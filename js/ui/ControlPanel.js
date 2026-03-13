@@ -21,7 +21,7 @@ export default class ControlPanel {
     this._setupSlider('viewDistance', 'viewDistance', 2, 25, 1);
     this._setupSlider('maxHeight', 'maxHeight', 100, 2400, 40);
     this._setupSlider('octaves', 'octaves', 1, 8, 1);
-    this._setupSlider('cameraSpeed', 'cameraSpeed', 50, 4000, 50);
+    this._setupSpeedSlider();
 
     const wireframeCb = document.getElementById('wireframe');
     wireframeCb.checked = CONFIG.wireframe;
@@ -113,6 +113,32 @@ export default class ControlPanel {
       update('lat', parseFloat(latInput.value));
       update('lon', parseFloat(lonInput.value));
       if (this.onRegenerate) this.onRegenerate();
+    });
+  }
+
+  _setupSpeedSlider() {
+    const slider = document.getElementById('cameraSpeed');
+    const display = document.getElementById('cameraSpeed-val');
+    const MIN_LOG = Math.log(1);
+    const MAX_LOG = Math.log(4000);
+    const MACH1 = 343;
+
+    slider.min = 0; slider.max = 1000; slider.step = 1;
+
+    const toSpeed = (pos) => Math.exp(MIN_LOG + (pos / 1000) * (MAX_LOG - MIN_LOG));
+    const toPos = (speed) => Math.round(((Math.log(speed) - MIN_LOG) / (MAX_LOG - MIN_LOG)) * 1000);
+    const formatSpeed = (ms) => {
+      if (ms < MACH1) return Math.round(ms * 3.6) + ' km/h';
+      return 'Mach ' + (ms / MACH1).toFixed(1);
+    };
+
+    slider.value = toPos(CONFIG.cameraSpeed);
+    display.textContent = formatSpeed(CONFIG.cameraSpeed);
+
+    slider.addEventListener('input', () => {
+      const speed = toSpeed(Number(slider.value));
+      display.textContent = formatSpeed(speed);
+      update('cameraSpeed', speed);
     });
   }
 
