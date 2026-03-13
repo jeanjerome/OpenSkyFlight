@@ -1,0 +1,16 @@
+# Tile cache (can be large, re-generated with scripts/prefetch-tiles.js)
+cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node (for prefetch script)
+node_modules/

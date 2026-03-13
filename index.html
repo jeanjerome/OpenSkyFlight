@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Landscape 3D — Wireframe Terrain</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a1a; font-family: 'Courier New', monospace; color: #ccc; }
+    #canvas-container { width: 100%; height: 100%; }
+    canvas { display: block; }
+    #hud {
+      position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none; z-index: 9;
+    }
+
+    /* Stats overlay */
+    #stats {
+      position: fixed; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.6); padding: 6px 12px;
+      font-size: 13px; border-radius: 4px; pointer-events: none;
+      z-index: 10;
+    }
+
+    /* Crosshair */
+    #crosshair {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 20px; height: 20px;
+      pointer-events: none; z-index: 10;
+    }
+    #crosshair::before, #crosshair::after {
+      content: ''; position: absolute; background: rgba(255,255,255,0.5);
+    }
+    #crosshair::before { width: 2px; height: 100%; left: 50%; transform: translateX(-50%); }
+    #crosshair::after { height: 2px; width: 100%; top: 50%; transform: translateY(-50%); }
+
+    /* Help overlay */
+    #help {
+      position: fixed; bottom: 12px; left: 12px;
+      background: rgba(0,0,0,0.6); padding: 8px 14px;
+      font-size: 12px; border-radius: 4px; line-height: 1.6;
+      pointer-events: none; z-index: 10;
+    }
+
+    /* Control panel */
+    #control-panel {
+      position: fixed; top: 12px; right: 12px;
+      background: rgba(0,0,0,0.75); padding: 16px;
+      border-radius: 8px; width: 260px;
+      font-size: 13px; z-index: 20;
+      transition: transform 0.3s ease;
+      max-height: calc(100vh - 24px);
+      overflow-y: auto;
+    }
+    #control-panel.collapsed { transform: translateX(calc(100% + 12px)); }
+    #toggle-panel {
+      position: fixed; top: 12px; right: 280px;
+      background: rgba(0,0,0,0.75); border: none; color: #ccc;
+      padding: 8px 10px; border-radius: 4px; cursor: pointer;
+      font-size: 14px; z-index: 21;
+    }
+    #control-panel h3 { margin-bottom: 12px; font-size: 14px; color: #8bf; }
+    .ctrl-group { margin-bottom: 10px; }
+    .ctrl-group label { display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 12px; }
+    .ctrl-group input[type=range] { width: 100%; cursor: pointer; accent-color: #5ae; }
+    .ctrl-group.checkbox-group { display: flex; align-items: center; gap: 8px; }
+    .ctrl-group.checkbox-group input[type=checkbox] { accent-color: #5ae; width: 16px; height: 16px; cursor: pointer; }
+    .ctrl-group.checkbox-group label { margin-bottom: 0; font-size: 12px; cursor: pointer; }
+    .ctrl-group input[type=text] {
+      width: 100%; background: rgba(255,255,255,0.1); border: 1px solid #444;
+      color: #ccc; padding: 4px 8px; border-radius: 4px; font-family: inherit;
+    }
+    #regenerate, #loadTerrain {
+      width: 100%; padding: 8px; margin-top: 8px;
+      background: #2a5a8a; border: none; color: #fff;
+      border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 13px;
+    }
+    #regenerate:hover, #loadTerrain:hover { background: #3a7aba; }
+    .ctrl-group select {
+      width: 100%; background: rgba(255,255,255,0.1); border: 1px solid #444;
+      color: #ccc; padding: 4px 8px; border-radius: 4px; font-family: inherit; font-size: 12px;
+    }
+    .ctrl-group select option { background: #1a1a2e; color: #ccc; }
+    .ctrl-group input[type=number] {
+      width: 100%; background: rgba(255,255,255,0.1); border: 1px solid #444;
+      color: #ccc; padding: 4px 8px; border-radius: 4px; font-family: inherit;
+    }
+    .search-row { display: flex; gap: 4px; }
+    .search-row input { flex: 1; }
+    #searchBtn {
+      background: #2a5a8a; border: none; color: #fff; padding: 4px 10px;
+      border-radius: 4px; cursor: pointer; font-size: 14px;
+    }
+    #searchBtn:hover { background: #3a7aba; }
+    #realworld-controls .ctrl-group { margin-bottom: 8px; }
+    .section-separator { border: none; border-top: 1px solid #333; margin: 12px 0; }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
+      "geo-three": "https://cdn.jsdelivr.net/npm/geo-three/build/geo-three.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="canvas-container"></div>
+  <canvas id="hud"></canvas>
+  <div id="stats"></div>
+  <div id="crosshair"></div>
+  <div id="help">
+    Clic pour capturer la souris | Souris : orienter le vol<br>
+    ↑↓ : avancer/reculer | ←→ : dériver
+  </div>
+
+  <button id="toggle-panel">◀</button>
+  <div id="control-panel">
+    <h3>Contrôles du terrain</h3>
+
+    <div class="ctrl-group">
+      <label>Mode</label>
+      <select id="terrainMode">
+        <option value="procedural">Procédural</option>
+        <option value="realworld">Carte réelle</option>
+      </select>
+    </div>
+
+    <div id="realworld-controls" style="display:none">
+      <div class="ctrl-group">
+        <label>Rechercher un lieu</label>
+        <div class="search-row">
+          <input type="text" id="placeSearch" placeholder="Mont Blanc, Paris..." />
+          <button id="searchBtn">&#128269;</button>
+        </div>
+      </div>
+      <div class="ctrl-group">
+        <label>Latitude</label>
+        <input type="number" id="lat" step="0.001" />
+      </div>
+      <div class="ctrl-group">
+        <label>Longitude</label>
+        <input type="number" id="lon" step="0.001" />
+      </div>
+      <div class="ctrl-group checkbox-group">
+        <input type="checkbox" id="useOsmTexture" />
+        <label for="useOsmTexture">Afficher texture</label>
+      </div>
+      <div class="ctrl-group">
+        <label>Source texture</label>
+        <select id="textureSource">
+          <option value="satellite">Satellite</option>
+          <option value="osm">OpenStreetMap</option>
+        </select>
+      </div>
+      <button id="loadTerrain">Charger le terrain</button>
+      <hr class="section-separator" />
+    </div>
+
+    <div id="procedural-controls">
+      <div class="ctrl-group">
+        <label>Résolution <span id="resolution-val"></span></label>
+        <input type="range" id="resolution" />
+      </div>
+
+      <div class="ctrl-group">
+        <label>Hauteur max <span id="maxHeight-val"></span></label>
+        <input type="range" id="maxHeight" />
+      </div>
+
+      <div class="ctrl-group">
+        <label>Octaves <span id="octaves-val"></span></label>
+        <input type="range" id="octaves" />
+      </div>
+
+      <div class="ctrl-group">
+        <label>Seed</label>
+        <input type="text" id="seed" />
+      </div>
+
+      <div class="ctrl-group">
+        <label>Distance de vue <span id="viewDistance-val"></span></label>
+        <input type="range" id="viewDistance" />
+      </div>
+
+      <div class="ctrl-group checkbox-group">
+        <input type="checkbox" id="wireframe" checked />
+        <label for="wireframe">Wireframe</label>
+      </div>
+
+      <button id="regenerate">Régénérer le terrain</button>
+    </div><!-- /procedural-controls -->
+
+    <div class="ctrl-group">
+      <label>Vitesse caméra <span id="cameraSpeed-val"></span></label>
+      <input type="range" id="cameraSpeed" />
+    </div>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
