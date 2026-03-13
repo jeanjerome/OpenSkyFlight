@@ -26,6 +26,8 @@ const CONFIG = {
   showHud: true,
   logLevel: 'WARN',
   showLogs: false,
+  showMinimap: false,
+  minimapZoom: 13,
 };
 
 const listeners = new Set();

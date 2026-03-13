@@ -169,6 +169,39 @@
     /* Section separator */
     .section-separator { border: none; border-top: 1px solid #003322; margin: 12px 0; }
 
+    /* Minimap panel */
+    #minimap-container {
+      position: fixed; bottom: 0; right: 0;
+      width: 260px;
+      background: rgba(0, 10, 5, 0.88);
+      border: 1px solid #005533;
+      border-right: none; border-bottom: none;
+      z-index: 20; display: none;
+      flex-direction: column;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+    }
+    #minimap-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 4px 8px;
+      border-bottom: 1px solid #005533;
+      color: #00cc66; letter-spacing: 1px; font-size: 10px;
+    }
+    .minimap-zoom-btns {
+      display: flex; gap: 4px;
+    }
+    .minimap-zoom-btns button {
+      background: transparent; border: 1px solid #005533; color: #00cc66;
+      padding: 0 6px; cursor: pointer; font-family: inherit; font-size: 12px;
+      line-height: 18px; letter-spacing: 0;
+    }
+    .minimap-zoom-btns button:hover { border-color: #00ff88; color: #00ff88; }
+    #minimap {
+      display: block;
+      width: 256px; height: 256px;
+      margin: 0 auto 2px;
+    }
+
     /* Log panel */
     #log-panel-container {
       position: fixed; bottom: 0; left: 0;
@@ -221,6 +254,17 @@
     ↑↓ : avancer/reculer | ←→ : dériver
   </div>
 
+  <div id="minimap-container">
+    <div id="minimap-header">
+      <span>MAP</span>
+      <div class="minimap-zoom-btns">
+        <button id="minimap-zoom-out">&minus;</button>
+        <button id="minimap-zoom-in">+</button>
+      </div>
+    </div>
+    <canvas id="minimap" width="256" height="256"></canvas>
+  </div>
+
   <div id="log-panel-container">
     <div id="log-panel-header">
       <span>LOG OUTPUT</span>
@@ -260,6 +304,11 @@
       <div class="ctrl-group checkbox-group">
         <input type="checkbox" id="showLogs" />
         <label for="showLogs">LOGS</label>
+      </div>
+
+      <div class="ctrl-group checkbox-group">
+        <input type="checkbox" id="showMinimap" />
+        <label for="showMinimap">MAP</label>
       </div>
 
       <div class="ctrl-group" id="logLevel-group">

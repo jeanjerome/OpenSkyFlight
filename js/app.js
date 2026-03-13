@@ -5,6 +5,7 @@ import GeoTerrainManager from './terrain/GeoTerrainManager.js';
 import FPSController from './camera/FPSController.js';
 import ControlPanel from './ui/ControlPanel.js';
 import HUD from './ui/HUD.js';
+import Minimap from './ui/Minimap.js';
 import Logger from './utils/Logger.js';
 
 // --- Renderer ---
@@ -68,6 +69,10 @@ const fpsController = new FPSController(camera, renderer.domElement);
 // --- HUD ---
 const hudCanvas = document.getElementById('hud');
 const hud = new HUD(hudCanvas);
+
+// --- Minimap ---
+const minimapCanvas = document.getElementById('minimap');
+const minimap = new Minimap(minimapCanvas, geoTerrainManager);
 
 // --- Raycaster for ground elevation (procedural mode) ---
 const groundRaycaster = new THREE.Raycaster();
@@ -190,6 +195,9 @@ function animate() {
 
   // Update HUD after render
   hud.update(camera, groundElevation);
+
+  // Update minimap
+  minimap.update(camera);
 
   // FPS counter
   frameCount++;

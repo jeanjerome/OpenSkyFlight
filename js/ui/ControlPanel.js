@@ -15,6 +15,7 @@ export default class ControlPanel {
     this._setupSlider('octaves', 'octaves', 1, 8, 1);
     this._setupSpeedSlider();
     this._setupHudToggle();
+    this._setupMinimapToggle();
     this._setupLogControls();
 
     const wireframeCb = document.getElementById('wireframe');
@@ -58,6 +59,14 @@ export default class ControlPanel {
     hudCb.checked = CONFIG.showHud;
     hudCb.addEventListener('change', () => {
       update('showHud', hudCb.checked);
+    });
+  }
+
+  _setupMinimapToggle() {
+    const cb = document.getElementById('showMinimap');
+    cb.checked = CONFIG.showMinimap;
+    cb.addEventListener('change', () => {
+      update('showMinimap', cb.checked);
     });
   }
 
