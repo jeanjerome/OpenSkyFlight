@@ -7,6 +7,8 @@ import ControlPanel from './ui/ControlPanel.js';
 import HUD from './ui/HUD.js';
 import Minimap from './ui/Minimap.js';
 import Logger from './utils/Logger.js';
+import AtmosphericSky from './atmosphere/AtmosphericSky.js';
+import CloudLayer from './atmosphere/CloudLayer.js';
 
 // --- Renderer ---
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -17,14 +19,17 @@ document.getElementById('canvas-container').appendChild(renderer.domElement);
 
 // --- Scene ---
 const scene = new THREE.Scene();
-scene.fog = null;
 
 // --- Lighting ---
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
 scene.add(ambientLight);
 const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-dirLight.position.set(1, 0.5, 0.8); // sun low angle for visible relief
+dirLight.position.set(1, 0.5, 0.8);
 scene.add(dirLight);
+
+// --- Atmospheric sky & clouds ---
+const atmosphericSky = new AtmosphericSky(scene, dirLight, ambientLight);
+const cloudLayer = new CloudLayer(scene);
 
 // --- Camera ---
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 1, 100000);
@@ -112,7 +117,7 @@ onChange((key, value) => {
     waterPlane.material.wireframe = CONFIG.wireframe;
   }
   if (key === 'viewDistance') {
-    // no-op: fog removed
+    // handled by terrain managers
   }
   if (key === 'showHud') {
     hudCanvas.style.display = value ? 'block' : 'none';
@@ -154,6 +159,7 @@ function animate() {
   prevTime = now;
 
   fpsController.update(dt);
+  cloudLayer.update(dt, camera.position);
 
   const activeManager = getActiveManager();
   activeManager.update(camera.position);

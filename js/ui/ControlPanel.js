@@ -17,6 +17,7 @@ export default class ControlPanel {
     this._setupHudToggle();
     this._setupMinimapToggle();
     this._setupLogControls();
+    this._setupAtmosphere();
 
     const wireframeCb = document.getElementById('wireframe');
     wireframeCb.checked = CONFIG.wireframe;
@@ -189,6 +190,25 @@ export default class ControlPanel {
       const speed = toSpeed(Number(slider.value));
       display.textContent = formatSpeed(speed);
       update('cameraSpeed', speed);
+    });
+  }
+
+  _setupAtmosphere() {
+    this._setupSlider('sunElevation', 'sunElevation', 0, 90, 1);
+    this._setupSlider('sunAzimuth', 'sunAzimuth', 0, 360, 1);
+    this._setupSlider('skyTurbidity', 'skyTurbidity', 1, 10, 0.5);
+    this._setupSlider('cloudAltitude', 'cloudAltitude', 500, 12000, 100);
+
+    const cloudsCb = document.getElementById('showClouds');
+    cloudsCb.checked = CONFIG.showClouds;
+    cloudsCb.addEventListener('change', () => {
+      update('showClouds', cloudsCb.checked);
+    });
+
+    const fogCb = document.getElementById('fogEnabled');
+    fogCb.checked = CONFIG.fogEnabled;
+    fogCb.addEventListener('change', () => {
+      update('fogEnabled', fogCb.checked);
     });
   }
 

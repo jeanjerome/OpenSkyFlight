@@ -238,7 +238,8 @@
   <script type="importmap">
   {
     "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
+      "three": "https://cdn.jsdelivr.net/npm/three@0.183.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.183.0/examples/jsm/",
       "geo-three": "https://cdn.jsdelivr.net/npm/geo-three/build/geo-three.module.js"
     }
   }
@@ -382,6 +383,39 @@
         </div>
         <button id="regenerate" class="mfd-btn">REGENERATE TERRAIN</button>
       </div><!-- /procedural-controls -->
+
+      <!-- ── ATMOSPHERE ── -->
+      <div class="mfd-section-label">ATMOSPHERE</div>
+
+      <div class="ctrl-group">
+        <label>SUN ELEVATION <span id="sunElevation-val"></span></label>
+        <input type="range" id="sunElevation" />
+      </div>
+
+      <div class="ctrl-group">
+        <label>SUN AZIMUTH <span id="sunAzimuth-val"></span></label>
+        <input type="range" id="sunAzimuth" />
+      </div>
+
+      <div class="ctrl-group">
+        <label>TURBIDITY <span id="skyTurbidity-val"></span></label>
+        <input type="range" id="skyTurbidity" />
+      </div>
+
+      <div class="ctrl-group checkbox-group">
+        <input type="checkbox" id="showClouds" checked />
+        <label for="showClouds">CLOUD LAYER</label>
+      </div>
+
+      <div class="ctrl-group">
+        <label>CLOUD ALT <span id="cloudAltitude-val"></span></label>
+        <input type="range" id="cloudAltitude" />
+      </div>
+
+      <div class="ctrl-group checkbox-group">
+        <input type="checkbox" id="fogEnabled" checked />
+        <label for="fogEnabled">ATMOSPHERIC FOG</label>
+      </div>
 
     </div><!-- /mfd-body -->
   </div>

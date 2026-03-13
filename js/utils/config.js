@@ -28,6 +28,15 @@ const CONFIG = {
   showLogs: false,
   showMinimap: false,
   minimapZoom: 13,
+  sunElevation: 15,
+  sunAzimuth: 180,
+  skyTurbidity: 2.0,
+  skyRayleigh: 1.0,
+  showClouds: true,
+  cloudAltitude: 3500,
+  cloudOpacity: 0.7,
+  fogEnabled: true,
+  fogDensity: 0.000015,
 };
 
 const listeners = new Set();
