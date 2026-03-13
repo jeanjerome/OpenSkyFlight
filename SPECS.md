@@ -1,8 +1,8 @@
-# Landscape 3D — Spécifications techniques détaillées
+# OpenSkyFlight — Spécifications techniques détaillées
 
 ## Vue d'ensemble
 
-**Landscape 3D** est un visualiseur de terrain 3D interactif fonctionnant dans le navigateur, construit avec Three.js v0.163 et des modules ES natifs. Aucune étape de build ni `npm install` n'est nécessaire. La seule dépendance runtime — Three.js — est chargée via CDN (import map). Un serveur Node.js de développement sert de proxy transparent avec cache disque pour les tuiles cartographiques.
+**OpenSkyFlight** est un simulateur de vol 3D interactif fonctionnant dans le navigateur, construit avec Three.js v0.163 et des modules ES natifs. Aucune étape de build ni `npm install` n'est nécessaire. La seule dépendance runtime — Three.js — est chargée via CDN (import map). Un serveur Node.js de développement sert de proxy transparent avec cache disque pour les tuiles cartographiques.
 
 L'application propose deux modes de terrain mutuellement exclusifs :
 1. **Procédural** — Bruit Simplex (fBm) généré entièrement dans le navigateur via un Web Worker.
@@ -13,7 +13,7 @@ L'application propose deux modes de terrain mutuellement exclusifs :
 ## Architecture des fichiers
 
 ```
-landscape-3d/
+openskylight/
 ├── index.html                     Point d'entrée, CSS, layout HTML, import map Three.js
 ├── js/
 │   ├── app.js                     Bootstrap de la scène, boucle de rendu, orchestration

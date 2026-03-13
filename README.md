@@ -1,20 +1,35 @@
-# Landscape 3D
+# OpenSkyFlight
 
-Interactive 3D terrain viewer with flight controls, supporting both procedural generation and real-world elevation data. Built with Three.js and vanilla JavaScript — no build step required.
+A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Earth using satellite imagery and elevation data from OpenStreetMap and AWS Terrarium — all rendered in real time with Three.js. No install, no build step.
 
 ![WebGL](https://img.shields.io/badge/WebGL-Three.js-green)
+
+<!-- Hero screenshot: full-screen flight over mountains with HUD, satellite textures, and minimap visible -->
+![Flying over the Alps with satellite imagery and HUD instruments](docs/screenshots/hero.png)
 
 ## Features
 
 - **Dual terrain modes** — procedural (Simplex noise) or real-world (elevation tiles)
-- **Real-world elevation** — decoded from [AWS Terrarium](https://registry.opendata.aws/terrain-tiles/) PNG tiles
-- **Map textures** — optional OpenStreetMap raster overlay
+
+| Procedural terrain | Real-world terrain |
+|---|---|
+| ![Procedural Simplex noise terrain](docs/screenshots/procedural.png) | ![Real-world elevation with Earth curvature](docs/screenshots/realworld.png) |
+- **Real-world elevation** — decoded from [AWS Terrarium](https://registry.opendata.aws/terrain-tiles/) PNG tiles with spherical Earth curvature
+- **Satellite & map textures** — ESRI World Imagery or OpenStreetMap raster overlay, switchable at runtime
+- **Adaptive LOD** — quadtree subdivision based on camera altitude, covering up to the geometric horizon
 - **Flight simulator controls** — 6-DOF camera with pointer lock, banking, pitch/yaw
-- **Aircraft-style HUD** — compass, artificial horizon, altimeter (AGL), speed indicator
+- **Aircraft-style HUD** — compass, artificial horizon, altimeter (MSL + AGL), speed indicator
+- **MFD cockpit panel** — auto-hiding control panel with military flight display aesthetics
+- **OSM minimap** — real-time 2D map overlay with airplane marker and independent zoom
+
+<!-- Screenshots: HUD close-up | MFD control panel | Minimap -->
+| HUD instruments | MFD control panel | OSM minimap |
+|---|---|---|
+| ![HUD with compass, horizon, altimeter and speed](docs/screenshots/hud.png) | ![MFD cockpit-style control panel](docs/screenshots/mfd-panel.png) | ![OSM minimap with airplane marker](docs/screenshots/minimap.png) |
 - **Dynamic chunk loading** — spiral-ordered around camera, with frustum culling
-- **Web Worker** — terrain geometry built off the main thread
-- **Local tile cache** — pre-download tiles for offline or faster loading
-- **Configurable** — control panel with sliders for resolution, view distance, height, etc.
+- **Web Worker** — terrain geometry built off the main thread (zero-copy ArrayBuffer transfer)
+- **Local tile cache** — transparent caching proxy, pre-download tiles for offline flight
+- **Centralized logging** — in-app log panel with level control (DEBUG/INFO/WARN/ERROR)
 
 ## Quick Start
 
@@ -38,13 +53,28 @@ The server acts as a **caching proxy** for map tiles — every tile downloaded f
 | `A` / `D` or `←` / `→` | Strafe left / right |
 | `Esc` | Release pointer lock |
 
-Use the right-side control panel to switch between **Procedural** and **Real-World** modes, adjust terrain parameters, and toggle wireframe or OSM textures.
+Use the right-side control panel to switch between **Procedural** and **Real-World** modes, adjust terrain parameters, and toggle wireframe or textures.
 
 ## Real-World Mode
 
-Switch to **Real-World** in the control panel, enter coordinates (or search a place name), then click **Load Terrain**. The app fetches elevation data from AWS Terrarium and optionally overlays OpenStreetMap textures.
+Switch to **Real-World** in the control panel, enter coordinates (or search a place name), then click **Load Terrain**. The app fetches elevation data from AWS Terrarium and optionally overlays satellite or OSM textures.
 
 Default location: **Mont Blanc** (45.8326°N, 6.8652°E).
+
+| Satellite textures | OpenStreetMap textures | Wireframe mode |
+|---|---|---|
+| ![Satellite view over Mont Blanc](docs/screenshots/satellite.png) | ![OSM map draped over real elevation](docs/screenshots/osm-texture.png) | ![Wireframe rendering with green MFD aesthetics](docs/screenshots/wireframe.png) |
+
+*Left: ESRI satellite imagery. Center: OpenStreetMap cartography projected on relief. Right: wireframe mode with MFD-style green overlay.*
+
+## How It Works
+
+1. **Elevation** — Terrarium PNG tiles (AWS S3) are decoded into heightmaps (`R×256 + G + B/256 − 32768` meters)
+2. **Mesh generation** — A Web Worker builds terrain geometry from heightmaps, transferred back via zero-copy ArrayBuffers
+3. **LOD system** — `buildLodRings()` uses recursive quadtree subdivision: tiles near the camera are split into 4 children at higher zoom, distant tiles stay coarse
+4. **Earth curvature** — Vertex positions are projected onto a sphere (`_projectOnSphere`), so distant terrain curves away naturally
+5. **Textures** — Satellite (ESRI) or OSM tiles are fetched on demand and applied as `CanvasTexture` to terrain meshes
+6. **Caching** — A Node.js proxy intercepts all `/tiles/` requests: serves from disk on hit, fetches upstream on miss, caches for next time
 
 ## Tile Cache
 
@@ -58,74 +88,93 @@ Every tile is downloaded **at most once**. Subsequent sessions, or navigating ba
 ```
 cache/
   terrarium/        ← elevation tiles (AWS Terrarium)
-    12/
-      2045/
-        1423.png
   osm/              ← map textures (OpenStreetMap)
-    12/
-      2045/
-        1423.png
+  satellite/        ← satellite imagery (ESRI)
 ```
-
-The cache is organized by source name (`terrarium`, `osm`), so changing providers in the future won't cause conflicts.
 
 > The `cache/` directory is listed in `.gitignore` and should not be committed — it can be regenerated at any time.
 
-### Bulk pre-download
-
-To pre-fill the cache for a region (useful before going offline):
-
-```bash
-node scripts/prefetch-tiles.js --lat 45.8326 --lon 6.8652 --zoom 12 --radius 12
-```
-
-| Option | Default | Description |
-|---|---|---|
-| `--lat` | *(required)* | Latitude of the center point |
-| `--lon` | *(required)* | Longitude of the center point |
-| `--zoom` | `12` | Zoom level (matches the app's zoom setting) |
-| `--radius` | `12` | Number of tiles around the center in each direction |
-| `--delay` | `100` | Delay in ms between downloads (rate limiting) |
-
-Both the server and the prefetch script write to the same `cache/` directory — no duplication.
 
 ## Project Structure
 
 ```
-├── index.html                  Main HTML page
+├── index.html                     Main HTML page (MFD-styled UI)
 ├── js/
-│   ├── app.js                  Scene setup & animation loop
+│   ├── app.js                     Scene setup & animation loop
 │   ├── camera/
-│   │   └── FPSController.js    Flight camera (pointer lock, 6-DOF)
+│   │   └── FPSController.js       Flight camera (pointer lock, 6-DOF, banking)
 │   ├── terrain/
-│   │   ├── ChunkManager.js     Chunk loading & disposal
-│   │   ├── TerrainChunk.js     Geometry & mesh for one chunk
-│   │   ├── NoiseGenerator.js   Simplex noise implementation
-│   │   └── terrainWorker.js    Web Worker for off-thread generation
+│   │   ├── ChunkManager.js        Chunk lifecycle, LOD dispatch
+│   │   ├── GeoTerrainManager.js   Real-world terrain via geo-three
+│   │   ├── TerrainChunk.js        Geometry & mesh for one chunk
+│   │   ├── NoiseGenerator.js      Simplex noise (fBm)
+│   │   └── terrainWorker.js       Web Worker for off-thread generation
 │   ├── geo/
-│   │   ├── TileMath.js         Lat/lon ↔ tile coordinate math
-│   │   ├── ElevationProvider.js Terrarium tile fetch + decode
-│   │   └── TextureProvider.js  OSM tile fetch
+│   │   ├── TileMath.js            Slippy Map math, quadtree LOD, horizon calc
+│   │   ├── ElevationProvider.js   Terrarium tile fetch + decode
+│   │   ├── TerrariumProvider.js   geo-three height provider
+│   │   ├── LocalTileProvider.js   geo-three texture provider (via proxy)
+│   │   ├── TextureProvider.js     OSM/satellite tile fetch
+│   │   └── fetchSemaphore.js      Browser-side concurrency limiter
 │   ├── ui/
-│   │   ├── HUD.js              Flight instrument overlay
-│   │   └── ControlPanel.js     Settings panel
+│   │   ├── HUD.js                 Flight instrument overlay (Canvas 2D)
+│   │   ├── Minimap.js             OSM minimap with airplane marker
+│   │   └── ControlPanel.js        MFD settings panel
 │   └── utils/
-│       └── config.js           Configuration & reactive updates
+│       ├── config.js              Reactive configuration system
+│       └── Logger.js              Centralized logging with UI panel
 ├── scripts/
-│   ├── serve.js                Dev server with caching tile proxy
-│   └── prefetch-tiles.js       Bulk tile pre-download CLI
-└── cache/                      Local tile cache (git-ignored)
+│   └── serve.js                   Dev server with caching tile proxy
+└── cache/                         Local tile cache (git-ignored)
 ```
 
 ## Technologies
 
 - [Three.js](https://threejs.org/) v0.163 — 3D rendering (loaded via CDN, no install)
+- [geo-three](https://github.com/tentone/geo-three) — geographic tile management and Mercator projection
 - Web Workers — off-thread terrain generation
-- Canvas 2D — HUD overlay
+- Canvas 2D — HUD overlay and minimap
 - [AWS Terrarium Tiles](https://registry.opendata.aws/terrain-tiles/) — elevation data
 - [OpenStreetMap](https://www.openstreetmap.org/) — map textures
+- [ESRI World Imagery](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9) — satellite textures
 - ES modules — no bundler needed
+
+## Data Sources & Attribution
+
+OpenSkyFlight does not bundle or redistribute any map data. All tiles are fetched at runtime by the user's browser through a local caching proxy. Users are responsible for complying with each provider's terms of use.
+
+### Elevation data — Mapzen Terrain Tiles (AWS)
+
+Elevation tiles are sourced from the [Mapzen Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) open dataset hosted on AWS S3. The underlying data comes from multiple public domain and open data sources including USGS 3DEP, SRTM, GMTED2010, and others.
+
+- **License:** mixed open data — mostly public domain (US government), some CC-BY (Australia), Open Government Licence (Canada)
+- **Attribution:** terrain data courtesy of [Mapzen](https://www.mapzen.com/rights/). See the full [attribution guide](https://github.com/tilezen/joerd/blob/master/docs/attribution.md) for regional sources.
+- No API key required. No rate limit.
+
+### Map textures — OpenStreetMap
+
+Map tiles are fetched from the [OpenStreetMap](https://www.openstreetmap.org/) tile server.
+
+- **License:** map data is available under the [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/). Tile images are licensed under [CC-BY-SA 2.0](https://creativecommons.org/licenses/by-sa/2.0/).
+- **Attribution:** © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors.
+- **Usage policy:** the public tile server is intended for light, interactive use. See the [OSM Tile Usage Policy](https://operations.osmfoundation.org/policies/tiles/) for details. For heavy or production use, consider a self-hosted tile server or a commercial provider.
+
+### Satellite imagery — Esri World Imagery
+
+Satellite tiles are fetched from the [Esri World Imagery](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9) basemap service.
+
+- **License:** proprietary — governed by the [Esri Terms of Use](https://www.esri.com/en-us/legal/terms/full-master-agreement). Non-commercial use is permitted with attribution. Commercial use requires a paid Esri license.
+- **Attribution:** powered by Esri. Sources: Esri, Maxar, Earthstar Geographics, and the GIS User Community.
+- Users consuming this data are responsible for complying with Esri's terms.
+
+### Geocoding — Nominatim
+
+Place name search uses the [Nominatim](https://nominatim.openstreetmap.org/) geocoding API.
+
+- **License:** results are OpenStreetMap data under [ODbL](https://opendatacommons.org/licenses/odbl/).
+- **Attribution:** © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors.
+- **Usage policy:** max 1 request/second, no bulk geocoding. See the [Nominatim Usage Policy](https://operations.osmfoundation.org/policies/nominatim/).
 
 ## License
 
-MIT
+This project's source code is licensed under MIT. Map data, imagery, and elevation data are subject to their respective licenses listed above.

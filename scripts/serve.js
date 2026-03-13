@@ -148,7 +148,7 @@ const server = createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Landscape 3D — http://localhost:${PORT}`);
+  console.log(`OpenSkyFlight — http://localhost:${PORT}`);
   console.log(`Tile cache: ${CACHE_DIR}`);
   console.log(`Tile proxy: /tiles/{terrarium,osm,satellite}/{z}/{x}/{y}.png`);
 });
