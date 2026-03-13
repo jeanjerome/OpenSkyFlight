@@ -23,6 +23,7 @@ const CONFIG = {
   minZoom: 3,
   maxTotalTiles: 1000,
   lodRingRadius: 8,
+  showHud: true,
 };
 
 const listeners = new Set();

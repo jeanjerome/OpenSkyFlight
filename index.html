@@ -44,58 +44,130 @@
       pointer-events: none; z-index: 10;
     }
 
-    /* Control panel */
+    /* Panel trigger zone */
+    #panel-trigger {
+      position: fixed; top: 0; right: 0;
+      width: 20px; height: 100%;
+      z-index: 19;
+    }
+
+    /* MFD Control Panel */
     #control-panel {
-      position: fixed; top: 12px; right: 12px;
-      background: rgba(0,0,0,0.75); padding: 16px;
-      border-radius: 8px; width: 260px;
-      font-size: 13px; z-index: 20;
-      transition: transform 0.3s ease;
-      max-height: calc(100vh - 24px);
+      position: fixed; top: 0; right: 0;
+      background: rgba(0, 10, 5, 0.92);
+      background-image: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 255, 136, 0.03) 2px,
+        rgba(0, 255, 136, 0.03) 4px
+      );
+      width: 280px; height: 100%;
+      font-size: 12px; z-index: 20;
+      border-left: 2px solid #00ff88;
+      border-radius: 0;
+      box-shadow: -4px 0 20px rgba(0,255,136,0.15);
+      transform: translateX(100%);
+      transition: transform 0.25s ease;
       overflow-y: auto;
+      display: flex; flex-direction: column;
     }
-    #control-panel.collapsed { transform: translateX(calc(100% + 12px)); }
-    #toggle-panel {
-      position: fixed; top: 12px; right: 280px;
-      background: rgba(0,0,0,0.75); border: none; color: #ccc;
-      padding: 8px 10px; border-radius: 4px; cursor: pointer;
-      font-size: 14px; z-index: 21;
+    #control-panel.visible { transform: translateX(0); }
+
+    /* Scrollbar styling */
+    #control-panel::-webkit-scrollbar { width: 4px; }
+    #control-panel::-webkit-scrollbar-track { background: transparent; }
+    #control-panel::-webkit-scrollbar-thumb { background: #005533; }
+
+    /* MFD Header */
+    .mfd-header {
+      position: sticky; top: 0; z-index: 1;
+      background: rgba(0, 10, 5, 0.95);
+      border-bottom: 1px solid #005533;
+      padding: 10px 14px;
+      font-size: 11px;
+      color: #00ff88;
+      letter-spacing: 2px;
+      text-align: center;
     }
-    #control-panel h3 { margin-bottom: 12px; font-size: 14px; color: #8bf; }
-    .ctrl-group { margin-bottom: 10px; }
-    .ctrl-group label { display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 12px; }
-    .ctrl-group input[type=range] { width: 100%; cursor: pointer; accent-color: #5ae; }
-    .ctrl-group.checkbox-group { display: flex; align-items: center; gap: 8px; }
-    .ctrl-group.checkbox-group input[type=checkbox] { accent-color: #5ae; width: 16px; height: 16px; cursor: pointer; }
-    .ctrl-group.checkbox-group label { margin-bottom: 0; font-size: 12px; cursor: pointer; }
-    .ctrl-group input[type=text] {
-      width: 100%; background: rgba(255,255,255,0.1); border: 1px solid #444;
-      color: #ccc; padding: 4px 8px; border-radius: 4px; font-family: inherit;
+    .mfd-header span { opacity: 0.5; }
+
+    .mfd-body { padding: 10px 14px 14px; flex: 1; }
+
+    /* Section labels */
+    .mfd-section-label {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 10px; color: #00cc66; letter-spacing: 2px;
+      margin: 14px 0 10px; text-transform: uppercase;
     }
-    #regenerate, #loadTerrain {
-      width: 100%; padding: 8px; margin-top: 8px;
-      background: #2a5a8a; border: none; color: #fff;
-      border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 13px;
+    .mfd-section-label::before,
+    .mfd-section-label::after {
+      content: ''; flex: 1; height: 1px; background: #003322;
     }
-    #regenerate:hover, #loadTerrain:hover { background: #3a7aba; }
-    .ctrl-group select {
-      width: 100%; background: rgba(255,255,255,0.1); border: 1px solid #444;
-      color: #ccc; padding: 4px 8px; border-radius: 4px; font-family: inherit; font-size: 12px;
+
+    /* Control groups */
+    .ctrl-group { margin-bottom: 8px; }
+    .ctrl-group label {
+      display: flex; justify-content: space-between; margin-bottom: 2px;
+      font-size: 11px; color: #00cc66; text-transform: uppercase; letter-spacing: 0.5px;
     }
-    .ctrl-group select option { background: #1a1a2e; color: #ccc; }
+    .ctrl-group label span { color: #00ff88; }
+    .ctrl-group input[type=range] {
+      width: 100%; cursor: pointer;
+      accent-color: #00ff88;
+      height: 4px;
+    }
+    .ctrl-group.checkbox-group {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .ctrl-group.checkbox-group input[type=checkbox] {
+      accent-color: #00ff88; width: 14px; height: 14px; cursor: pointer;
+    }
+    .ctrl-group.checkbox-group label {
+      margin-bottom: 0; font-size: 11px; cursor: pointer;
+    }
+    .ctrl-group input[type=text],
     .ctrl-group input[type=number] {
-      width: 100%; background: rgba(255,255,255,0.1); border: 1px solid #444;
-      color: #ccc; padding: 4px 8px; border-radius: 4px; font-family: inherit;
+      width: 100%; background: rgba(0,255,136,0.05); border: 1px solid #005533;
+      color: #00ff88; padding: 4px 8px; border-radius: 0; font-family: inherit; font-size: 11px;
     }
+    .ctrl-group input[type=text]:focus,
+    .ctrl-group input[type=number]:focus {
+      outline: none; border-color: #00ff88;
+      box-shadow: 0 0 6px rgba(0,255,136,0.2);
+    }
+    .ctrl-group select {
+      width: 100%; background: rgba(0,255,136,0.05); border: 1px solid #005533;
+      color: #00ff88; padding: 4px 8px; border-radius: 0; font-family: inherit; font-size: 11px;
+    }
+    .ctrl-group select:focus { outline: none; border-color: #00ff88; }
+    .ctrl-group select option { background: #001a0d; color: #00ff88; }
+
+    /* MFD Buttons */
+    .mfd-btn {
+      width: 100%; padding: 7px; margin-top: 8px;
+      background: transparent; border: 1px solid #00ff88; color: #00ff88;
+      border-radius: 0; cursor: pointer; font-family: inherit; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 1px;
+      transition: background 0.15s, box-shadow 0.15s;
+    }
+    .mfd-btn:hover {
+      background: rgba(0,255,136,0.12);
+      box-shadow: 0 0 10px rgba(0,255,136,0.2);
+    }
+    .mfd-btn:active { background: rgba(0,255,136,0.25); }
+
+    /* Search row */
     .search-row { display: flex; gap: 4px; }
     .search-row input { flex: 1; }
     #searchBtn {
-      background: #2a5a8a; border: none; color: #fff; padding: 4px 10px;
-      border-radius: 4px; cursor: pointer; font-size: 14px;
+      background: transparent; border: 1px solid #00ff88; color: #00ff88;
+      padding: 4px 10px; border-radius: 0; cursor: pointer; font-size: 13px;
     }
-    #searchBtn:hover { background: #3a7aba; }
-    #realworld-controls .ctrl-group { margin-bottom: 8px; }
-    .section-separator { border: none; border-top: 1px solid #333; margin: 12px 0; }
+    #searchBtn:hover { background: rgba(0,255,136,0.12); }
+
+    /* Section separator */
+    .section-separator { border: none; border-top: 1px solid #003322; margin: 12px 0; }
   </style>
   <script type="importmap">
   {
@@ -116,87 +188,97 @@
     ↑↓ : avancer/reculer | ←→ : dériver
   </div>
 
-  <button id="toggle-panel">◀</button>
+  <div id="panel-trigger"></div>
   <div id="control-panel">
-    <h3>Contrôles du terrain</h3>
+    <div class="mfd-header">MFD-01 <span>/</span> TERRAIN SYS</div>
+    <div class="mfd-body">
 
-    <div class="ctrl-group">
-      <label>Mode</label>
-      <select id="terrainMode">
-        <option value="procedural">Procédural</option>
-        <option value="realworld">Carte réelle</option>
-      </select>
-    </div>
-
-    <div id="realworld-controls" style="display:none">
-      <div class="ctrl-group">
-        <label>Rechercher un lieu</label>
-        <div class="search-row">
-          <input type="text" id="placeSearch" placeholder="Mont Blanc, Paris..." />
-          <button id="searchBtn">&#128269;</button>
-        </div>
-      </div>
-      <div class="ctrl-group">
-        <label>Latitude</label>
-        <input type="number" id="lat" step="0.001" />
-      </div>
-      <div class="ctrl-group">
-        <label>Longitude</label>
-        <input type="number" id="lon" step="0.001" />
-      </div>
-      <div class="ctrl-group checkbox-group">
-        <input type="checkbox" id="useOsmTexture" />
-        <label for="useOsmTexture">Afficher texture</label>
-      </div>
-      <div class="ctrl-group">
-        <label>Source texture</label>
-        <select id="textureSource">
-          <option value="satellite">Satellite</option>
-          <option value="osm">OpenStreetMap</option>
-        </select>
-      </div>
-      <button id="loadTerrain">Charger le terrain</button>
-      <hr class="section-separator" />
-    </div>
-
-    <div id="procedural-controls">
-      <div class="ctrl-group">
-        <label>Résolution <span id="resolution-val"></span></label>
-        <input type="range" id="resolution" />
-      </div>
+      <!-- ── SIMULATION ── -->
+      <div class="mfd-section-label">SIMULATION</div>
 
       <div class="ctrl-group">
-        <label>Hauteur max <span id="maxHeight-val"></span></label>
-        <input type="range" id="maxHeight" />
+        <label>VITESSE <span id="cameraSpeed-val"></span></label>
+        <input type="range" id="cameraSpeed" />
       </div>
 
-      <div class="ctrl-group">
-        <label>Octaves <span id="octaves-val"></span></label>
-        <input type="range" id="octaves" />
-      </div>
-
-      <div class="ctrl-group">
-        <label>Seed</label>
-        <input type="text" id="seed" />
-      </div>
-
-      <div class="ctrl-group">
-        <label>Distance de vue <span id="viewDistance-val"></span></label>
+      <div class="ctrl-group" id="sim-viewdistance-group">
+        <label>DISTANCE DE VUE <span id="viewDistance-val"></span></label>
         <input type="range" id="viewDistance" />
       </div>
 
-      <div class="ctrl-group checkbox-group">
+      <div class="ctrl-group checkbox-group" id="sim-wireframe-group">
         <input type="checkbox" id="wireframe" checked />
-        <label for="wireframe">Wireframe</label>
+        <label for="wireframe">WIREFRAME</label>
       </div>
 
-      <button id="regenerate">Régénérer le terrain</button>
-    </div><!-- /procedural-controls -->
+      <div class="ctrl-group checkbox-group">
+        <input type="checkbox" id="showHud" checked />
+        <label for="showHud">HUD OVERLAY</label>
+      </div>
 
-    <div class="ctrl-group">
-      <label>Vitesse <span id="cameraSpeed-val"></span></label>
-      <input type="range" id="cameraSpeed" />
-    </div>
+      <!-- ── CONFIGURATION ── -->
+      <div class="mfd-section-label">CONFIGURATION</div>
+
+      <div class="ctrl-group">
+        <label>MODE</label>
+        <select id="terrainMode">
+          <option value="procedural">Procédural</option>
+          <option value="realworld">Carte réelle</option>
+        </select>
+      </div>
+
+      <div id="realworld-controls" style="display:none">
+        <div class="ctrl-group">
+          <label>RECHERCHER UN LIEU</label>
+          <div class="search-row">
+            <input type="text" id="placeSearch" placeholder="Mont Blanc, Paris..." />
+            <button id="searchBtn">&#128269;</button>
+          </div>
+        </div>
+        <div class="ctrl-group">
+          <label>LATITUDE</label>
+          <input type="number" id="lat" step="0.001" />
+        </div>
+        <div class="ctrl-group">
+          <label>LONGITUDE</label>
+          <input type="number" id="lon" step="0.001" />
+        </div>
+        <div class="ctrl-group checkbox-group">
+          <input type="checkbox" id="useOsmTexture" />
+          <label for="useOsmTexture">TEXTURE / WIREFRAME</label>
+        </div>
+        <div class="ctrl-group">
+          <label>SOURCE TEXTURE</label>
+          <select id="textureSource">
+            <option value="satellite">Satellite</option>
+            <option value="osm">OpenStreetMap</option>
+          </select>
+        </div>
+        <button id="loadTerrain" class="mfd-btn">CHARGER LE TERRAIN</button>
+        <hr class="section-separator" />
+      </div>
+
+      <div id="procedural-controls">
+        <div class="ctrl-group">
+          <label>RÉSOLUTION <span id="resolution-val"></span></label>
+          <input type="range" id="resolution" />
+        </div>
+        <div class="ctrl-group">
+          <label>HAUTEUR MAX <span id="maxHeight-val"></span></label>
+          <input type="range" id="maxHeight" />
+        </div>
+        <div class="ctrl-group">
+          <label>OCTAVES <span id="octaves-val"></span></label>
+          <input type="range" id="octaves" />
+        </div>
+        <div class="ctrl-group">
+          <label>SEED</label>
+          <input type="text" id="seed" />
+        </div>
+        <button id="regenerate" class="mfd-btn">RÉGÉNÉRER LE TERRAIN</button>
+      </div><!-- /procedural-controls -->
+
+    </div><!-- /mfd-body -->
   </div>
 
   <script type="module" src="js/app.js"></script>

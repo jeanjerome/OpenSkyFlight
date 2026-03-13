@@ -93,7 +93,7 @@ function regenerate() {
 const controlPanel = new ControlPanel(regenerate);
 
 // Update water level when maxHeight changes
-onChange((key) => {
+onChange((key, value) => {
   if (key === 'maxHeight') {
     waterPlane.position.y = CONFIG.maxHeight * CONFIG.waterLevel;
   }
@@ -102,6 +102,9 @@ onChange((key) => {
   }
   if (key === 'viewDistance') {
     // no-op: fog removed
+  }
+  if (key === 'showHud') {
+    hudCanvas.style.display = value ? 'block' : 'none';
   }
   if (key === 'terrainMode') {
     waterPlane.visible = CONFIG.terrainMode === 'procedural';

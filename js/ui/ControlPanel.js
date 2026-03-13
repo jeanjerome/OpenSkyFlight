@@ -4,24 +4,16 @@ export default class ControlPanel {
   constructor(onRegenerate) {
     this.onRegenerate = onRegenerate;
     this.panel = document.getElementById('control-panel');
-    this.toggleBtn = document.getElementById('toggle-panel');
-    this.collapsed = false;
+    this._hideTimeout = null;
 
-    this.toggleBtn.addEventListener('click', () => {
-      this.collapsed = !this.collapsed;
-      this.panel.classList.toggle('collapsed', this.collapsed);
-      this.toggleBtn.textContent = this.collapsed ? '▶' : '◀';
-    });
-
-    // --- Terrain mode ---
+    this._setupHoverBehavior();
     this._setupTerrainMode();
-
-    // --- Procedural sliders ---
     this._setupSlider('resolution', 'chunkResolution', 16, 128, 1);
     this._setupSlider('viewDistance', 'viewDistance', 2, 25, 1);
     this._setupSlider('maxHeight', 'maxHeight', 100, 2400, 40);
     this._setupSlider('octaves', 'octaves', 1, 8, 1);
     this._setupSpeedSlider();
+    this._setupHudToggle();
 
     const wireframeCb = document.getElementById('wireframe');
     wireframeCb.checked = CONFIG.wireframe;
@@ -38,16 +30,49 @@ export default class ControlPanel {
     });
   }
 
+  _setupHoverBehavior() {
+    const trigger = document.getElementById('panel-trigger');
+
+    const showPanel = () => {
+      clearTimeout(this._hideTimeout);
+      this.panel.classList.add('visible');
+    };
+
+    const scheduleHide = () => {
+      clearTimeout(this._hideTimeout);
+      this._hideTimeout = setTimeout(() => {
+        this.panel.classList.remove('visible');
+      }, 300);
+    };
+
+    trigger.addEventListener('mouseenter', showPanel);
+    trigger.addEventListener('mouseleave', scheduleHide);
+    this.panel.addEventListener('mouseenter', showPanel);
+    this.panel.addEventListener('mouseleave', scheduleHide);
+  }
+
+  _setupHudToggle() {
+    const hudCb = document.getElementById('showHud');
+    hudCb.checked = CONFIG.showHud;
+    hudCb.addEventListener('change', () => {
+      update('showHud', hudCb.checked);
+    });
+  }
+
   _setupTerrainMode() {
     const modeSelect = document.getElementById('terrainMode');
     const realworldControls = document.getElementById('realworld-controls');
     const proceduralControls = document.getElementById('procedural-controls');
+    const viewDistGroup = document.getElementById('sim-viewdistance-group');
+    const wireframeGroup = document.getElementById('sim-wireframe-group');
 
     modeSelect.value = CONFIG.terrainMode;
 
     const togglePanels = (mode) => {
       realworldControls.style.display = mode === 'realworld' ? 'block' : 'none';
       proceduralControls.style.display = mode === 'procedural' ? 'block' : 'none';
+      viewDistGroup.style.display = mode === 'procedural' ? '' : 'none';
+      wireframeGroup.style.display = mode === 'procedural' ? '' : 'none';
     };
     togglePanels(CONFIG.terrainMode);
 

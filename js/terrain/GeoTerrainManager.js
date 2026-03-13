@@ -37,10 +37,15 @@ export default class GeoTerrainManager {
     this.elevationProvider = new ElevationProvider();
     this._effectiveViewDistance = CONFIG.viewDistance;
     this._centerCoords = null; // Mercator coords of center lat/lon
+    this._wireframeMode = !CONFIG.useOsmTexture;
 
     onChange((key) => {
-      if (key === 'useOsmTexture' || key === 'textureSource') {
-        this._updateProvider();
+      if (key === 'useOsmTexture') {
+        this._wireframeMode = !CONFIG.useOsmTexture;
+        this._applyWireframeToggle();
+      }
+      if (key === 'textureSource') {
+        this._updateTextureSource();
       }
     });
   }
@@ -49,8 +54,7 @@ export default class GeoTerrainManager {
     this.dispose();
 
     // Create providers
-    const source = CONFIG.useOsmTexture ? (CONFIG.textureSource || 'satellite') : 'satellite';
-    this.textureProvider = new LocalTileProvider(source);
+    this.textureProvider = new LocalTileProvider(CONFIG.textureSource || 'satellite');
     this.heightProvider = new TerrariumProvider();
 
     // Create MapView with HEIGHT_SHADER mode
@@ -77,7 +81,33 @@ export default class GeoTerrainManager {
 
   update(cameraPosition) {
     if (!this.mapView) return;
-    // geo-three handles LOD via onBeforeRender — nothing extra needed here
+    if (this._wireframeMode) this._enforceWireframe();
+  }
+
+  _enforceWireframe() {
+    this.mapView.traverse((child) => {
+      if (!child.isMesh || !child.material || !child.material.color) return;
+      child.material.wireframe = true;
+      child.material.color.set(0x00ff88);
+      if (child.material.emissive) {
+        child.material.emissive.set(0x004422);
+        child.material.emissiveIntensity = 0.3;
+      }
+    });
+  }
+
+  _applyWireframeToggle() {
+    if (!this.mapView) return;
+    if (this._wireframeMode) {
+      this._enforceWireframe();
+    } else {
+      this.reinit();
+    }
+  }
+
+  _updateTextureSource() {
+    if (!this.mapView || this._wireframeMode) return;
+    this.reinit();
   }
 
   get _effectiveViewDistanceValue() {
@@ -93,23 +123,6 @@ export default class GeoTerrainManager {
     this.init(CONFIG.lat, CONFIG.lon);
   }
 
-  setTextureSource(source) {
-    if (!this.mapView) return;
-    this.textureProvider = new LocalTileProvider(source);
-    this.mapView.setProvider(this.textureProvider);
-  }
-
-  _updateProvider() {
-    if (!this.mapView) return;
-    if (CONFIG.useOsmTexture) {
-      const source = CONFIG.textureSource || 'satellite';
-      this.textureProvider = new LocalTileProvider(source);
-    } else {
-      // When textures are disabled, use a blank/default provider
-      this.textureProvider = new LocalTileProvider('satellite');
-    }
-    this.mapView.setProvider(this.textureProvider);
-  }
 
   /**
    * Compute ground elevation at a world position.
