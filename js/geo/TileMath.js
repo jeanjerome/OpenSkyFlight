@@ -1,5 +1,7 @@
 // Slippy Map tile math utilities
 
+import Logger from '../utils/Logger.js';
+
 const DEG2RAD = Math.PI / 180;
 
 export function latLonToTile(lat, lon, zoom) {
@@ -46,7 +48,9 @@ export function nearZoomForAltitude(altMeters, baseZoom, minZoom = 3) {
   if (altMeters <= 0) return baseZoom;
   const desiredTileMeters = Math.max(altMeters * 0.2, 1);
   const z = Math.floor(Math.log2(40075016.686 / desiredTileMeters));
-  return Math.max(minZoom, Math.min(baseZoom, z));
+  const result = Math.max(minZoom, Math.min(baseZoom, z));
+  Logger.debug('TileMath', `nearZoom: alt=${Math.round(altMeters)}m → zoom=${result}`);
+  return result;
 }
 
 /**
@@ -132,5 +136,6 @@ export function buildLodRings(camTile, nearZoom, minZoom, _unused, baseZoom, alt
   for (let z = nearZoom; z >= minZoom; z--) {
     if (byZoom[z]?.length) rings.push({ zoom: z, tiles: byZoom[z] });
   }
+  Logger.debug('TileMath', `buildLodRings: nearZoom=${nearZoom}, startZoom=${clamped}, total=${tileList.length} tiles, ${rings.length} rings`);
   return rings;
 }

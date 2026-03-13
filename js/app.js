@@ -5,6 +5,7 @@ import GeoTerrainManager from './terrain/GeoTerrainManager.js';
 import FPSController from './camera/FPSController.js';
 import ControlPanel from './ui/ControlPanel.js';
 import HUD from './ui/HUD.js';
+import Logger from './utils/Logger.js';
 
 // --- Renderer ---
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -92,6 +93,11 @@ function regenerate() {
 
 const controlPanel = new ControlPanel(regenerate);
 
+// --- Logger panel init ---
+Logger.bindPanel(document.getElementById('log-panel'));
+document.getElementById('log-panel-clear').addEventListener('click', () => Logger.clear());
+Logger.info('App', 'Application started');
+
 // Update water level when maxHeight changes
 onChange((key, value) => {
   if (key === 'maxHeight') {
@@ -154,6 +160,7 @@ function animate() {
       camera.far = farNeeded;
       camera.near = 1;
       camera.updateProjectionMatrix();
+      Logger.debug('App', 'Realworld clip planes updated', { near: 1, far: farNeeded });
     }
 
     // AGL from elevation lookup
@@ -165,6 +172,7 @@ function animate() {
       camera.far = Math.max(5000, farNeeded);
       camera.near = Math.max(1, farNeeded * 0.0001);
       camera.updateProjectionMatrix();
+      Logger.debug('App', 'Clip planes updated', { near: camera.near, far: camera.far });
     }
 
     // Raycast down to measure ground elevation

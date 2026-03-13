@@ -168,6 +168,39 @@
 
     /* Section separator */
     .section-separator { border: none; border-top: 1px solid #003322; margin: 12px 0; }
+
+    /* Log panel */
+    #log-panel-container {
+      position: fixed; bottom: 0; left: 0;
+      width: 520px; max-height: 220px;
+      background: rgba(0, 10, 5, 0.88);
+      border: 1px solid #005533;
+      border-bottom: none; border-left: none;
+      z-index: 15; display: none;
+      flex-direction: column;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+    }
+    #log-panel-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 4px 8px;
+      border-bottom: 1px solid #005533;
+      color: #00cc66; letter-spacing: 1px; font-size: 10px;
+    }
+    #log-panel-clear {
+      background: transparent; border: 1px solid #005533; color: #00cc66;
+      padding: 1px 8px; cursor: pointer; font-family: inherit; font-size: 10px;
+      letter-spacing: 1px;
+    }
+    #log-panel-clear:hover { border-color: #00ff88; color: #00ff88; }
+    #log-panel {
+      overflow-y: auto; flex: 1; padding: 4px 8px;
+      max-height: 186px;
+      line-height: 1.4;
+    }
+    #log-panel::-webkit-scrollbar { width: 4px; }
+    #log-panel::-webkit-scrollbar-track { background: transparent; }
+    #log-panel::-webkit-scrollbar-thumb { background: #005533; }
   </style>
   <script type="importmap">
   {
@@ -186,6 +219,14 @@
   <div id="help">
     Clic pour capturer la souris | Souris : orienter le vol<br>
     ↑↓ : avancer/reculer | ←→ : dériver
+  </div>
+
+  <div id="log-panel-container">
+    <div id="log-panel-header">
+      <span>LOG OUTPUT</span>
+      <button id="log-panel-clear">CLEAR</button>
+    </div>
+    <div id="log-panel"></div>
   </div>
 
   <div id="panel-trigger"></div>
@@ -214,6 +255,21 @@
       <div class="ctrl-group checkbox-group">
         <input type="checkbox" id="showHud" checked />
         <label for="showHud">HUD OVERLAY</label>
+      </div>
+
+      <div class="ctrl-group checkbox-group">
+        <input type="checkbox" id="showLogs" />
+        <label for="showLogs">LOGS</label>
+      </div>
+
+      <div class="ctrl-group" id="logLevel-group">
+        <label>LOG LEVEL</label>
+        <select id="logLevel">
+          <option value="DEBUG">DEBUG</option>
+          <option value="INFO">INFO</option>
+          <option value="WARN" selected>WARN</option>
+          <option value="ERROR">ERROR</option>
+        </select>
       </div>
 
       <!-- ── CONFIGURATION ── -->

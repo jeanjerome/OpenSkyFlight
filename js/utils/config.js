@@ -24,6 +24,8 @@ const CONFIG = {
   maxTotalTiles: 1000,
   lodRingRadius: 8,
   showHud: true,
+  logLevel: 'WARN',
+  showLogs: false,
 };
 
 const listeners = new Set();

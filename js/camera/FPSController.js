@@ -1,4 +1,5 @@
 import { CONFIG } from '../utils/config.js';
+import Logger from '../utils/Logger.js';
 
 export default class FPSController {
   constructor(camera, domElement) {
@@ -10,6 +11,8 @@ export default class FPSController {
     this.yawRate = 0;
     this.keys = {};
     this.locked = false;
+
+    this._lastLogTime = 0;
 
     this._onMouseMove = this._onMouseMove.bind(this);
     this._onKeyDown = this._onKeyDown.bind(this);
@@ -89,6 +92,13 @@ export default class FPSController {
     this.camera.rotation.y = this.yaw;
     this.camera.rotation.x = this.pitch;
     this.camera.rotation.z = this.roll;
+
+    const now = performance.now();
+    if (now - this._lastLogTime > 2000) {
+      this._lastLogTime = now;
+      const p = this.camera.position;
+      Logger.debug('Camera', `pos=(${p.x.toFixed(0)}, ${p.y.toFixed(0)}, ${p.z.toFixed(0)}) pitch=${this.pitch.toFixed(2)} yaw=${this.yaw.toFixed(2)}`);
+    }
   }
 
   dispose() {

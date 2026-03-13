@@ -2,6 +2,7 @@
 
 import * as THREE from 'three';
 import { acquireFetch, releaseFetch } from './fetchSemaphore.js';
+import Logger from '../utils/Logger.js';
 
 export default class TextureProvider {
   constructor() {
@@ -16,7 +17,10 @@ export default class TextureProvider {
    */
   async fetchTexture(tileX, tileY, zoom, source = 'osm') {
     const key = `${source}/${zoom}/${tileX}/${tileY}`;
-    if (this._cache.has(key)) return this._cache.get(key);
+    if (this._cache.has(key)) {
+      Logger.debug('Texture', `Cache hit: ${key}`);
+      return this._cache.get(key);
+    }
 
     await acquireFetch();
     try {
@@ -34,6 +38,7 @@ export default class TextureProvider {
       texture.wrapS = THREE.ClampToEdgeWrapping;
       texture.wrapT = THREE.ClampToEdgeWrapping;
 
+      Logger.info('Texture', `Fetched ${key}`);
       this._cache.set(key, texture);
       return texture;
     } finally {

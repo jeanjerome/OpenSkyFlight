@@ -1,4 +1,5 @@
 import { CONFIG, update } from '../utils/config.js';
+import Logger from '../utils/Logger.js';
 
 export default class ControlPanel {
   constructor(onRegenerate) {
@@ -14,6 +15,7 @@ export default class ControlPanel {
     this._setupSlider('octaves', 'octaves', 1, 8, 1);
     this._setupSpeedSlider();
     this._setupHudToggle();
+    this._setupLogControls();
 
     const wireframeCb = document.getElementById('wireframe');
     wireframeCb.checked = CONFIG.wireframe;
@@ -56,6 +58,20 @@ export default class ControlPanel {
     hudCb.checked = CONFIG.showHud;
     hudCb.addEventListener('change', () => {
       update('showHud', hudCb.checked);
+    });
+  }
+
+  _setupLogControls() {
+    const logsCb = document.getElementById('showLogs');
+    logsCb.checked = CONFIG.showLogs;
+    logsCb.addEventListener('change', () => {
+      update('showLogs', logsCb.checked);
+    });
+
+    const logLevelSelect = document.getElementById('logLevel');
+    logLevelSelect.value = CONFIG.logLevel;
+    logLevelSelect.addEventListener('change', () => {
+      update('logLevel', logLevelSelect.value);
     });
   }
 
@@ -122,7 +138,7 @@ export default class ControlPanel {
           alert('Lieu non trouvé');
         }
       } catch (err) {
-        console.warn('Nominatim search failed:', err);
+        Logger.warn('ControlPanel', `Nominatim search failed: ${err.message}`);
         alert('Erreur de recherche');
       }
     };

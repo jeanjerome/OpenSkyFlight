@@ -3,6 +3,7 @@
 // Encoding: height = (R * 256 + G + B / 256) - 32768
 
 import { acquireFetch, releaseFetch } from './fetchSemaphore.js';
+import Logger from '../utils/Logger.js';
 
 export default class ElevationProvider {
   constructor() {
@@ -16,7 +17,10 @@ export default class ElevationProvider {
 
   async fetchHeightmap(tileX, tileY, zoom) {
     const key = `${zoom}/${tileX}/${tileY}`;
-    if (this._cache.has(key)) return this._cache.get(key);
+    if (this._cache.has(key)) {
+      Logger.debug('Elevation', `Cache hit: ${key}`);
+      return this._cache.get(key);
+    }
 
     // Deduplicate in-flight requests: return existing promise if fetch already running
     if (this._pending.has(key)) return this._pending.get(key);
@@ -59,9 +63,7 @@ export default class ElevationProvider {
         if (h > max) max = h;
       }
 
-      if (max - min < 1) {
-        console.debug(`Elevation tile ${key}: flat (h=${min.toFixed(1)}m)`);
-      }
+      Logger.info('Elevation', `Fetched ${key}`, { min: Math.round(min), max: Math.round(max) });
 
       this._cache.set(key, heightmap);
       return heightmap;

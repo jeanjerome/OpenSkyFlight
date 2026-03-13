@@ -4,6 +4,7 @@ import { CONFIG, onChange } from '../utils/config.js';
 import { latLonToTile, tileWorldSize, horizonTiles, nearZoomForAltitude, buildLodRings, EARTH_RADIUS } from '../geo/TileMath.js';
 import ElevationProvider from '../geo/ElevationProvider.js';
 import TextureProvider from '../geo/TextureProvider.js';
+import Logger from '../utils/Logger.js';
 
 export default class ChunkManager {
   constructor(scene) {
@@ -99,7 +100,10 @@ export default class ChunkManager {
       this._pendingReal.delete(key);
 
       // Check if this tile is still needed
-      if (!this._currentNeededKeys || !this._currentNeededKeys.has(key)) return;
+      if (!this._currentNeededKeys || !this._currentNeededKeys.has(key)) {
+        Logger.debug('ChunkManager', 'Tile no longer needed, discarding', key);
+        return;
+      }
 
       const chunk = new TerrainChunk(cx, cz, this.material);
       const vertexCount = positions.byteLength / 12;
@@ -133,6 +137,8 @@ export default class ChunkManager {
       chunk._lodZoom = zoom;
       chunk._lodTx = cx;
       chunk._lodTy = cz;
+
+      Logger.debug('ChunkManager', `Tile loaded z${zoom}/${cx}/${cz}`, { worldSize, scale });
 
       // When textures are enabled, stage the chunk off-screen until texture is ready
       if (CONFIG.useOsmTexture) {
@@ -184,7 +190,7 @@ export default class ChunkManager {
         chunk.setTexture(texture);
       }
     } catch (err) {
-      console.warn('Texture load failed:', err.message);
+      Logger.warn('ChunkManager', `Texture load failed: ${err.message}`);
     }
   }
 
@@ -201,7 +207,7 @@ export default class ChunkManager {
         chunk.setTexture(texture);
       }
     } catch (err) {
-      console.warn('Texture load failed:', err.message);
+      Logger.warn('ChunkManager', `Texture load failed: ${err.message}`);
     }
   }
 
@@ -215,7 +221,7 @@ export default class ChunkManager {
           chunk.setTexture(texture);
         }
       } catch (err) {
-        console.warn('Texture stage failed:', err.message);
+        Logger.warn('ChunkManager', `Texture stage failed: ${err.message}`);
         // Will proceed without texture — still better than a hole
       }
     }
@@ -334,6 +340,7 @@ export default class ChunkManager {
 
     // Store for use in _onChunkReady
     this._currentNeededKeys = neededKeys;
+    Logger.debug('ChunkManager', `LOD plan: ${totalTiles} tiles needed, nearZoom=${nearZoom}, rings=${rings.length}`);
 
     // Prune chunks no longer needed
     this._pruneOutOfRangeChunks(neededKeys, cameraPosition);
@@ -376,6 +383,7 @@ export default class ChunkManager {
         const coverage = this._tileCoverageStatus(key, neededKeys);
         if (coverage === 'covered') {
           // All replacement tiles are loaded — safe to remove
+          Logger.debug('ChunkManager', 'Pruned tile (covered)', key);
           this.scene.remove(chunk.mesh);
           chunk.dispose();
           this.chunks.delete(key);
@@ -499,7 +507,7 @@ export default class ChunkManager {
         zoom,
       }, [hmCopy.buffer]);
     } catch (err) {
-      console.warn(`Elevation fetch failed for tile z${zoom}/${tx}/${ty}:`, err.message);
+      Logger.warn('ChunkManager', `Elevation fetch failed for tile z${zoom}/${tx}/${ty}: ${err.message}`);
       this.pending.delete(key);
       this._pendingReal.delete(key);
       this._failedTiles.set(key, Date.now());
