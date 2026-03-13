@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CONFIG, update, onChange } from '../utils/config.js';
 import { UnitsUtils } from 'geo-three';
+import Logger from '../utils/Logger.js';
 
 const TILE_SIZE = 256;
 const GRID = 5; // 5x5 tile grid
@@ -14,23 +15,17 @@ export default class Minimap {
 
     this._tileCache = new Map(); // "z/x/y" -> Image
     this._pendingLoads = new Set();
-    this._lastLat = null;
-    this._lastLon = null;
-    this._lastZoom = null;
-    this._lastYaw = null;
-    this._throttleCounter = 0;
-    this._forceRedraw = true;
     this._worldDir = new THREE.Vector3();
+
+    // Last draw parameters — used to redraw when tiles arrive
+    this._drawParams = null; // { lat, lon, zoom, yaw }
+    this._redrawTimer = null;
 
     this._setupControls();
     this._applyVisibility();
     onChange((key) => {
       if (key === 'showMinimap' || key === 'terrainMode') {
         this._applyVisibility();
-        this._invalidate();
-      }
-      if (key === 'minimapZoom') {
-        this._invalidate();
       }
     });
   }
@@ -43,7 +38,6 @@ export default class Minimap {
       update('minimapZoom', Math.max(CONFIG.minimapZoom - 1, 3));
     });
 
-    // Wheel zoom on the container
     this.container.addEventListener('wheel', (e) => {
       e.preventDefault();
       if (e.deltaY < 0) {
@@ -54,27 +48,15 @@ export default class Minimap {
     }, { passive: false });
   }
 
-  _invalidate() {
-    this._lastLat = null;
-    this._lastLon = null;
-    this._lastZoom = null;
-    this._lastYaw = null;
-    this._forceRedraw = true;
-  }
-
   _applyVisibility() {
     const visible = CONFIG.showMinimap && CONFIG.terrainMode === 'realworld';
     this.container.style.display = visible ? 'flex' : 'none';
   }
 
+  /** Called every frame from the animation loop. */
   update(camera) {
     if (!CONFIG.showMinimap || CONFIG.terrainMode !== 'realworld') return;
     if (!this.geo.mapView) return;
-
-    // Throttle: update every 3 frames (unless forced)
-    this._throttleCounter++;
-    if (!this._forceRedraw && this._throttleCounter % 3 !== 0) return;
-    this._forceRedraw = false;
 
     const mapView = this.geo.mapView;
 
@@ -92,29 +74,30 @@ export default class Minimap {
     const { latitude, longitude } = latLon;
     if (isNaN(latitude) || isNaN(longitude)) return;
 
-    // Camera yaw (heading) — extract from camera direction
     const dir = camera.getWorldDirection(this._worldDir);
-    const yaw = Math.atan2(dir.x, dir.z); // radians, 0 = north (+Z)
-
+    const yaw = Math.atan2(dir.x, dir.z);
     const zoom = CONFIG.minimapZoom;
 
-    // Skip redraw if nothing changed
-    const latRound = Math.round(latitude * 1e5);
-    const lonRound = Math.round(longitude * 1e5);
-    const yawRound = Math.round(yaw * 100);
-    if (latRound === this._lastLat && lonRound === this._lastLon &&
-        zoom === this._lastZoom && yawRound === this._lastYaw) {
+    // Only redraw when something actually changed
+    const p = this._drawParams;
+    if (p &&
+        Math.round(latitude * 1e5) === Math.round(p.lat * 1e5) &&
+        Math.round(longitude * 1e5) === Math.round(p.lon * 1e5) &&
+        zoom === p.zoom &&
+        Math.round(yaw * 100) === Math.round(p.yaw * 100)) {
       return;
     }
-    this._lastLat = latRound;
-    this._lastLon = lonRound;
-    this._lastZoom = zoom;
-    this._lastYaw = yawRound;
 
-    this._draw(latitude, longitude, zoom, yaw);
+    this._drawParams = { lat: latitude, lon: longitude, zoom, yaw };
+    this._draw();
   }
 
-  _draw(lat, lon, zoom, yaw) {
+  /** Redraw using saved parameters. Safe to call from tile onload. */
+  _draw() {
+    const p = this._drawParams;
+    if (!p) return;
+
+    const { lat, lon, zoom, yaw } = p;
     const ctx = this.ctx;
     const n = 1 << zoom;
 
@@ -126,23 +109,19 @@ export default class Minimap {
     const centerTileX = Math.floor(xTile);
     const centerTileY = Math.floor(yTile);
 
-    // Fractional offset within center tile (0..1)
     const fracX = xTile - centerTileX;
     const fracY = yTile - centerTileY;
 
-    // Canvas center
     const cw = this.canvas.width;
     const ch = this.canvas.height;
     const halfW = cw / 2;
     const halfH = ch / 2;
 
-    // Offset of center tile's top-left corner relative to canvas center
     const offsetX = halfW - fracX * TILE_SIZE;
     const offsetY = halfH - fracY * TILE_SIZE;
 
     ctx.clearRect(0, 0, cw, ch);
 
-    // Draw a grid of tiles centered around the camera tile
     const halfGrid = Math.floor(GRID / 2);
     for (let dy = -halfGrid; dy <= halfGrid; dy++) {
       for (let dx = -halfGrid; dx <= halfGrid; dx++) {
@@ -150,7 +129,6 @@ export default class Minimap {
         const ty = centerTileY + dy;
 
         if (ty < 0 || ty >= n) continue;
-        // Wrap X around the globe
         const wrappedTx = ((tx % n) + n) % n;
 
         const px = offsetX + dx * TILE_SIZE;
@@ -160,17 +138,15 @@ export default class Minimap {
         if (img) {
           ctx.drawImage(img, px, py, TILE_SIZE, TILE_SIZE);
         } else {
-          // Placeholder
           ctx.fillStyle = 'rgba(0, 20, 10, 0.6)';
           ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
         }
       }
     }
 
-    // Draw airplane marker at center
     this._drawMarker(halfW, halfH, yaw);
 
-    // Draw zoom label
+    // Zoom label
     ctx.fillStyle = 'rgba(0, 10, 5, 0.7)';
     ctx.fillRect(0, ch - 16, 40, 16);
     ctx.fillStyle = '#00cc66';
@@ -183,9 +159,9 @@ export default class Minimap {
     const size = 10;
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.rotate(Math.PI - yaw); // +Z in Three.js = south, so offset by π
+    ctx.rotate(Math.PI - yaw);
     ctx.beginPath();
-    ctx.moveTo(0, -size);          // nose (up = north)
+    ctx.moveTo(0, -size);
     ctx.lineTo(size * 0.6, size * 0.6);
     ctx.lineTo(0, size * 0.3);
     ctx.lineTo(-size * 0.6, size * 0.6);
@@ -196,6 +172,15 @@ export default class Minimap {
     ctx.lineWidth = 1;
     ctx.stroke();
     ctx.restore();
+  }
+
+  /** Batch tile-load redraws — one repaint per 100ms burst. */
+  _scheduleRedraw() {
+    if (this._redrawTimer) return;
+    this._redrawTimer = setTimeout(() => {
+      this._redrawTimer = null;
+      this._draw();
+    }, 100);
   }
 
   _getTile(z, x, y) {
@@ -210,16 +195,17 @@ export default class Minimap {
     img.onload = () => {
       this._tileCache.set(key, img);
       this._pendingLoads.delete(key);
-      // Evict old entries if cache too large
       if (this._tileCache.size > 200) {
         const first = this._tileCache.keys().next().value;
         this._tileCache.delete(first);
       }
-      // Trigger redraw now that the tile is available
-      this._invalidate();
+      this._scheduleRedraw();
     };
     img.onerror = () => {
       this._pendingLoads.delete(key);
+      Logger.warn('Minimap', `Tile ${key} load failed`);
+      // Retry after delay (tile will be re-requested on next _draw)
+      setTimeout(() => this._scheduleRedraw(), 1000);
     };
     return null;
   }
