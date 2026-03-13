@@ -144,11 +144,11 @@ export default class ControlPanel {
           latInput.value = parseFloat(data[0].lat).toFixed(4);
           lonInput.value = parseFloat(data[0].lon).toFixed(4);
         } else {
-          alert('Lieu non trouvé');
+          alert('Location not found');
         }
       } catch (err) {
         Logger.warn('ControlPanel', `Nominatim search failed: ${err.message}`);
-        alert('Erreur de recherche');
+        alert('Search error');
       }
     };
 

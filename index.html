@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -250,8 +250,8 @@
   <div id="stats"></div>
   <div id="crosshair"></div>
   <div id="help">
-    Clic pour capturer la souris | Souris : orienter le vol<br>
-    ↑↓ : avancer/reculer | ←→ : dériver
+    Click to capture mouse | Mouse: steer flight<br>
+    ↑↓ : forward/backward | ←→ : strafe
   </div>
 
   <div id="minimap-container">
@@ -282,12 +282,12 @@
       <div class="mfd-section-label">SIMULATION</div>
 
       <div class="ctrl-group">
-        <label>VITESSE <span id="cameraSpeed-val"></span></label>
+        <label>SPEED <span id="cameraSpeed-val"></span></label>
         <input type="range" id="cameraSpeed" />
       </div>
 
       <div class="ctrl-group" id="sim-viewdistance-group">
-        <label>DISTANCE DE VUE <span id="viewDistance-val"></span></label>
+        <label>VIEW DISTANCE <span id="viewDistance-val"></span></label>
         <input type="range" id="viewDistance" />
       </div>
 
@@ -327,14 +327,14 @@
       <div class="ctrl-group">
         <label>MODE</label>
         <select id="terrainMode">
-          <option value="procedural">Procédural</option>
-          <option value="realworld">Carte réelle</option>
+          <option value="procedural">Procedural</option>
+          <option value="realworld">Real world</option>
         </select>
       </div>
 
       <div id="realworld-controls" style="display:none">
         <div class="ctrl-group">
-          <label>RECHERCHER UN LIEU</label>
+          <label>SEARCH LOCATION</label>
           <div class="search-row">
             <input type="text" id="placeSearch" placeholder="Mont Blanc, Paris..." />
             <button id="searchBtn">&#128269;</button>
@@ -359,17 +359,17 @@
             <option value="osm">OpenStreetMap</option>
           </select>
         </div>
-        <button id="loadTerrain" class="mfd-btn">CHARGER LE TERRAIN</button>
+        <button id="loadTerrain" class="mfd-btn">LOAD TERRAIN</button>
         <hr class="section-separator" />
       </div>
 
       <div id="procedural-controls">
         <div class="ctrl-group">
-          <label>RÉSOLUTION <span id="resolution-val"></span></label>
+          <label>RESOLUTION <span id="resolution-val"></span></label>
           <input type="range" id="resolution" />
         </div>
         <div class="ctrl-group">
-          <label>HAUTEUR MAX <span id="maxHeight-val"></span></label>
+          <label>MAX HEIGHT <span id="maxHeight-val"></span></label>
           <input type="range" id="maxHeight" />
         </div>
         <div class="ctrl-group">
@@ -380,7 +380,7 @@
           <label>SEED</label>
           <input type="text" id="seed" />
         </div>
-        <button id="regenerate" class="mfd-btn">RÉGÉNÉRER LE TERRAIN</button>
+        <button id="regenerate" class="mfd-btn">REGENERATE TERRAIN</button>
       </div><!-- /procedural-controls -->
 
     </div><!-- /mfd-body -->

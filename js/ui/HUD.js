@@ -8,9 +8,9 @@ const COMPASS_POINTS = [
   { deg: 90, label: 'E' },
   { deg: 135, label: 'SE' },
   { deg: 180, label: 'S' },
-  { deg: 225, label: 'SO' },
-  { deg: 270, label: 'O' },
-  { deg: 315, label: 'NO' },
+  { deg: 225, label: 'SW' },
+  { deg: 270, label: 'W' },
+  { deg: 315, label: 'NW' },
 ];
 
 export default class HUD {
