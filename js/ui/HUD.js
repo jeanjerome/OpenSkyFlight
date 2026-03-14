@@ -45,6 +45,7 @@ export default class HUD {
     this._drawHorizon(ctx, pitch);
     this._drawAltimeter(ctx, altY, groundElevation);
     this._drawSpeed(ctx);
+    if (CONFIG.hiResMode) this._drawHiResBadge(ctx);
   }
 
   // --- Compass / Heading (top center) ---
@@ -332,6 +333,37 @@ export default class HUD {
     ctx.font = 'bold 12px Courier New';
     ctx.textAlign = 'right';
     ctx.fillText('SPD', x, cy - scaleH / 2 - 14);
+
+    ctx.restore();
+  }
+
+  // --- Hi-Res mode badge (top-right) ---
+  _drawHiResBadge(ctx) {
+    const label = 'HI-RES Z18';
+    const x = this.w - 20;
+    const y = 44;
+
+    ctx.save();
+    ctx.font = 'bold 13px Courier New';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+
+    const tw = ctx.measureText(label).width;
+    const pad = 6;
+
+    // Background box
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(x - tw - pad * 2, y - 12, tw + pad * 2, 24);
+
+    // Border
+    ctx.strokeStyle = HUD_COLOR;
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = HUD_ALPHA;
+    ctx.strokeRect(x - tw - pad * 2, y - 12, tw + pad * 2, 24);
+
+    // Text
+    ctx.fillStyle = HUD_COLOR;
+    ctx.fillText(label, x - pad, y);
 
     ctx.restore();
   }

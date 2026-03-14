@@ -26,17 +26,18 @@ const CONFIG = {
   showHud: true,
   logLevel: 'WARN',
   showLogs: false,
-  showMinimap: false,
+  showMinimap: true,
   minimapZoom: 13,
-  sunElevation: 15,
+  sunElevation: 80,
   sunAzimuth: 180,
   skyTurbidity: 2.0,
   skyRayleigh: 1.0,
-  showClouds: true,
+  showClouds: false,
   cloudAltitude: 3500,
   cloudOpacity: 0.7,
   fogEnabled: true,
   fogDensity: 0.000015,
+  hiResMode: false,
 };
 
 const listeners = new Set();

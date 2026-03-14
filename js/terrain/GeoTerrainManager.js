@@ -59,6 +59,9 @@ export default class GeoTerrainManager {
       ? new DebugProvider()
       : new LocalTileProvider(CONFIG.textureSource || 'satellite');
     this.heightProvider = new TerrariumProvider();
+    const effectiveZoom = CONFIG.hiResMode ? 18 : 15;
+    this.heightProvider.maxZoom = effectiveZoom;
+    this.textureProvider.maxZoom = effectiveZoom;
 
     // Create MapView with HEIGHT_SHADER mode
     this.mapView = new MapView(MapView.HEIGHT_SHADER, this.textureProvider, this.heightProvider);
@@ -126,6 +129,12 @@ export default class GeoTerrainManager {
     this._debugMode = !this._debugMode;
     this.reinit();
     return this._debugMode;
+  }
+
+  toggleHiRes() {
+    CONFIG.hiResMode = !CONFIG.hiResMode;
+    this.reinit();
+    return CONFIG.hiResMode;
   }
 
   reinit() {
@@ -207,7 +216,19 @@ export default class GeoTerrainManager {
   dispose() {
     if (this.mapView) {
       this.scene.remove(this.mapView);
-      this.mapView.clear();
+      // Do NOT call mapView.clear() — it re-initializes child nodes which
+      // triggers async loads and causes "Loaded more children than expected" errors.
+      // Instead, dispose geometry and materials manually.
+      this.mapView.traverse((child) => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach((m) => m.dispose());
+          } else {
+            child.material.dispose();
+          }
+        }
+      });
       this.mapView = null;
     }
     this._centerCoords = null;

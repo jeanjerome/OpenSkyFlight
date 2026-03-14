@@ -141,6 +141,10 @@ window.addEventListener('keydown', (e) => {
     const active = geoTerrainManager.toggleDebug();
     Logger.info('App', `Debug tiles ${active ? 'enabled' : 'disabled'}`);
   }
+  if (e.code === 'KeyH' && CONFIG.terrainMode === 'realworld') {
+    const active = geoTerrainManager.toggleHiRes();
+    Logger.info('App', `Hi-res mode (zoom 18) ${active ? 'enabled' : 'disabled'}`);
+  }
 });
 
 // --- Stats overlay ---
