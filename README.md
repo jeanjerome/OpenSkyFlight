@@ -16,6 +16,7 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 | ![Procedural Simplex noise terrain](docs/screenshots/procedural.png) | ![Real-world elevation with Earth curvature](docs/screenshots/realworld.png) |
 - **Real-world elevation** — decoded from [AWS Terrarium](https://registry.opendata.aws/terrain-tiles/) PNG tiles with spherical Earth curvature
 - **Satellite & map textures** — ESRI World Imagery or OpenStreetMap raster overlay, switchable at runtime
+- **Hi-Res mode (zoom 18)** — press `H` to toggle upsampled elevation with zoom-18 satellite textures for sharper close-up detail
 - **Adaptive LOD** — quadtree subdivision based on camera altitude, covering up to the geometric horizon
 - **Flight simulator controls** — 6-DOF camera with pointer lock, banking, pitch/yaw
 - **Aircraft-style HUD** — compass, artificial horizon, altimeter (MSL + AGL), speed indicator
@@ -51,6 +52,8 @@ The server acts as a **caching proxy** for map tiles — every tile downloaded f
 | Mouse | Look around (yaw / pitch) |
 | `W` / `S` or `↑` / `↓` | Move forward / backward |
 | `A` / `D` or `←` / `→` | Strafe left / right |
+| `H` | Toggle Hi-Res mode (zoom 18) |
+| `X` | Toggle debug tile overlay |
 | `Esc` | Release pointer lock |
 
 Use the right-side control panel to switch between **Procedural** and **Real-World** modes, adjust terrain parameters, and toggle wireframe or textures.
@@ -100,44 +103,50 @@ cache/
 ```
 ├── index.html                     Main HTML page (MFD-styled UI)
 ├── js/
-│   ├── app.js                     Scene setup & animation loop
+│   ├── app.js                     Scene setup, render loop & keyboard shortcuts
+│   ├── atmosphere/
+│   │   ├── AtmosphericSky.js      Procedural sky, sun positioning & fog
+│   │   └── CloudLayer.js          Animated cloud layer
 │   ├── camera/
 │   │   └── FPSController.js       Flight camera (pointer lock, 6-DOF, banking)
 │   ├── terrain/
 │   │   ├── ChunkManager.js        Chunk lifecycle, LOD dispatch
-│   │   ├── GeoTerrainManager.js   Real-world terrain via geo-three
+│   │   ├── GeoTerrainManager.js   Real-world terrain via geo-three, hi-res toggle
 │   │   ├── TerrainChunk.js        Geometry & mesh for one chunk
 │   │   ├── NoiseGenerator.js      Simplex noise (fBm)
 │   │   └── terrainWorker.js       Web Worker for off-thread generation
 │   ├── geo/
 │   │   ├── TileMath.js            Slippy Map math, quadtree LOD, horizon calc
 │   │   ├── ElevationProvider.js   Terrarium tile fetch + decode
-│   │   ├── TerrariumProvider.js   geo-three height provider
+│   │   ├── TerrariumProvider.js   geo-three height provider (zoom-15 upsampling to 18)
 │   │   ├── LocalTileProvider.js   geo-three texture provider (via proxy)
 │   │   ├── TextureProvider.js     OSM/satellite tile fetch
 │   │   └── fetchSemaphore.js      Browser-side concurrency limiter
 │   ├── ui/
-│   │   ├── HUD.js                 Flight instrument overlay (Canvas 2D)
+│   │   ├── HUD.js                 Flight instrument overlay + hi-res badge
 │   │   ├── Minimap.js             OSM minimap with airplane marker
 │   │   └── ControlPanel.js        MFD settings panel
 │   └── utils/
 │       ├── config.js              Reactive configuration system
 │       └── Logger.js              Centralized logging with UI panel
 ├── scripts/
-│   └── serve.js                   Dev server with caching tile proxy
+│   ├── serve.js                   Dev server with caching tile proxy
+│   └── prefetch-tiles.js          Bulk tile downloader for offline use
 └── cache/                         Local tile cache (git-ignored)
 ```
 
 ## Technologies
 
-- [Three.js](https://threejs.org/) v0.163 — 3D rendering (loaded via CDN, no install)
+- [Three.js](https://threejs.org/) v0.183 — 3D rendering (loaded via CDN, no install)
 - [geo-three](https://github.com/tentone/geo-three) — geographic tile management and Mercator projection
 - Web Workers — off-thread terrain generation
-- Canvas 2D — HUD overlay and minimap
-- [AWS Terrarium Tiles](https://registry.opendata.aws/terrain-tiles/) — elevation data
+- Canvas 2D — HUD instrument overlay, hi-res badge, and minimap
+- [three/examples — Sky](https://threejs.org/examples/?q=sky#webgl_shaders_sky) — procedural atmospheric sky and sun
+- [AWS Terrarium Tiles](https://registry.opendata.aws/terrain-tiles/) — elevation data (zoom 0–15, upsampled to 18 in hi-res mode)
 - [OpenStreetMap](https://www.openstreetmap.org/) — map textures
-- [ESRI World Imagery](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9) — satellite textures
-- ES modules — no bundler needed
+- [ESRI World Imagery](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9) — satellite textures (up to zoom 18+)
+- Node.js — dev server with transparent caching tile proxy and offline prefetch script
+- ES modules + import maps — no bundler needed
 
 ## Data Sources & Attribution
 
