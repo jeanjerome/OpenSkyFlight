@@ -1,4 +1,4 @@
-import { MapView, MapHeightNodeShader, LODRaycast, UnitsUtils } from 'geo-three';
+import { MapView, MapHeightNodeShader, LODRaycast, UnitsUtils, DebugProvider } from 'geo-three';
 import { CONFIG, onChange } from '../utils/config.js';
 import LocalTileProvider from '../geo/LocalTileProvider.js';
 import TerrariumProvider from '../geo/TerrariumProvider.js';
@@ -38,6 +38,7 @@ export default class GeoTerrainManager {
     this._effectiveViewDistance = CONFIG.viewDistance;
     this._centerCoords = null; // Mercator coords of center lat/lon
     this._wireframeMode = !CONFIG.useOsmTexture;
+    this._debugMode = false;
 
     onChange((key) => {
       if (key === 'useOsmTexture') {
@@ -54,7 +55,9 @@ export default class GeoTerrainManager {
     this.dispose();
 
     // Create providers
-    this.textureProvider = new LocalTileProvider(CONFIG.textureSource || 'satellite');
+    this.textureProvider = this._debugMode
+      ? new DebugProvider()
+      : new LocalTileProvider(CONFIG.textureSource || 'satellite');
     this.heightProvider = new TerrariumProvider();
 
     // Create MapView with HEIGHT_SHADER mode
@@ -117,6 +120,12 @@ export default class GeoTerrainManager {
   getMeshes() {
     // In HEIGHT_SHADER mode, the map manages its own meshes
     return this.mapView ? [this.mapView] : [];
+  }
+
+  toggleDebug() {
+    this._debugMode = !this._debugMode;
+    this.reinit();
+    return this._debugMode;
   }
 
   reinit() {

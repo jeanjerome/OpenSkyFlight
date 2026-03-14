@@ -135,6 +135,14 @@ onChange((key, value) => {
 });
 
 
+// --- Debug tile toggle (X key) ---
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'KeyX' && CONFIG.terrainMode === 'realworld') {
+    const active = geoTerrainManager.toggleDebug();
+    Logger.info('App', `Debug tiles ${active ? 'enabled' : 'disabled'}`);
+  }
+});
+
 // --- Stats overlay ---
 const statsEl = document.getElementById('stats');
 let frameCount = 0;
