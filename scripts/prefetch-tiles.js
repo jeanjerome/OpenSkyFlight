@@ -44,11 +44,18 @@ console.log(`Radius: ${radius} → grid ${(2 * radius + 1)}×${(2 * radius + 1)}
 const sources = [
   {
     name: 'terrarium',
+    ext: 'png',
     urlTemplate: (z, x, y) => `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`,
   },
   {
     name: 'osm',
+    ext: 'png',
     urlTemplate: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
+  },
+  {
+    name: 'satellite',
+    ext: 'jpg',
+    urlTemplate: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,
   },
 ];
 
@@ -59,7 +66,7 @@ function sleep(ms) {
 }
 
 async function downloadTile(source, z, x, y) {
-  const filePath = join(cacheDir, source.name, String(z), String(x), `${y}.png`);
+  const filePath = join(cacheDir, source.name, String(z), String(x), `${y}.${source.ext}`);
   if (existsSync(filePath)) return 'cached';
 
   const url = source.urlTemplate(z, x, y);
