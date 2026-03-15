@@ -149,6 +149,11 @@ window.addEventListener('keydown', (e) => {
     const active = geoTerrainManager.toggleHiRes();
     Logger.info('App', `Hi-res mode (zoom 18) ${active ? 'enabled' : 'disabled'}`);
   }
+  if (e.code === 'KeyI') {
+    const active = hud.toggleStats();
+    document.getElementById('help').style.display = active ? 'block' : 'none';
+    Logger.info('App', `Info ${active ? 'enabled' : 'disabled'}`);
+  }
   if (e.code === 'KeyB') {
     if (benchmarkRunner.isRunning()) {
       benchmarkRunner.stop(fpsController, renderer);
@@ -166,8 +171,7 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-// --- Stats overlay ---
-const statsEl = document.getElementById('stats');
+// --- Stats ---
 let frameCount = 0;
 let lastFPSTime = performance.now();
 
@@ -232,7 +236,7 @@ function animate() {
   renderer.render(scene, camera);
 
   // Update HUD after render
-  hud.update(camera, groundElevation, benchmarkRunner);
+  hud.update(camera, groundElevation, benchmarkRunner, dt);
 
   // Update minimap
   minimap.update(camera);
@@ -241,8 +245,12 @@ function animate() {
   frameCount++;
   if (now - lastFPSTime >= 500) {
     const fps = Math.round(frameCount / ((now - lastFPSTime) / 1000));
-    const info = renderer.info;
-    statsEl.textContent = `${fps} FPS | ${info.render.triangles} tris | ${info.memory.geometries} geos`;
+    const tris = renderer.info.render.triangles;
+    const formattedTris = tris >= 1e9 ? (tris / 1e9).toFixed(1) + 'B'
+      : tris >= 1e6 ? (tris / 1e6).toFixed(1) + 'M'
+      : tris >= 1e3 ? (tris / 1e3).toFixed(1) + 'K'
+      : tris;
+    hud.setStats(`${fps} FPS | ${formattedTris} triangles`);
     frameCount = 0;
     lastFPSTime = now;
   }
