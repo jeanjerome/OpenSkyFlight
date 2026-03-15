@@ -4,29 +4,6 @@ import LocalTileProvider from '../geo/LocalTileProvider.js';
 import TerrariumProvider from '../geo/TerrariumProvider.js';
 import ElevationProvider from '../geo/ElevationProvider.js';
 
-// Patch MapHeightNodeShader.prepareMaterial for Three.js r152+ compatibility
-// geo-three uses 'vUv' which was renamed to 'vMapUv' in Three.js r152
-const _origPrepareMaterial = MapHeightNodeShader.prepareMaterial;
-MapHeightNodeShader.prepareMaterial = function(material) {
-  material.userData = { heightMap: { value: MapHeightNodeShader.defaultHeightTexture } };
-  material.onBeforeCompile = (shader) => {
-    for (const i in material.userData) {
-      shader.uniforms[i] = material.userData[i];
-    }
-    shader.vertexShader = 'uniform sampler2D heightMap;\n' + shader.vertexShader;
-    shader.vertexShader = shader.vertexShader.replace('#include <fog_vertex>', `
-#include <fog_vertex>
-
-// geo-three height displacement (patched for Three.js r152+)
-vec4 _theight = texture2D(heightMap, vMapUv);
-float _height = ((_theight.r * 255.0 * 65536.0 + _theight.g * 255.0 * 256.0 + _theight.b * 255.0) * 0.1) - 10000.0;
-vec3 _transformed = position + _height * normal;
-gl_Position = projectionMatrix * modelViewMatrix * vec4(_transformed, 1.0);
-    `);
-  };
-  return material;
-};
-
 export default class GeoTerrainManager {
   constructor(scene, renderer) {
     this.scene = scene;
