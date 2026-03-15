@@ -1,4 +1,4 @@
-import { MapView, MapHeightNodeShader, LODRaycast, UnitsUtils, DebugProvider } from 'geo-three';
+import { MapView, MapHeightNodeShader, LODRaycastPruning, UnitsUtils, DebugProvider } from 'geo-three';
 import { CONFIG, onChange } from '../utils/config.js';
 import LocalTileProvider from '../geo/LocalTileProvider.js';
 import TerrariumProvider from '../geo/TerrariumProvider.js';
@@ -44,10 +44,13 @@ export default class GeoTerrainManager {
     this.mapView = new MapView(MapView.HEIGHT_SHADER, this.textureProvider, this.heightProvider);
 
     // Configure LOD
-    const lod = new LODRaycast();
+    const lod = new LODRaycastPruning();
     lod.subdivisionRays = 11;
     lod.thresholdUp = 0.6;
     lod.thresholdDown = 0.15;
+    lod.maxLeafNodes = 400;
+    lod.pruneGraceMultiplier = 1.8;
+    lod.pruneMinLevel = 4;
     this.mapView.lod = lod;
 
     // Position map so that (lat, lon) is at world origin
