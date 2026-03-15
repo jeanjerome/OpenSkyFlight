@@ -4,7 +4,6 @@
 
 import { acquireFetch, releaseFetch } from './fetchSemaphore.js';
 import Logger from '../utils/Logger.js';
-
 export default class ElevationProvider {
   constructor() {
     this._cache = new Map();

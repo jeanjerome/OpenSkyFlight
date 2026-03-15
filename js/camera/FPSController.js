@@ -11,6 +11,7 @@ export default class FPSController {
     this.yawRate = 0;
     this.keys = {};
     this.locked = false;
+    this.enabled = true;
 
     this._lastLogTime = 0;
 
@@ -54,6 +55,7 @@ export default class FPSController {
   }
 
   update(dt) {
+    if (!this.enabled) return;
     const speed = CONFIG.cameraSpeed * dt;
     const sinYaw = Math.sin(this.yaw);
     const cosYaw = Math.cos(this.yaw);

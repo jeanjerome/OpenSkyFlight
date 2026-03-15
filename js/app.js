@@ -9,6 +9,7 @@ import Minimap from './ui/Minimap.js';
 import Logger from './utils/Logger.js';
 import AtmosphericSky from './atmosphere/AtmosphericSky.js';
 import CloudLayer from './atmosphere/CloudLayer.js';
+import BenchmarkRunner from './benchmark/BenchmarkRunner.js';
 
 // --- Renderer ---
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -70,6 +71,9 @@ if (CONFIG.terrainMode === 'realworld') {
 
 // --- FPS Controller ---
 const fpsController = new FPSController(camera, renderer.domElement);
+
+// --- Benchmark ---
+const benchmarkRunner = new BenchmarkRunner();
 
 // --- HUD ---
 const hudCanvas = document.getElementById('hud');
@@ -145,6 +149,21 @@ window.addEventListener('keydown', (e) => {
     const active = geoTerrainManager.toggleHiRes();
     Logger.info('App', `Hi-res mode (zoom 18) ${active ? 'enabled' : 'disabled'}`);
   }
+  if (e.code === 'KeyB') {
+    if (benchmarkRunner.isRunning()) {
+      benchmarkRunner.stop(fpsController, renderer);
+    } else {
+      const getGround = (x, z) => {
+        if (CONFIG.terrainMode === 'realworld') {
+          return geoTerrainManager.getGroundElevation(x, z);
+        }
+        groundRaycaster.set(new THREE.Vector3(x, 10000, z), downDirection);
+        const hits = groundRaycaster.intersectObjects(chunkManager.getMeshes(), false);
+        return hits.length > 0 ? hits[0].point.y : 0;
+      };
+      benchmarkRunner.start(fpsController, camera, getGround);
+    }
+  }
 });
 
 // --- Stats overlay ---
@@ -171,6 +190,7 @@ function animate() {
   prevTime = now;
 
   fpsController.update(dt);
+  benchmarkRunner.update(dt, renderer, camera, fpsController);
   cloudLayer.update(dt, camera.position);
 
   const activeManager = getActiveManager();
@@ -212,7 +232,7 @@ function animate() {
   renderer.render(scene, camera);
 
   // Update HUD after render
-  hud.update(camera, groundElevation);
+  hud.update(camera, groundElevation, benchmarkRunner);
 
   // Update minimap
   minimap.update(camera);

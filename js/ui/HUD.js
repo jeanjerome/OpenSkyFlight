@@ -33,7 +33,7 @@ export default class HUD {
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  update(camera, groundElevation) {
+  update(camera, groundElevation, benchmarkRunner) {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.w, this.h);
 
@@ -46,6 +46,13 @@ export default class HUD {
     this._drawAltimeter(ctx, altY, groundElevation);
     this._drawSpeed(ctx);
     if (CONFIG.hiResMode) this._drawHiResBadge(ctx);
+    if (benchmarkRunner && benchmarkRunner.isRunning()) {
+      if (benchmarkRunner.isWarmup()) {
+        this._drawBenchmarkWarmup(ctx, benchmarkRunner.getWarmupRemaining());
+      } else {
+        this._drawBenchmarkBadge(ctx, benchmarkRunner.getElapsed());
+      }
+    }
   }
 
   // --- Compass / Heading (top center) ---
@@ -364,6 +371,79 @@ export default class HUD {
     // Text
     ctx.fillStyle = HUD_COLOR;
     ctx.fillText(label, x - pad, y);
+
+    ctx.restore();
+  }
+
+  // --- Benchmark warmup badge (top-left) ---
+  _drawBenchmarkWarmup(ctx, remaining) {
+    const x = 20;
+    const y = 44;
+    const secs = Math.ceil(remaining);
+    const label = `WARMUP  ${secs}s`;
+
+    ctx.save();
+    ctx.font = 'bold 13px Courier New';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+
+    const tw = ctx.measureText(label).width;
+    const pad = 6;
+    const totalW = tw + pad * 2;
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(x, y - 12, totalW, 24);
+
+    ctx.strokeStyle = '#ffaa00';
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.9;
+    ctx.strokeRect(x, y - 12, totalW, 24);
+
+    ctx.fillStyle = '#ffaa00';
+    ctx.fillText(label, x + pad, y);
+
+    ctx.restore();
+  }
+
+  // --- Benchmark recording badge (top-left) ---
+  _drawBenchmarkBadge(ctx, elapsed) {
+    const x = 20;
+    const y = 44;
+    const secs = Math.floor(elapsed);
+    const label = `REC BENCHMARK  ${secs}s`;
+
+    ctx.save();
+    ctx.font = 'bold 13px Courier New';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+
+    const tw = ctx.measureText(label).width;
+    const dotSize = 8;
+    const pad = 6;
+    const totalW = dotSize + 8 + tw + pad * 2;
+
+    // Background box
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(x, y - 12, totalW, 24);
+
+    // Border
+    ctx.strokeStyle = '#ff3333';
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.9;
+    ctx.strokeRect(x, y - 12, totalW, 24);
+
+    // Blinking red dot
+    const blink = Math.floor(elapsed * 2) % 2 === 0;
+    if (blink) {
+      ctx.fillStyle = '#ff3333';
+      ctx.beginPath();
+      ctx.arc(x + pad + dotSize / 2, y, dotSize / 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Text
+    ctx.fillStyle = '#ff3333';
+    ctx.fillText(label, x + pad + dotSize + 8, y);
 
     ctx.restore();
   }

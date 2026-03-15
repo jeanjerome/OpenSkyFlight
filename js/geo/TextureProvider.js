@@ -3,7 +3,6 @@
 import * as THREE from 'three';
 import { acquireFetch, releaseFetch } from './fetchSemaphore.js';
 import Logger from '../utils/Logger.js';
-
 export default class TextureProvider {
   constructor() {
     this._cache = new Map();

@@ -58,6 +58,20 @@ The server acts as a **caching proxy** for map tiles — every tile downloaded f
 
 Use the right-side control panel to switch between **Procedural** and **Real-World** modes, adjust terrain parameters, and toggle wireframe or textures.
 
+## Building geo-three (dev only)
+
+The terrain engine relies on [geo-three](https://github.com/tentone/geo-three), a Three.js geographic tile library. The upstream project no longer appears to be actively maintained, so we vendor its source code in `vendor/geo-three/source/` in order to apply our own patches and extensions (Three.js r152+ compatibility, custom providers, etc.).
+
+If you modify the sources, rebuild the bundle:
+
+```bash
+cd vendor/geo-three
+npm install   # first time only
+npm run build
+```
+
+This produces `vendor/geo-three/geo-three.module.js`, which the app already imports via import map — no other change needed.
+
 ## Real-World Mode
 
 Switch to **Real-World** in the control panel, enter coordinates (or search a place name), then click **Load Terrain**. The app fetches elevation data from AWS Terrarium and optionally overlays satellite or OSM textures.
