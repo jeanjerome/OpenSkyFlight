@@ -12,5 +12,6 @@ Thumbs.db
 *.swo
 *~
 
-# Node (for prefetch script)
+# Node
 node_modules/
+vendor/geo-three/node_modules/
