@@ -1557,6 +1557,84 @@ class LODFrustum extends LODRadial {
     }
 }
 
+const _projScreenMatrix = new Matrix4();
+const _frustum = new Frustum();
+const _nodeWorldPos = new Vector3();
+const _cameraWorldPos = new Vector3();
+class LODRaycastPruning extends LODRaycast {
+    constructor() {
+        super(...arguments);
+        this.maxLeafNodes = 400;
+        this.pruneGraceMultiplier = 1.8;
+        this.pruneMinLevel = 4;
+        this.pruneOutsideFrustumOnly = true;
+    }
+    updateLOD(view, camera, renderer, scene) {
+        super.updateLOD(view, camera, renderer, scene);
+        this._prunePass(view, camera);
+    }
+    _prunePass(view, camera) {
+        _projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+        _frustum.setFromProjectionMatrix(_projScreenMatrix);
+        camera.getWorldPosition(_cameraWorldPos);
+        const parentGroups = new Map();
+        view.traverse((obj) => {
+            const node = obj;
+            if (!node.isMesh || node.subdivided || node.level === undefined || node.level < this.pruneMinLevel) {
+                return;
+            }
+            const parent = node.parentNode;
+            if (!parent) {
+                return;
+            }
+            const inFrustum = _frustum.intersectsObject(node);
+            node.getWorldPosition(_nodeWorldPos);
+            const dist = _cameraWorldPos.distanceTo(_nodeWorldPos);
+            const m = node.matrixWorld.elements;
+            Math.sqrt(m[0] * m[0] + m[1] * m[1] + m[2] * m[2]);
+            if (!parentGroups.has(parent)) {
+                parentGroups.set(parent, { leaves: [], allOutside: true, maxDist: 0 });
+            }
+            const group = parentGroups.get(parent);
+            group.leaves.push(node);
+            if (inFrustum) {
+                group.allOutside = false;
+            }
+            group.maxDist = Math.max(group.maxDist, dist);
+        });
+        const candidates = [];
+        let totalLeaves = 0;
+        for (const [parent, group] of parentGroups) {
+            totalLeaves += group.leaves.length;
+            if (group.leaves.length !== MapNode.childrens) {
+                continue;
+            }
+            if (this.pruneOutsideFrustumOnly && !group.allOutside) {
+                continue;
+            }
+            const m = group.leaves[0].matrixWorld.elements;
+            const tileWorldSize = Math.sqrt(m[0] * m[0] + m[1] * m[1] + m[2] * m[2]);
+            const graceDistance = tileWorldSize * this.pruneGraceMultiplier;
+            if (group.allOutside && group.maxDist > graceDistance) {
+                parent.simplify();
+            }
+            else if (group.allOutside) {
+                candidates.push({ parent, maxDist: group.maxDist });
+            }
+        }
+        if (totalLeaves > this.maxLeafNodes && candidates.length > 0) {
+            candidates.sort((a, b) => b.maxDist - a.maxDist);
+            for (const candidate of candidates) {
+                if (totalLeaves <= this.maxLeafNodes) {
+                    break;
+                }
+                candidate.parent.simplify();
+                totalLeaves -= (MapNode.childrens - 1);
+            }
+        }
+    }
+}
+
 const projection = new Matrix4();
 const pov = new Vector3();
 const frustum = new Frustum();
@@ -2055,4 +2133,4 @@ class CancelablePromise {
     }
 }
 
-export { BingMapsProvider, CancelablePromise, CanvasUtils, DebugProvider, Geolocation, GeolocationUtils, GoogleMapsProvider, HeightDebugProvider, HereMapsProvider, LODFrustum, LODFrustumOrthographic, LODRadial, LODRaycast, MapBoxProvider, MapHeightNode, MapHeightNodeShader, MapNode, MapNodeGeometry, MapNodeHeightGeometry, MapPlaneNode, MapProvider, MapSphereNode, MapSphereNodeGeometry, MapTilerProvider, MapView, OpenMapTilesProvider, OpenStreetMapsProvider, QuadTreePosition, TextureUtils, UnitsUtils, XHRUtils };
+export { BingMapsProvider, CancelablePromise, CanvasUtils, DebugProvider, Geolocation, GeolocationUtils, GoogleMapsProvider, HeightDebugProvider, HereMapsProvider, LODFrustum, LODFrustumOrthographic, LODRadial, LODRaycast, LODRaycastPruning, MapBoxProvider, MapHeightNode, MapHeightNodeShader, MapNode, MapNodeGeometry, MapNodeHeightGeometry, MapPlaneNode, MapProvider, MapSphereNode, MapSphereNodeGeometry, MapTilerProvider, MapView, OpenMapTilesProvider, OpenStreetMapsProvider, QuadTreePosition, TextureUtils, UnitsUtils, XHRUtils };
