@@ -1,7 +1,11 @@
 import { CONFIG } from '../utils/config.js';
 
 const HUD_COLOR = '#00ff88';
-const HUD_ALPHA = 0.7;
+const HUD_ALPHA = 0.85;
+const HUD_SHADOW_COLOR = 'rgba(0, 0, 0, 0.9)';
+const HUD_SHADOW_BLUR = 6;
+const BADGE_HEIGHT = 24;
+const BADGE_SPACING = 30;
 const COMPASS_POINTS = [
   { deg: 0, label: 'N' },
   { deg: 45, label: 'NE' },
@@ -19,7 +23,20 @@ export default class HUD {
     this.ctx = canvas.getContext('2d');
     this.w = 0;
     this.h = 0;
+    this.showStats = false;
+    this.statsText = '';
+    this.prevPos = null;
+    this.groundSpeed = 0;
     this.resize();
+  }
+
+  toggleStats() {
+    this.showStats = !this.showStats;
+    return this.showStats;
+  }
+
+  setStats(text) {
+    this.statsText = text;
   }
 
   resize(w, h) {
@@ -33,7 +50,7 @@ export default class HUD {
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  update(camera, groundElevation, benchmarkRunner) {
+  update(camera, groundElevation, benchmarkRunner, dt) {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.w, this.h);
 
@@ -41,18 +58,45 @@ export default class HUD {
     const pitch = camera.rotation.x;
     const altY = camera.position.y;
 
+    // Compute ground speed (horizontal distance / dt)
+    const px = camera.position.x;
+    const pz = camera.position.z;
+    if (this.prevPos && dt > 0) {
+      const dx = px - this.prevPos.x;
+      const dz = pz - this.prevPos.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      // Smooth the speed display
+      const instant = dist / dt;
+      this.groundSpeed += (instant - this.groundSpeed) * Math.min(1, 5 * dt);
+    }
+    this.prevPos = { x: px, z: pz };
+
     this._drawCompass(ctx, yaw);
     this._drawHorizon(ctx, pitch);
     this._drawAltimeter(ctx, altY, groundElevation);
-    this._drawSpeed(ctx);
-    if (CONFIG.hiResMode) this._drawHiResBadge(ctx);
+    this._drawSpeed(ctx, this.groundSpeed);
+    // Top-right badges: stack vertically
+    let badgeY = 44;
+    if (this.showStats && this.statsText) {
+      this._drawStatsBadge(ctx, badgeY);
+      badgeY += BADGE_SPACING;
+    }
+    if (CONFIG.hiResMode) {
+      this._drawHiResBadge(ctx, badgeY);
+      badgeY += BADGE_SPACING;
+    }
     if (benchmarkRunner && benchmarkRunner.isRunning()) {
       if (benchmarkRunner.isWarmup()) {
-        this._drawBenchmarkWarmup(ctx, benchmarkRunner.getWarmupRemaining());
+        this._drawBenchmarkWarmup(ctx, benchmarkRunner.getWarmupRemaining(), badgeY);
       } else {
-        this._drawBenchmarkBadge(ctx, benchmarkRunner.getElapsed());
+        this._drawBenchmarkBadge(ctx, benchmarkRunner.getElapsed(), badgeY);
       }
     }
+  }
+
+  _applyHudShadow(ctx) {
+    ctx.shadowColor = HUD_SHADOW_COLOR;
+    ctx.shadowBlur = HUD_SHADOW_BLUR;
   }
 
   // --- Compass / Heading (top center) ---
@@ -67,6 +111,7 @@ export default class HUD {
     if (headingDeg < 0) headingDeg += 360;
 
     ctx.save();
+    this._applyHudShadow(ctx);
     ctx.beginPath();
     ctx.rect(cx - bandW / 2, bandY - 2, bandW, bandH + 20);
     ctx.clip();
@@ -120,6 +165,7 @@ export default class HUD {
     ctx.restore();
 
     // Heading readout
+    this._applyHudShadow(ctx);
     ctx.globalAlpha = HUD_ALPHA;
     ctx.fillStyle = HUD_COLOR;
     ctx.font = 'bold 13px Courier New';
@@ -137,6 +183,7 @@ export default class HUD {
     const pitchDeg = pitch * 180 / Math.PI;
 
     ctx.save();
+    this._applyHudShadow(ctx);
     ctx.globalAlpha = HUD_ALPHA;
     ctx.strokeStyle = HUD_COLOR;
     ctx.fillStyle = HUD_COLOR;
@@ -233,6 +280,7 @@ export default class HUD {
     }
 
     ctx.save();
+    this._applyHudShadow(ctx);
     ctx.globalAlpha = HUD_ALPHA;
     ctx.strokeStyle = HUD_COLOR;
     ctx.fillStyle = HUD_COLOR;
@@ -302,12 +350,13 @@ export default class HUD {
   }
 
   // --- Speed indicator (left of center) ---
-  _drawSpeed(ctx) {
+  _drawSpeed(ctx, speed) {
     const x = this.w / 2 - 250;
     const cy = this.h / 2;
     const scaleH = 200;
 
     ctx.save();
+    this._applyHudShadow(ctx);
     ctx.globalAlpha = HUD_ALPHA;
     ctx.strokeStyle = HUD_COLOR;
     ctx.fillStyle = HUD_COLOR;
@@ -334,7 +383,7 @@ export default class HUD {
     ctx.font = 'bold 13px Courier New';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
-    ctx.fillText(Math.round(CONFIG.cameraSpeed), x - 12, cy);
+    ctx.fillText(Math.round(speed), x - 12, cy);
 
     // Label
     ctx.font = 'bold 12px Courier New';
@@ -344,11 +393,37 @@ export default class HUD {
     ctx.restore();
   }
 
+  // --- Stats badge (top-right) ---
+  _drawStatsBadge(ctx, y) {
+    const x = this.w - 20;
+    const label = this.statsText;
+
+    ctx.save();
+    ctx.font = 'bold 13px Courier New';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+
+    const tw = ctx.measureText(label).width;
+    const pad = 6;
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(x - tw - pad * 2, y - 12, tw + pad * 2, BADGE_HEIGHT);
+
+    ctx.strokeStyle = HUD_COLOR;
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = HUD_ALPHA;
+    ctx.strokeRect(x - tw - pad * 2, y - 12, tw + pad * 2, BADGE_HEIGHT);
+
+    ctx.fillStyle = HUD_COLOR;
+    ctx.fillText(label, x - pad, y);
+
+    ctx.restore();
+  }
+
   // --- Hi-Res mode badge (top-right) ---
-  _drawHiResBadge(ctx) {
+  _drawHiResBadge(ctx, y) {
     const label = 'HI-RES Z18';
     const x = this.w - 20;
-    const y = 44;
 
     ctx.save();
     ctx.font = 'bold 13px Courier New';
@@ -375,46 +450,43 @@ export default class HUD {
     ctx.restore();
   }
 
-  // --- Benchmark warmup badge (top-left) ---
-  _drawBenchmarkWarmup(ctx, remaining) {
-    const x = 20;
-    const y = 44;
+  // --- Benchmark warmup badge (top-right) ---
+  _drawBenchmarkWarmup(ctx, remaining, y) {
+    const x = this.w - 20;
     const secs = Math.ceil(remaining);
     const label = `WARMUP  ${secs}s`;
 
     ctx.save();
     ctx.font = 'bold 13px Courier New';
-    ctx.textAlign = 'left';
+    ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
 
     const tw = ctx.measureText(label).width;
     const pad = 6;
-    const totalW = tw + pad * 2;
 
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    ctx.fillRect(x, y - 12, totalW, 24);
+    ctx.fillRect(x - tw - pad * 2, y - 12, tw + pad * 2, 24);
 
     ctx.strokeStyle = '#ffaa00';
     ctx.lineWidth = 1.5;
     ctx.globalAlpha = 0.9;
-    ctx.strokeRect(x, y - 12, totalW, 24);
+    ctx.strokeRect(x - tw - pad * 2, y - 12, tw + pad * 2, 24);
 
     ctx.fillStyle = '#ffaa00';
-    ctx.fillText(label, x + pad, y);
+    ctx.fillText(label, x - pad, y);
 
     ctx.restore();
   }
 
-  // --- Benchmark recording badge (top-left) ---
-  _drawBenchmarkBadge(ctx, elapsed) {
-    const x = 20;
-    const y = 44;
+  // --- Benchmark recording badge (top-right) ---
+  _drawBenchmarkBadge(ctx, elapsed, y) {
+    const x = this.w - 20;
     const secs = Math.floor(elapsed);
     const label = `REC BENCHMARK  ${secs}s`;
 
     ctx.save();
     ctx.font = 'bold 13px Courier New';
-    ctx.textAlign = 'left';
+    ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
 
     const tw = ctx.measureText(label).width;
@@ -424,26 +496,26 @@ export default class HUD {
 
     // Background box
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    ctx.fillRect(x, y - 12, totalW, 24);
+    ctx.fillRect(x - totalW, y - 12, totalW, 24);
 
     // Border
     ctx.strokeStyle = '#ff3333';
     ctx.lineWidth = 1.5;
     ctx.globalAlpha = 0.9;
-    ctx.strokeRect(x, y - 12, totalW, 24);
+    ctx.strokeRect(x - totalW, y - 12, totalW, 24);
 
     // Blinking red dot
     const blink = Math.floor(elapsed * 2) % 2 === 0;
     if (blink) {
       ctx.fillStyle = '#ff3333';
       ctx.beginPath();
-      ctx.arc(x + pad + dotSize / 2, y, dotSize / 2, 0, Math.PI * 2);
+      ctx.arc(x - totalW + pad + dotSize / 2, y, dotSize / 2, 0, Math.PI * 2);
       ctx.fill();
     }
 
     // Text
     ctx.fillStyle = '#ff3333';
-    ctx.fillText(label, x + pad + dotSize + 8, y);
+    ctx.fillText(label, x - pad, y);
 
     ctx.restore();
   }

@@ -15,15 +15,7 @@
       pointer-events: none; z-index: 9;
     }
 
-    /* Stats overlay */
-    #stats {
-      position: fixed; top: 12px; left: 12px;
-      background: rgba(0,0,0,0.6); padding: 6px 12px;
-      font-size: 13px; border-radius: 4px; pointer-events: none;
-      z-index: 10;
-    }
-
-    /* Crosshair */
+/* Crosshair */
     #crosshair {
       position: fixed; top: 50%; left: 50%;
       transform: translate(-50%, -50%);
@@ -38,6 +30,7 @@
 
     /* Help overlay */
     #help {
+      display: none;
       position: fixed; bottom: 12px; left: 12px;
       background: rgba(0,0,0,0.6); padding: 8px 14px;
       font-size: 12px; border-radius: 4px; line-height: 1.6;
@@ -248,12 +241,12 @@
 <body>
   <div id="canvas-container"></div>
   <canvas id="hud"></canvas>
-  <div id="stats"></div>
-  <div id="crosshair"></div>
+<div id="crosshair"></div>
   <div id="help">
-    Click to capture mouse | Mouse: steer flight<br>
-    ↑↓ : forward/backward | ←→ : strafe<br>
-    X : debug tiles
+    Click to capture mouse | Mouse : steer flight<br>
+    W/↑ S/↓ : forward / backward | A/← D/→ : strafe<br>
+    I : info &amp; help | B : benchmark<br>
+    H : hi-res mode | X : debug tiles
   </div>
 
   <div id="minimap-container">
