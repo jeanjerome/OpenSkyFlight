@@ -393,7 +393,7 @@ export default class ChunkManager {
           chunk.dispose();
           this.chunks.delete(key);
         } else {
-          // Keep old tile visible as fallback; push it behind new tiles
+          // Keep as fallback until replacements load
           chunk.mesh.renderOrder = -1;
         }
       } else {
@@ -467,18 +467,13 @@ export default class ChunkManager {
   _isTileFarFromCamera(tileKey, cameraPosition) {
     const [z, tx, ty] = tileKey.split('/').map(Number);
     const scale = 1 << (CONFIG.zoom - z);
-    // Tile center in base-zoom tile coords, relative to center tile
     const tileCenterX = (tx + 0.5) * scale - this._centerTile.x;
     const tileCenterY = (ty + 0.5) * scale - this._centerTile.y;
-    // Camera position in base-zoom tile coords, relative to center tile
     const camTileX = cameraPosition.x / CONFIG.chunkSize;
     const camTileY = cameraPosition.z / CONFIG.chunkSize;
-
     const dx = tileCenterX - camTileX;
     const dy = tileCenterY - camTileY;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-
-    return dist > this._effectiveViewDistance * 2;
+    return Math.sqrt(dx * dx + dy * dy) > this._effectiveViewDistance * 2;
   }
 
   async _fetchAndGenerateLod(zoom, tx, ty, key) {
