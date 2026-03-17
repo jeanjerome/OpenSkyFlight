@@ -14,7 +14,11 @@ export default class TextureProvider {
    * Call once after renderer creation.
    */
   setRenderer(renderer) {
-    this._maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+    try {
+      this._maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+    } catch (_) {
+      this._maxAnisotropy = 16; // sensible default when capabilities API differs
+    }
     Logger.debug('Texture', `Max anisotropy: ${this._maxAnisotropy}`);
   }
 

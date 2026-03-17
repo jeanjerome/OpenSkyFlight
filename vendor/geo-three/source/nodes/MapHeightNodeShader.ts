@@ -1,4 +1,4 @@
-import {BufferGeometry, Intersection, LinearFilter, Material, MeshPhongMaterial, NearestFilter, Raycaster, RGBAFormat, Texture, Vector3} from 'three';
+import {BufferGeometry, DataTexture, FloatType, LinearFilter, Material, MeshStandardMaterial, Raycaster, Intersection, RedFormat, Vector3} from 'three';
 import {MapHeightNode} from './MapHeightNode';
 import {MapNodeGeometry} from '../geometries/MapNodeGeometry';
 import {MapPlaneNode} from './MapPlaneNode';
@@ -8,106 +8,99 @@ import {MapView} from '../MapView';
 import {TextureUtils} from '../utils/TextureUtils';
 
 /**
- * Map height node that uses GPU height calculation to generate the deformed plane mesh.
+ * Map height node that uses displacementMap for WebGPU-compatible vertex displacement.
  *
- * This solution is faster if no mesh interaction is required since all trasnformations are done in the GPU the transformed mesh cannot be accessed for CPU operations (e.g. raycasting).
- *
- * @param parentNode - The parent node of this node.
- * @param mapView - Map view object where this node is placed.
- * @param location - Position in the node tree relative to the parent.
- * @param level - Zoom level in the tile tree of the node.
- * @param x - X position of the node in the tile tree.
- * @param y - Y position of the node in the tile tree.
+ * Height data is decoded from Mapbox terrain-RGB on the CPU into a Float32
+ * displacement texture (meters). The shared geometry is displaced on the GPU
+ * via the built-in displacementMap pipeline (WebGPU and WebGL2).
  */
-export class MapHeightNodeShader extends MapHeightNode 
+export class MapHeightNodeShader extends MapHeightNode
 {
-	/**
-	 * Default height texture applied when tile load fails.
-	 * 
-	 * This tile sets the height to sea level where it is common for the data sources to be missing height data.
-	 */
 	public static defaultHeightTexture = TextureUtils.createFillTexture('#0186C0');
 
-	/**
-	 * Size of the grid of the geometry displayed on the scene for each tile.
-	 */
 	public static geometrySize: number = 256;
 
-	/**
-	 * Map node plane geometry.
-	 */
 	public static geometry: BufferGeometry = new MapNodeGeometry(1.0, 1.0, MapHeightNodeShader.geometrySize, MapHeightNodeShader.geometrySize, true);
 
-	/**
-	 * Base geometry of the map node.
-	 */
 	public static baseGeometry: BufferGeometry = MapPlaneNode.geometry;
 
-	/**
-	 * Base scale of the map node.
-	 */
 	public static baseScale: Vector3 = new Vector3(UnitsUtils.EARTH_PERIMETER, 1, UnitsUtils.EARTH_PERIMETER);
 
-	public constructor(parentNode: MapHeightNode = null, mapView: MapView = null, location: number = QuadTreePosition.root, level: number = 0, x: number = 0, y: number = 0) 
+	/**
+	 * 1x1 default displacement texture encoding sea level (0 meters).
+	 */
+	public static defaultDisplacementMap: DataTexture = (() =>
 	{
-		const material: Material = MapHeightNodeShader.prepareMaterial(new MeshPhongMaterial({map: MapNode.defaultTexture, color: 0xFFFFFF}));
+		const tex = new DataTexture(new Float32Array([0.0]), 1, 1, RedFormat, FloatType);
+		tex.magFilter = LinearFilter;
+		tex.minFilter = LinearFilter;
+		tex.needsUpdate = true;
+		return tex;
+	})();
+
+	public constructor(parentNode: MapHeightNode = null, mapView: MapView = null, location: number = QuadTreePosition.root, level: number = 0, x: number = 0, y: number = 0)
+	{
+		const material = new MeshStandardMaterial({
+			map: MapNode.defaultTexture,
+			color: 0xFFFFFF,
+			roughness: 1.0,
+			metalness: 0.0,
+			displacementMap: MapHeightNodeShader.defaultDisplacementMap,
+			displacementScale: 1.0,
+			displacementBias: 0.0,
+		});
 
 		super(parentNode, mapView, location, level, x, y, MapHeightNodeShader.geometry, material);
 
 		this.frustumCulled = false;
 	}
 
-	/**
-	 * Prepare the three.js material to be used in the map tile.
-	 *
-	 * @param material - Material to be transformed.
-	 */
-	public static prepareMaterial(material: Material): Material
-	{
-		material.userData = {heightMap: {value: MapHeightNodeShader.defaultHeightTexture}};
-
-		material.onBeforeCompile = (shader) => 
-		{
-			// Pass uniforms from userData to the
-			for (const i in material.userData) 
-			{
-				shader.uniforms[i] = material.userData[i];
-			}
-
-			// Vertex variables
-			shader.vertexShader =
-				`
-			uniform sampler2D heightMap;
-			` + shader.vertexShader;
-
-			// Vertex depth logic
-			shader.vertexShader = shader.vertexShader.replace('#include <fog_vertex>', `
-			#include <fog_vertex>
-	
-			// Calculate height of the title
-			vec4 _theight = texture2D(heightMap, vMapUv);
-			float _height = ((_theight.r * 255.0 * 65536.0 + _theight.g * 255.0 * 256.0 + _theight.b * 255.0) * 0.1) - 10000.0;
-			vec3 _transformed = position + _height * normal;
-	
-			// Vertex position based on height
-			gl_Position = projectionMatrix * modelViewMatrix * vec4(_transformed, 1.0);
-			`);
-		};
-
-		return material;
-	}
-
-	public async loadData(): Promise<void> 
+	public async loadData(): Promise<void>
 	{
 		await super.loadData();
-
 		this.textureLoaded = true;
 	}
 
-	public async loadHeightGeometry(): Promise<void> 
+	/**
+	 * Decode Mapbox terrain-RGB heightmap into a Float32 displacement texture.
+	 *
+	 * Height formula: h = (R*65536 + G*256 + B) * 0.1 - 10000
+	 * Stored directly in meters as Float32 in the Red channel.
+	 */
+	public static decodeToDisplacementMap(image: any): DataTexture
 	{
-		
-		if (this.mapView.heightProvider === null) 
+		const w: number = image.width || 256;
+		const h: number = image.height || 256;
+
+		const canvas = document.createElement('canvas');
+		canvas.width = w;
+		canvas.height = h;
+		const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+		ctx.drawImage(image, 0, 0);
+		const imageData = ctx.getImageData(0, 0, w, h);
+		const src = imageData.data;
+
+		const out = new Float32Array(w * h);
+		for (let i = 0; i < w * h; i++)
+		{
+			const r = src[i * 4];
+			const g = src[i * 4 + 1];
+			const b = src[i * 4 + 2];
+			out[i] = (r * 65536 + g * 256 + b) * 0.1 - 10000.0;
+		}
+
+		const tex = new DataTexture(out, w, h, RedFormat, FloatType);
+		tex.flipY = true;
+		tex.magFilter = LinearFilter;
+		tex.minFilter = LinearFilter;
+		tex.generateMipmaps = false;
+		tex.needsUpdate = true;
+		return tex;
+	}
+
+	public async loadHeightGeometry(): Promise<void>
+	{
+		if (this.mapView.heightProvider === null)
 		{
 			throw new Error('GeoThree: MapView.heightProvider provider is null.');
 		}
@@ -115,7 +108,6 @@ export class MapHeightNodeShader extends MapHeightNode
 		if (this.level < this.mapView.heightProvider.minZoom || this.level > this.mapView.heightProvider.maxZoom)
 		{
 			console.warn('Geo-Three: Loading tile outside of provider range.', this);
-
 			// @ts-ignore
 			this.material.map = MapHeightNodeShader.defaultTexture;
 			// @ts-ignore
@@ -123,58 +115,49 @@ export class MapHeightNodeShader extends MapHeightNode
 			return;
 		}
 
-		try 
+		try
 		{
 			const image = await this.mapView.heightProvider.fetchTile(this.level, this.x, this.y);
 
-			if (this.disposed) 
+			if (this.disposed)
 			{
 				return;
 			}
-			
-			const texture = new Texture(image as any);
-			texture.generateMipmaps = false;
-			texture.format = RGBAFormat;
-			texture.magFilter = NearestFilter;
-			texture.minFilter = NearestFilter;
-			texture.needsUpdate = true;
-			
-			// @ts-ignore
-			this.material.userData.heightMap.value = texture;
-		}
-		catch (e) 
-		{
-			if (this.disposed) 
-			{
-				return;
-			}
-			
-			console.error('Geo-Three: Failed to load node tile height data.', this);
-			
-			// Water level texture (assume that missing texture will be water level)
-			// @ts-ignore
-			this.material.userData.heightMap.value = MapHeightNodeShader.defaultHeightTexture;
-		}
 
-		// @ts-ignore
-		this.material.needsUpdate = true;
+			const displacementTex = MapHeightNodeShader.decodeToDisplacementMap(image);
+
+			// @ts-ignore
+			this.material.displacementMap = displacementTex;
+			// @ts-ignore
+			this.material.needsUpdate = true;
+		}
+		catch (e)
+		{
+			if (this.disposed)
+			{
+				return;
+			}
+
+			console.error('Geo-Three: Failed to load node tile height data.', this);
+
+			// @ts-ignore
+			this.material.displacementMap = MapHeightNodeShader.defaultDisplacementMap;
+			// @ts-ignore
+			this.material.needsUpdate = true;
+		}
 
 		this.heightLoaded = true;
 	}
 
 	/**
-	 * Overrides normal raycasting, to avoid raycasting when isMesh is set to false.
-	 *
-	 * Switches the geometry for a simpler one for faster raycasting.
+	 * Raycasting uses flat geometry for performance (displacement is GPU-only).
 	 */
 	public raycast(raycaster: Raycaster, intersects: Intersection[]): void
 	{
-		if (this.isMesh === true) 
+		if (this.isMesh === true)
 		{
 			this.geometry = MapPlaneNode.geometry;
-
 			super.raycast(raycaster, intersects);
-
 			this.geometry = MapHeightNodeShader.geometry;
 		}
 	}
@@ -184,10 +167,10 @@ export class MapHeightNodeShader extends MapHeightNode
 		super.dispose();
 
 		// @ts-ignore
-		if (this.material.userData.heightMap.value && this.material.userData.heightMap.value !== MapHeightNodeShader.defaultHeightTexture)
+		const dMap = this.material.displacementMap;
+		if (dMap && dMap !== MapHeightNodeShader.defaultDisplacementMap)
 		{
-			// @ts-ignore
-			this.material.userData.heightMap.value.dispose();
+			dMap.dispose();
 		}
 	}
 }
