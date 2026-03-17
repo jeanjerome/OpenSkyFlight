@@ -1,32 +1,54 @@
 import Logger from '../utils/Logger.js';
 
 /**
- * GPU timing using EXT_disjoint_timer_query_webgl2.
- * Reads results with a 2-frame delay to avoid pipeline stalls.
- * Falls back gracefully if the extension is unavailable (e.g. Safari).
+ * GPU timing with backend detection.
+ * - WebGL2: uses EXT_disjoint_timer_query_webgl2 (reads results with 2-frame delay).
+ * - WebGPU: GPU timestamp queries are optional and rarely exposed;
+ *   falls back to performance.now() around render calls.
  */
 export default class GPUTimer {
   constructor(renderer) {
-    this._gl = renderer.getContext();
-    this._ext = this._gl.getExtension('EXT_disjoint_timer_query_webgl2');
-    this._available = !!this._ext;
-    this._pendingQueries = []; // ring buffer of { query, frameId }
+    this._available = false;
+    this._gl = null;
+    this._ext = null;
+    this._pendingQueries = [];
     this._frameId = 0;
     this._lastGPUTimeMs = 0;
+    this._cpuRenderStart = 0;
 
-    if (this._available) {
-      Logger.info('GPUTimer', 'EXT_disjoint_timer_query_webgl2 available');
+    // Detect backend: WebGPURenderer exposes a .backend property
+    this._isWebGPU = !!renderer.backend;
+
+    if (this._isWebGPU) {
+      Logger.info('GPUTimer', 'WebGPU backend — using CPU render timing as surrogate');
     } else {
-      Logger.info('GPUTimer', 'GPU timing not available — falling back to CPU-only metrics');
+      // WebGL2 path
+      try {
+        this._gl = renderer.getContext();
+        this._ext = this._gl.getExtension('EXT_disjoint_timer_query_webgl2');
+        this._available = !!this._ext;
+      } catch (_) {
+        // getContext() may not return a WebGL2 context
+      }
+
+      if (this._available) {
+        Logger.info('GPUTimer', 'EXT_disjoint_timer_query_webgl2 available');
+      } else {
+        Logger.info('GPUTimer', 'GPU timing not available — falling back to CPU-only metrics');
+      }
     }
   }
 
   get available() {
-    return this._available;
+    return this._available || this._isWebGPU;
   }
 
   /** Call before renderer.render() */
   beginFrame() {
+    if (this._isWebGPU) {
+      this._cpuRenderStart = performance.now();
+      return;
+    }
     if (!this._available) return;
     const gl = this._gl;
     const query = gl.createQuery();
@@ -37,6 +59,10 @@ export default class GPUTimer {
 
   /** Call after renderer.render() */
   endFrame() {
+    if (this._isWebGPU) {
+      this._lastGPUTimeMs = performance.now() - this._cpuRenderStart;
+      return;
+    }
     if (!this._available) return;
     const gl = this._gl;
     gl.endQuery(this._ext.TIME_ELAPSED_EXT);
@@ -44,7 +70,6 @@ export default class GPUTimer {
     // Check for disjoint — GPU results may be invalid
     const disjoint = gl.getParameter(this._ext.GPU_DISJOINT_EXT);
     if (disjoint) {
-      // Discard all pending queries
       for (const p of this._pendingQueries) {
         gl.deleteQuery(p.query);
       }
@@ -55,10 +80,10 @@ export default class GPUTimer {
     // Harvest results from queries older than 2 frames
     while (this._pendingQueries.length > 0) {
       const oldest = this._pendingQueries[0];
-      if (this._frameId - oldest.frameId < 2) break; // too recent
+      if (this._frameId - oldest.frameId < 2) break;
 
       const available = gl.getQueryParameter(oldest.query, gl.QUERY_RESULT_AVAILABLE);
-      if (!available) break; // not ready yet
+      if (!available) break;
 
       const nanoseconds = gl.getQueryParameter(oldest.query, gl.QUERY_RESULT);
       this._lastGPUTimeMs = nanoseconds / 1e6;

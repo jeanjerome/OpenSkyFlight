@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { NodeMaterial } from 'three';
+import { uniform, texture, uv, smoothstep, float, vec2, vec4 } from 'three/tsl';
 import { CONFIG, onChange } from '../utils/config.js';
 import Logger from '../utils/Logger.js';
 
@@ -46,44 +48,24 @@ function generateNoiseTexture(size) {
     }
   }
 
-  const texture = new THREE.DataTexture(data, size, size, THREE.RedFormat);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
-  texture.minFilter = THREE.LinearFilter;
-  texture.magFilter = THREE.LinearFilter;
-  texture.needsUpdate = true;
-  return texture;
+  const tex = new THREE.DataTexture(data, size, size, THREE.RedFormat);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  return tex;
 }
-
-const CLOUD_VERTEX = /* glsl */ `
-varying vec2 vUv;
-void main() {
-  vUv = uv;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}
-`;
-
-// Sprint 4.2: simplified shader — single texture fetch instead of 5-octave FBM
-const CLOUD_FRAGMENT = /* glsl */ `
-uniform float uTime;
-uniform float uOpacity;
-uniform sampler2D uNoiseMap;
-varying vec2 vUv;
-
-void main() {
-  vec2 uv = vUv + uTime * vec2(0.0025, 0.00125);
-  float n = texture2D(uNoiseMap, uv).r;
-  float cloud = smoothstep(0.4, 0.7, n);
-  if (cloud < 0.01) discard;
-  gl_FragColor = vec4(1.0, 1.0, 1.0, cloud * uOpacity);
-}
-`;
 
 export default class CloudLayer {
   constructor(scene) {
     this.scene = scene;
     this.mesh = null;
     this._noiseTexture = generateNoiseTexture(512);
+
+    // TSL uniforms
+    this._uTime = uniform(float(0));
+    this._uOpacity = uniform(float(CONFIG.cloudOpacity));
 
     this._buildMesh();
 
@@ -95,31 +77,31 @@ export default class CloudLayer {
         if (this.mesh) this.mesh.position.y = CONFIG.cloudAltitude;
       }
       if (key === 'cloudOpacity') {
-        if (this.mesh) this.mesh.material.uniforms.uOpacity.value = CONFIG.cloudOpacity;
+        this._uOpacity.value = CONFIG.cloudOpacity;
       }
       if (key === 'terrainMode') {
         this._rebuildGeometry();
       }
     });
 
-    Logger.info('CloudLayer', 'Cloud layer initialized (pre-computed noise texture)');
+    Logger.info('CloudLayer', 'Cloud layer initialized (TSL + pre-computed noise texture)');
   }
 
   _buildMesh() {
     const size = CONFIG.terrainMode === 'realworld' ? 80000 : 8000;
     const geo = new THREE.PlaneGeometry(size, size, 1, 1);
-    const mat = new THREE.ShaderMaterial({
-      vertexShader: CLOUD_VERTEX,
-      fragmentShader: CLOUD_FRAGMENT,
-      uniforms: {
-        uTime: { value: 0 },
-        uOpacity: { value: CONFIG.cloudOpacity },
-        uNoiseMap: { value: this._noiseTexture },
-      },
-      transparent: true,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    });
+
+    const uvOffset = uv().add(this._uTime.mul(vec2(0.0025, 0.00125)));
+    const n = texture(this._noiseTexture, uvOffset).r;
+    const cloud = smoothstep(float(0.4), float(0.7), n);
+
+    const mat = new NodeMaterial();
+    mat.transparent = true;
+    mat.depthWrite = false;
+    mat.side = THREE.DoubleSide;
+    mat.colorNode = vec4(1, 1, 1, 1);
+    mat.opacityNode = cloud.mul(this._uOpacity);
+
     this.mesh = new THREE.Mesh(geo, mat);
     this.mesh.rotation.x = -Math.PI / 2;
     this.mesh.position.y = CONFIG.cloudAltitude;
@@ -149,7 +131,7 @@ export default class CloudLayer {
     }
 
     if (!this.mesh.visible) return;
-    this.mesh.material.uniforms.uTime.value += dt;
+    this._uTime.value += dt;
     // Track camera XZ
     this.mesh.position.x = cameraPosition.x;
     this.mesh.position.z = cameraPosition.z;

@@ -1,4 +1,4 @@
-import { Texture, RGBAFormat, LinearFilter, Mesh, REVISION, BufferGeometry, Float32BufferAttribute, Vector2, Vector3, MeshBasicMaterial, MeshPhongMaterial, Vector4, ShaderMaterial, Matrix4, Quaternion, TextureLoader, NearestFilter, Raycaster, DoubleSide, Uint32BufferAttribute, Frustum, Box3, Color } from 'three';
+import { Texture, RGBAFormat, LinearFilter, Mesh, REVISION, BufferGeometry, Float32BufferAttribute, Vector2, Vector3, MeshBasicMaterial, MeshPhongMaterial, Vector4, ShaderMaterial, Matrix4, Quaternion, TextureLoader, DataTexture, RedFormat, FloatType, MeshStandardMaterial, Raycaster, DoubleSide, Uint32BufferAttribute, NearestFilter, Frustum, Box3, Color } from 'three';
 
 /******************************************************************************
 Copyright (c) Microsoft Corporation.
@@ -837,33 +837,17 @@ MapSphereNode.segments = 80;
 
 class MapHeightNodeShader extends MapHeightNode {
     constructor(parentNode = null, mapView = null, location = QuadTreePosition.root, level = 0, x = 0, y = 0) {
-        const material = MapHeightNodeShader.prepareMaterial(new MeshPhongMaterial({ map: MapNode.defaultTexture, color: 0xFFFFFF }));
+        const material = new MeshStandardMaterial({
+            map: MapNode.defaultTexture,
+            color: 0xFFFFFF,
+            roughness: 1.0,
+            metalness: 0.0,
+            displacementMap: MapHeightNodeShader.defaultDisplacementMap,
+            displacementScale: 1.0,
+            displacementBias: 0.0,
+        });
         super(parentNode, mapView, location, level, x, y, MapHeightNodeShader.geometry, material);
         this.frustumCulled = false;
-    }
-    static prepareMaterial(material) {
-        material.userData = { heightMap: { value: MapHeightNodeShader.defaultHeightTexture } };
-        material.onBeforeCompile = (shader) => {
-            for (const i in material.userData) {
-                shader.uniforms[i] = material.userData[i];
-            }
-            shader.vertexShader =
-                `
-			uniform sampler2D heightMap;
-			` + shader.vertexShader;
-            shader.vertexShader = shader.vertexShader.replace('#include <fog_vertex>', `
-			#include <fog_vertex>
-	
-			// Calculate height of the title
-			vec4 _theight = texture2D(heightMap, vMapUv);
-			float _height = ((_theight.r * 255.0 * 65536.0 + _theight.g * 255.0 * 256.0 + _theight.b * 255.0) * 0.1) - 10000.0;
-			vec3 _transformed = position + _height * normal;
-	
-			// Vertex position based on height
-			gl_Position = projectionMatrix * modelViewMatrix * vec4(_transformed, 1.0);
-			`);
-        };
-        return material;
     }
     loadData() {
         const _super = Object.create(null, {
@@ -873,6 +857,31 @@ class MapHeightNodeShader extends MapHeightNode {
             yield _super.loadData.call(this);
             this.textureLoaded = true;
         });
+    }
+    static decodeToDisplacementMap(image) {
+        const w = image.width || 256;
+        const h = image.height || 256;
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(image, 0, 0);
+        const imageData = ctx.getImageData(0, 0, w, h);
+        const src = imageData.data;
+        const out = new Float32Array(w * h);
+        for (let i = 0; i < w * h; i++) {
+            const r = src[i * 4];
+            const g = src[i * 4 + 1];
+            const b = src[i * 4 + 2];
+            out[i] = (r * 65536 + g * 256 + b) * 0.1 - 10000.0;
+        }
+        const tex = new DataTexture(out, w, h, RedFormat, FloatType);
+        tex.flipY = true;
+        tex.magFilter = LinearFilter;
+        tex.minFilter = LinearFilter;
+        tex.generateMipmaps = false;
+        tex.needsUpdate = true;
+        return tex;
     }
     loadHeightGeometry() {
         return __awaiter(this, void 0, void 0, function* () {
@@ -890,22 +899,18 @@ class MapHeightNodeShader extends MapHeightNode {
                 if (this.disposed) {
                     return;
                 }
-                const texture = new Texture(image);
-                texture.generateMipmaps = false;
-                texture.format = RGBAFormat;
-                texture.magFilter = NearestFilter;
-                texture.minFilter = NearestFilter;
-                texture.needsUpdate = true;
-                this.material.userData.heightMap.value = texture;
+                const displacementTex = MapHeightNodeShader.decodeToDisplacementMap(image);
+                this.material.displacementMap = displacementTex;
+                this.material.needsUpdate = true;
             }
             catch (e) {
                 if (this.disposed) {
                     return;
                 }
                 console.error('Geo-Three: Failed to load node tile height data.', this);
-                this.material.userData.heightMap.value = MapHeightNodeShader.defaultHeightTexture;
+                this.material.displacementMap = MapHeightNodeShader.defaultDisplacementMap;
+                this.material.needsUpdate = true;
             }
-            this.material.needsUpdate = true;
             this.heightLoaded = true;
         });
     }
@@ -918,8 +923,9 @@ class MapHeightNodeShader extends MapHeightNode {
     }
     dispose() {
         super.dispose();
-        if (this.material.userData.heightMap.value && this.material.userData.heightMap.value !== MapHeightNodeShader.defaultHeightTexture) {
-            this.material.userData.heightMap.value.dispose();
+        const dMap = this.material.displacementMap;
+        if (dMap && dMap !== MapHeightNodeShader.defaultDisplacementMap) {
+            dMap.dispose();
         }
     }
 }
@@ -928,6 +934,13 @@ MapHeightNodeShader.geometrySize = 256;
 MapHeightNodeShader.geometry = new MapNodeGeometry(1.0, 1.0, MapHeightNodeShader.geometrySize, MapHeightNodeShader.geometrySize, true);
 MapHeightNodeShader.baseGeometry = MapPlaneNode.geometry;
 MapHeightNodeShader.baseScale = new Vector3(UnitsUtils.EARTH_PERIMETER, 1, UnitsUtils.EARTH_PERIMETER);
+MapHeightNodeShader.defaultDisplacementMap = (() => {
+    const tex = new DataTexture(new Float32Array([0.0]), 1, 1, RedFormat, FloatType);
+    tex.magFilter = LinearFilter;
+    tex.minFilter = LinearFilter;
+    tex.needsUpdate = true;
+    return tex;
+})();
 
 class LODRaycast {
     constructor() {

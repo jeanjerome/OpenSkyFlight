@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Sky } from 'three/addons/objects/Sky.js';
+import { SkyMesh } from 'three/addons/objects/SkyMesh.js';
 import { CONFIG, onChange } from '../utils/config.js';
 import Logger from '../utils/Logger.js';
 
@@ -17,8 +17,8 @@ export default class AtmosphericSky {
     this._coolColor = new THREE.Color(0.5, 0.7, 1.0);
     this._fogColor = new THREE.Color();
 
-    // Sky mesh
-    this.sky = new Sky();
+    // SkyMesh: TSL/NodeMaterial-based sky (WebGPU compatible)
+    this.sky = new SkyMesh();
     this.sky.scale.setScalar(4.5e6);
     scene.add(this.sky);
 
@@ -35,7 +35,7 @@ export default class AtmosphericSky {
       }
     });
 
-    Logger.info('AtmosphericSky', 'Sky initialized');
+    Logger.info('AtmosphericSky', 'Sky initialized (SkyMesh/WebGPU)');
   }
 
   _updateSky() {
@@ -46,13 +46,12 @@ export default class AtmosphericSky {
     const theta = sunAzimuth * DEG2RAD;
     this.sunDirection.setFromSphericalCoords(1, phi, theta);
 
-    // Sky uniforms
-    const uniforms = this.sky.material.uniforms;
-    uniforms.sunPosition.value.copy(this.sunDirection);
-    uniforms.turbidity.value = skyTurbidity;
-    uniforms.rayleigh.value = skyRayleigh;
-    uniforms.mieCoefficient.value = 0.005;
-    uniforms.mieDirectionalG.value = 0.75;
+    // SkyMesh uniforms (direct property access)
+    this.sky.sunPosition.value.copy(this.sunDirection);
+    this.sky.turbidity.value = skyTurbidity;
+    this.sky.rayleigh.value = skyRayleigh;
+    this.sky.mieCoefficient.value = 0.005;
+    this.sky.mieDirectionalG.value = 0.75;
 
     // Sync directional light to sun
     this.dirLight.position.copy(this.sunDirection).multiplyScalar(1e5);
@@ -66,7 +65,6 @@ export default class AtmosphericSky {
     // Fog
     if (CONFIG.fogEnabled) {
       // Interpolate fog color: warm (low sun) to cool blue (high sun)
-      // Reuse pre-allocated Color objects
       this._fogColor.copy(this._warmColor).lerp(this._coolColor, sunFactor);
 
       if (this.scene.fog instanceof THREE.FogExp2) {
