@@ -1,4 +1,5 @@
-import { Texture, RGBAFormat, LinearFilter, Mesh, REVISION, BufferGeometry, Float32BufferAttribute, Vector2, Vector3, MeshBasicMaterial, MeshPhongMaterial, Vector4, ShaderMaterial, Matrix4, Quaternion, TextureLoader, DataTexture, RedFormat, FloatType, MeshStandardMaterial, Raycaster, DoubleSide, Uint32BufferAttribute, NearestFilter, Frustum, Box3, Color } from 'three';
+import { Texture, RGBAFormat, LinearFilter, Mesh, REVISION, BufferGeometry, Float32BufferAttribute, Vector2, Vector3, MeshBasicMaterial, MeshPhongMaterial, Vector4, ShaderMaterial, Matrix4, Quaternion, TextureLoader, DataTexture, UnsignedByteType, MeshStandardNodeMaterial, Raycaster, DoubleSide, Uint32BufferAttribute, NearestFilter, Frustum, Box3, Color } from 'three';
+import { Fn, float, texture, varying, vec3, positionLocal, uv, vec2, cross, transformNormalToView } from 'three/tsl';
 
 /******************************************************************************
 Copyright (c) Microsoft Corporation.
@@ -835,18 +836,40 @@ MapSphereNode.baseGeometry = new MapSphereNodeGeometry(UnitsUtils.EARTH_RADIUS, 
 MapSphereNode.baseScale = new Vector3(1, 1, 1);
 MapSphereNode.segments = 80;
 
+const decodeTerrariumTSL = Fn(([sample]) => {
+    return sample.r.mul(65280.0)
+        .add(sample.g.mul(255.0))
+        .add(sample.b.mul(float(255.0).div(256.0)))
+        .sub(32768.0);
+});
 class MapHeightNodeShader extends MapHeightNode {
     constructor(parentNode = null, mapView = null, location = QuadTreePosition.root, level = 0, x = 0, y = 0) {
-        const material = new MeshStandardMaterial({
+        const heightTextureNode = texture(MapHeightNodeShader.defaultTerrariumTexture);
+        const material = new MeshStandardNodeMaterial({
             map: MapNode.defaultTexture,
             color: 0xFFFFFF,
             roughness: 1.0,
             metalness: 0.0,
-            displacementMap: MapHeightNodeShader.defaultDisplacementMap,
-            displacementScale: 1.0,
-            displacementBias: 0.0,
         });
+        const vNormal = varying(vec3(0.0, 1.0, 0.0));
+        material.positionNode = Fn(() => {
+            const pos = positionLocal.toVar();
+            const currentUv = uv();
+            const heightSample = texture(heightTextureNode, currentUv);
+            const elevation = decodeTerrariumTSL(heightSample);
+            const texelSize = float(1.0).div(256.0);
+            const hRight = decodeTerrariumTSL(texture(heightTextureNode, currentUv.add(vec2(texelSize, 0.0))));
+            const hUp = decodeTerrariumTSL(texture(heightTextureNode, currentUv.add(vec2(0.0, texelSize))));
+            const step = texelSize;
+            const tangent = vec3(step, hRight.sub(elevation), 0.0);
+            const bitangent = vec3(0.0, hUp.sub(elevation), step.negate());
+            vNormal.assign(cross(tangent, bitangent).normalize());
+            pos.y.addAssign(elevation);
+            return pos;
+        })();
+        material.normalNode = transformNormalToView(vNormal);
         super(parentNode, mapView, location, level, x, y, MapHeightNodeShader.geometry, material);
+        this._heightTextureNode = heightTextureNode;
         this.frustumCulled = false;
     }
     loadData() {
@@ -857,31 +880,6 @@ class MapHeightNodeShader extends MapHeightNode {
             yield _super.loadData.call(this);
             this.textureLoaded = true;
         });
-    }
-    static decodeToDisplacementMap(image) {
-        const w = image.width || 256;
-        const h = image.height || 256;
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(image, 0, 0);
-        const imageData = ctx.getImageData(0, 0, w, h);
-        const src = imageData.data;
-        const out = new Float32Array(w * h);
-        for (let i = 0; i < w * h; i++) {
-            const r = src[i * 4];
-            const g = src[i * 4 + 1];
-            const b = src[i * 4 + 2];
-            out[i] = (r * 65536 + g * 256 + b) * 0.1 - 10000.0;
-        }
-        const tex = new DataTexture(out, w, h, RedFormat, FloatType);
-        tex.flipY = true;
-        tex.magFilter = LinearFilter;
-        tex.minFilter = LinearFilter;
-        tex.generateMipmaps = false;
-        tex.needsUpdate = true;
-        return tex;
     }
     loadHeightGeometry() {
         return __awaiter(this, void 0, void 0, function* () {
@@ -899,17 +897,20 @@ class MapHeightNodeShader extends MapHeightNode {
                 if (this.disposed) {
                     return;
                 }
-                const displacementTex = MapHeightNodeShader.decodeToDisplacementMap(image);
-                this.material.displacementMap = displacementTex;
-                this.material.needsUpdate = true;
+                const heightTex = new Texture(image);
+                heightTex.colorSpace = '';
+                heightTex.generateMipmaps = false;
+                heightTex.magFilter = LinearFilter;
+                heightTex.minFilter = LinearFilter;
+                heightTex.needsUpdate = true;
+                this._heightTextureNode.value = heightTex;
             }
             catch (e) {
                 if (this.disposed) {
                     return;
                 }
                 console.error('Geo-Three: Failed to load node tile height data.', this);
-                this.material.displacementMap = MapHeightNodeShader.defaultDisplacementMap;
-                this.material.needsUpdate = true;
+                this._heightTextureNode.value = MapHeightNodeShader.defaultTerrariumTexture;
             }
             this.heightLoaded = true;
         });
@@ -923,9 +924,9 @@ class MapHeightNodeShader extends MapHeightNode {
     }
     dispose() {
         super.dispose();
-        const dMap = this.material.displacementMap;
-        if (dMap && dMap !== MapHeightNodeShader.defaultDisplacementMap) {
-            dMap.dispose();
+        const hTex = this._heightTextureNode.value;
+        if (hTex && hTex !== MapHeightNodeShader.defaultTerrariumTexture) {
+            hTex.dispose();
         }
     }
 }
@@ -934,8 +935,9 @@ MapHeightNodeShader.geometrySize = 256;
 MapHeightNodeShader.geometry = new MapNodeGeometry(1.0, 1.0, MapHeightNodeShader.geometrySize, MapHeightNodeShader.geometrySize, true);
 MapHeightNodeShader.baseGeometry = MapPlaneNode.geometry;
 MapHeightNodeShader.baseScale = new Vector3(UnitsUtils.EARTH_PERIMETER, 1, UnitsUtils.EARTH_PERIMETER);
-MapHeightNodeShader.defaultDisplacementMap = (() => {
-    const tex = new DataTexture(new Float32Array([0.0]), 1, 1, RedFormat, FloatType);
+MapHeightNodeShader.defaultTerrariumTexture = (() => {
+    const data = new Uint8Array([128, 0, 0, 255]);
+    const tex = new DataTexture(data, 1, 1, RGBAFormat, UnsignedByteType);
     tex.magFilter = LinearFilter;
     tex.minFilter = LinearFilter;
     tex.needsUpdate = true;
