@@ -6,6 +6,16 @@ import Logger from '../utils/Logger.js';
 export default class TextureProvider {
   constructor() {
     this._cache = new Map();
+    this._maxAnisotropy = 1; // will be set via setRenderer
+  }
+
+  /**
+   * Pass the renderer to enable anisotropic filtering.
+   * Call once after renderer creation.
+   */
+  setRenderer(renderer) {
+    this._maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+    Logger.debug('Texture', `Max anisotropy: ${this._maxAnisotropy}`);
   }
 
   /**
@@ -32,10 +42,15 @@ export default class TextureProvider {
       const bitmap = await createImageBitmap(blob);
 
       const texture = new THREE.CanvasTexture(bitmap);
-      texture.minFilter = THREE.LinearFilter;
+      // Sprint 2.5: trilinear filtering + mipmaps + anisotropy
+      texture.generateMipmaps = true;
+      texture.minFilter = THREE.LinearMipmapLinearFilter;
       texture.magFilter = THREE.LinearFilter;
       texture.wrapS = THREE.ClampToEdgeWrapping;
       texture.wrapT = THREE.ClampToEdgeWrapping;
+      if (this._maxAnisotropy > 1) {
+        texture.anisotropy = this._maxAnisotropy;
+      }
 
       Logger.info('Texture', `Fetched ${key}`);
       this._cache.set(key, texture);

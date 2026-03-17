@@ -1,5 +1,6 @@
 import CameraPath from './CameraPath.js';
 import MetricsCollector from './MetricsCollector.js';
+import BenchmarkComparator from './BenchmarkComparator.js';
 import Logger from '../utils/Logger.js';
 
 const WARMUP_DURATION = 15; // seconds — camera stays still, tiles load
@@ -12,6 +13,9 @@ export default class BenchmarkRunner {
     this.cameraPath = null;
     this.metrics = null;
     this.getGroundElevation = null;
+    this._lastReport = null;
+    this.gpuTimer = null;
+    this._stopped = false; // flag to signal stop was called during tickPath
   }
 
   isRunning() {
@@ -20,6 +24,11 @@ export default class BenchmarkRunner {
 
   isWarmup() {
     return this.warmup;
+  }
+
+  /** Returns the subsystem timer (for instrumenting the render loop). */
+  getSubsystemTimer() {
+    return this.metrics ? this.metrics.subsystemTimer : null;
   }
 
   getElapsed() {
@@ -31,7 +40,7 @@ export default class BenchmarkRunner {
     return Math.max(0, WARMUP_DURATION - this.warmupElapsed);
   }
 
-  start(fpsController, camera, getGroundElevation) {
+  start(fpsController, camera, getGroundElevation, gpuTimer) {
     if (this.running) return;
     this.running = true;
     this.warmup = true;
@@ -39,6 +48,8 @@ export default class BenchmarkRunner {
     this.cameraPath = new CameraPath(camera);
     this.metrics = null;
     this.getGroundElevation = getGroundElevation;
+    this.gpuTimer = gpuTimer || null;
+    this._stopped = false;
     fpsController.enabled = false;
     Logger.info('Benchmark', `Warmup ${WARMUP_DURATION}s — then ${this.cameraPath.totalDuration}s benchmark`);
   }
@@ -47,13 +58,23 @@ export default class BenchmarkRunner {
     if (!this.running) return;
     this.running = false;
     this.warmup = false;
+    this._stopped = true;
     fpsController.enabled = true;
 
     if (this.metrics) {
       const report = this.metrics.buildReport(renderer);
+      this._lastReport = report;
+
       if (report.summary) {
         Logger.info('Benchmark', `Completed — ${report.summary.totalFrames} frames, avg ${report.summary.fps.avg} FPS`);
         Logger.info('Benchmark', `P1=${report.summary.fps.p1} P5=${report.summary.fps.p5} min=${report.summary.fps.min} max=${report.summary.fps.max}`);
+
+        // A/B comparison against stored baseline
+        const comparison = BenchmarkComparator.compare(report);
+        if (comparison) {
+          BenchmarkComparator.logComparison(comparison);
+        }
+
         this._downloadJSON(report);
       }
     }
@@ -63,12 +84,15 @@ export default class BenchmarkRunner {
     this.getGroundElevation = null;
   }
 
-  update(dt, renderer, camera, fpsController) {
+  /**
+   * Advance camera path and handle warmup timing.
+   * Call BEFORE renderer.render() so the camera is positioned for this frame.
+   */
+  tickPath(dt, camera, fpsController, renderer) {
     if (!this.running) return;
 
     if (this.warmup) {
       this.warmupElapsed += dt;
-      // Camera stays still during warmup — tiles load around it
       if (this.warmupElapsed >= WARMUP_DURATION) {
         this.warmup = false;
         this.metrics = new MetricsCollector();
@@ -80,10 +104,16 @@ export default class BenchmarkRunner {
     const ok = this.cameraPath.update(dt, camera, this.getGroundElevation);
     if (!ok) {
       this.stop(fpsController, renderer);
-      return;
     }
+  }
 
-    this.metrics.record(renderer);
+  /**
+   * Record metrics for the current frame.
+   * Call AFTER renderer.render() so renderer.info reflects the current frame.
+   */
+  recordMetrics(renderer) {
+    if (!this.running || this.warmup || !this.metrics) return;
+    this.metrics.record(renderer, this.gpuTimer);
   }
 
   _downloadJSON(report) {

@@ -1,6 +1,7 @@
 # Tile cache (can be large, re-generated with scripts/prefetch-tiles.js)
 cache/
 benchmarks/
+internal/
 
 # OS files
 .DS_Store

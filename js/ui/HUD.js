@@ -3,7 +3,7 @@ import { CONFIG } from '../utils/config.js';
 const HUD_COLOR = '#00ff88';
 const HUD_ALPHA = 0.85;
 const HUD_SHADOW_COLOR = 'rgba(0, 0, 0, 0.9)';
-const HUD_SHADOW_BLUR = 6;
+const HUD_SHADOW_BLUR = 2; // Sprint 2.3: reduced from 6 to 2 (avoids costly SW blur path)
 const BADGE_HEIGHT = 24;
 const BADGE_SPACING = 30;
 const COMPASS_POINTS = [
@@ -27,16 +27,28 @@ export default class HUD {
     this.statsText = '';
     this.prevPos = null;
     this.groundSpeed = 0;
+    // Sprint 2.2: dirty flag — previous values for change detection
+    this._prevYaw = NaN;
+    this._prevPitch = NaN;
+    this._prevAlt = NaN;
+    this._prevSpeed = NaN;
+    this._prevBenchRunning = false;
+    this._prevBenchBadgeEpoch = 0;
+    this._forceRedraw = true;
     this.resize();
   }
 
   toggleStats() {
     this.showStats = !this.showStats;
+    this._forceRedraw = true;
     return this.showStats;
   }
 
   setStats(text) {
-    this.statsText = text;
+    if (text !== this.statsText) {
+      this.statsText = text;
+      this._forceRedraw = true;
+    }
   }
 
   resize(w, h) {
@@ -48,12 +60,10 @@ export default class HUD {
     this.canvas.style.width = this.w + 'px';
     this.canvas.style.height = this.h + 'px';
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this._forceRedraw = true;
   }
 
   update(camera, groundElevation, benchmarkRunner, dt) {
-    const ctx = this.ctx;
-    ctx.clearRect(0, 0, this.w, this.h);
-
     const yaw = camera.rotation.y;
     const pitch = camera.rotation.x;
     const altY = camera.position.y;
@@ -65,11 +75,39 @@ export default class HUD {
       const dx = px - this.prevPos.x;
       const dz = pz - this.prevPos.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
-      // Smooth the speed display
       const instant = dist / dt;
       this.groundSpeed += (instant - this.groundSpeed) * Math.min(1, 5 * dt);
     }
     this.prevPos = { x: px, z: pz };
+
+    const benchRunning = benchmarkRunner && benchmarkRunner.isRunning();
+    const benchBadgeEpoch = benchRunning
+      ? (benchmarkRunner.isWarmup()
+          ? Math.ceil(benchmarkRunner.getWarmupRemaining())
+          : Math.floor(benchmarkRunner.getElapsed()))
+      : 0;
+
+    // Sprint 2.2: dirty flag — skip redraw if nothing significant changed
+    if (!this._forceRedraw &&
+        Math.abs(yaw - this._prevYaw) < 0.001 &&
+        Math.abs(pitch - this._prevPitch) < 0.001 &&
+        Math.abs(altY - this._prevAlt) < 0.5 &&
+        Math.abs(this.groundSpeed - this._prevSpeed) < 0.5 &&
+        benchRunning === this._prevBenchRunning &&
+        benchBadgeEpoch === this._prevBenchBadgeEpoch) {
+      return;
+    }
+
+    this._prevYaw = yaw;
+    this._prevPitch = pitch;
+    this._prevAlt = altY;
+    this._prevSpeed = this.groundSpeed;
+    this._prevBenchRunning = benchRunning;
+    this._prevBenchBadgeEpoch = benchBadgeEpoch;
+    this._forceRedraw = false;
+
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, this.w, this.h);
 
     this._drawCompass(ctx, yaw);
     this._drawHorizon(ctx, pitch);

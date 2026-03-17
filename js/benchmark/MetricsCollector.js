@@ -1,17 +1,62 @@
 import { CONFIG } from '../utils/config.js';
 
+/**
+ * Subsystem timer — measures per-subsystem time within each frame.
+ * Usage: timer.begin('terrain'); ... timer.end('terrain');
+ */
+class SubsystemTimer {
+  constructor() {
+    this._starts = {};
+    this._current = {};
+  }
+
+  begin(name) {
+    this._starts[name] = performance.now();
+  }
+
+  end(name) {
+    if (this._starts[name] !== undefined) {
+      this._current[name] = performance.now() - this._starts[name];
+      delete this._starts[name];
+    }
+  }
+
+  /** Returns snapshot of current frame's subsystem times and resets. */
+  flush() {
+    const snap = {};
+    for (const k in this._current) {
+      snap[k] = Math.round(this._current[k] * 100) / 100;
+    }
+    this._current = {};
+    return snap;
+  }
+}
+
 export default class MetricsCollector {
   constructor() {
     this.frames = [];
     this.startTime = performance.now();
+    this.subsystemTimer = new SubsystemTimer();
   }
 
-  record(renderer) {
+  record(renderer, gpuTimer) {
     const now = performance.now();
     const timestamp = now - this.startTime;
     const info = renderer.info;
     const prev = this.frames.length > 0 ? this.frames[this.frames.length - 1] : null;
     const frameTime = prev ? timestamp - prev.t : 0;
+
+    // Subsystem timings for this frame
+    const subs = this.subsystemTimer.flush();
+
+    // Memory (Chrome only)
+    const mem = performance.memory ? {
+      jsHeapUsed: performance.memory.usedJSHeapSize,
+      jsHeapTotal: performance.memory.totalJSHeapSize,
+    } : null;
+
+    // GPU time (Sprint 4.3)
+    const gpuMs = gpuTimer ? gpuTimer.getLastGPUTimeMs() : 0;
 
     this.frames.push({
       t: Math.round(timestamp * 10) / 10,
@@ -21,6 +66,9 @@ export default class MetricsCollector {
       dc: info.render.calls,
       geo: info.memory.geometries,
       tex: info.memory.textures,
+      subs,
+      mem,
+      gpu: gpuMs > 0 ? Math.round(gpuMs * 100) / 100 : undefined,
     });
   }
 
@@ -39,24 +87,105 @@ export default class MetricsCollector {
       return arr[idx];
     };
     const avg = arr => arr.reduce((s, v) => s + v, 0) / arr.length;
+    const round1 = v => Math.round(v * 10) / 10;
+
+    // --- Histogram of frame times ---
+    const histogram = { '<8ms': 0, '<16.7ms': 0, '<33.3ms': 0, '<50ms': 0, '>=50ms': 0 };
+    for (const f of measured) {
+      if (f.ft < 8) histogram['<8ms']++;
+      else if (f.ft < 16.7) histogram['<16.7ms']++;
+      else if (f.ft < 33.3) histogram['<33.3ms']++;
+      else if (f.ft < 50) histogram['<50ms']++;
+      else histogram['>=50ms']++;
+    }
+
+    // --- Jank detection ---
+    const avgFt = avg(measured.map(f => f.ft));
+    let jankCount = 0;
+    let longestStableStreak = 0;
+    let currentStreak = 0;
+    for (const f of measured) {
+      if (f.ft > 2 * avgFt) {
+        jankCount++;
+        currentStreak = 0;
+      } else if (f.ft <= 16.7) {
+        currentStreak++;
+        if (currentStreak > longestStableStreak) longestStableStreak = currentStreak;
+      } else {
+        currentStreak = 0;
+      }
+    }
+
+    // --- Subsystem aggregation (avg / p95 / max) ---
+    const subsNames = new Set();
+    for (const f of measured) {
+      if (f.subs) for (const k of Object.keys(f.subs)) subsNames.add(k);
+    }
+    const subsAgg = {};
+    for (const name of subsNames) {
+      const vals = measured
+        .map(f => (f.subs && f.subs[name]) || 0)
+        .sort((a, b) => a - b);
+      subsAgg[name] = {
+        avg: round1(avg(vals)),
+        p95: round1(percentile(vals, 95)),
+        max: round1(Math.max(...vals)),
+      };
+    }
+
+    // --- Memory stats ---
+    const memFrames = measured.filter(f => f.mem);
+    let memSummary = null;
+    if (memFrames.length > 0) {
+      const heapUsed = memFrames.map(f => f.mem.jsHeapUsed);
+      memSummary = {
+        jsHeapUsed: {
+          min: Math.min(...heapUsed),
+          max: Math.max(...heapUsed),
+          avg: Math.round(avg(heapUsed)),
+        },
+        geometries: {
+          min: Math.min(...measured.map(f => f.geo)),
+          max: Math.max(...measured.map(f => f.geo)),
+          avg: Math.round(avg(measured.map(f => f.geo))),
+        },
+        textures: {
+          min: Math.min(...measured.map(f => f.tex)),
+          max: Math.max(...measured.map(f => f.tex)),
+          avg: Math.round(avg(measured.map(f => f.tex))),
+        },
+      };
+    }
+
+    // --- GPU time aggregation ---
+    const gpuFrames = measured.filter(f => f.gpu && f.gpu > 0);
+    let gpuSummary = null;
+    if (gpuFrames.length > 0) {
+      const gpuVals = gpuFrames.map(f => f.gpu).sort((a, b) => a - b);
+      gpuSummary = {
+        avg: round1(avg(gpuVals)),
+        p95: round1(percentile(gpuVals, 95)),
+        max: round1(Math.max(...gpuVals)),
+      };
+    }
 
     return {
       totalFrames: this.frames.length,
       fps: {
-        avg: Math.round(avg(fpsValues) * 10) / 10,
-        min: Math.round(Math.min(...fpsValues) * 10) / 10,
-        max: Math.round(Math.max(...fpsValues) * 10) / 10,
-        p1: Math.round(percentile(fpsValues, 1) * 10) / 10,
-        p5: Math.round(percentile(fpsValues, 5) * 10) / 10,
-        p95: Math.round(percentile(fpsValues, 95) * 10) / 10,
+        avg: round1(avg(fpsValues)),
+        min: round1(Math.min(...fpsValues)),
+        max: round1(Math.max(...fpsValues)),
+        p1: round1(percentile(fpsValues, 1)),
+        p5: round1(percentile(fpsValues, 5)),
+        p95: round1(percentile(fpsValues, 95)),
       },
       frameTime: {
-        avg: Math.round(avg(ftValues) * 10) / 10,
-        min: Math.round(Math.min(...ftValues) * 10) / 10,
-        max: Math.round(Math.max(...ftValues) * 10) / 10,
-        p1: Math.round(percentile(ftValues, 1) * 10) / 10,
-        p5: Math.round(percentile(ftValues, 5) * 10) / 10,
-        p95: Math.round(percentile(ftValues, 95) * 10) / 10,
+        avg: round1(avg(ftValues)),
+        min: round1(Math.min(...ftValues)),
+        max: round1(Math.max(...ftValues)),
+        p1: round1(percentile(ftValues, 1)),
+        p5: round1(percentile(ftValues, 5)),
+        p95: round1(percentile(ftValues, 95)),
       },
       triangles: {
         avg: Math.round(avg(triValues)),
@@ -66,6 +195,12 @@ export default class MetricsCollector {
         avg: Math.round(avg(dcValues)),
         max: Math.max(...dcValues),
       },
+      histogram,
+      jankCount,
+      longestStableStreak,
+      subs: subsAgg,
+      mem: memSummary,
+      gpuTime: gpuSummary,
     };
   }
 
@@ -103,7 +238,7 @@ export default class MetricsCollector {
   buildReport(renderer) {
     const elapsed = (performance.now() - this.startTime) / 1000;
     return {
-      version: 1,
+      version: 2,
       date: new Date().toISOString(),
       duration: Math.round(elapsed * 10) / 10,
       machine: this.getMachineInfo(renderer),
