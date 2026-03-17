@@ -18,6 +18,7 @@ async function initApp() {
   const renderer = new THREE.WebGPURenderer({
     antialias: true,
     powerPreference: 'high-performance',
+    trackTimestamp: true,
   });
   await renderer.init();
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, CONFIG.maxPixelRatio));
@@ -46,7 +47,7 @@ async function initApp() {
   // --- Water plane (Sprint 2.1: reduced from 80x80 to 1x1 segments) ---
   function createWaterPlane() {
     const geo = new THREE.PlaneGeometry(20000, 20000, 1, 1);
-    const mat = new THREE.MeshBasicMaterial({
+    const mat = new THREE.MeshBasicNodeMaterial({
       color: 0x1a3a5c,
       wireframe: CONFIG.wireframe,
       transparent: true,
@@ -300,6 +301,7 @@ async function initApp() {
 
     if (timer) timer.begin('render');
     gpuTimer.beginFrame();
+    renderer.info.reset();
     renderer.render(scene, camera);
     gpuTimer.endFrame();
     if (timer) timer.end('render');

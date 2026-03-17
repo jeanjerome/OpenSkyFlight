@@ -30,9 +30,11 @@ export default class TerrainChunk {
   setTexture(texture) {
     if (texture) {
       if (!this._textureMaterial) {
-        this._textureMaterial = new THREE.MeshPhongMaterial({
+        this._textureMaterial = new THREE.MeshStandardNodeMaterial({
           side: THREE.DoubleSide,
           wireframe: this._sharedMaterial.wireframe,
+          roughness: 1.0,
+          metalness: 0.0,
         });
       }
       this._textureMaterial.map = texture;
