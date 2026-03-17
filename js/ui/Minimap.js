@@ -20,6 +20,8 @@ export default class Minimap {
     // Last draw parameters — used to redraw when tiles arrive
     this._drawParams = null; // { lat, lon, zoom, yaw }
     this._redrawTimer = null;
+    // Sprint 3.2: throttle update to ~20Hz (every 3 frames)
+    this._frameCounter = 0;
 
     this._setupControls();
     this._applyVisibility();
@@ -57,6 +59,10 @@ export default class Minimap {
   update(camera) {
     if (!CONFIG.showMinimap || CONFIG.terrainMode !== 'realworld') return;
     if (!this.geo.mapView) return;
+
+    // Sprint 3.2: only run every 3 frames (~20Hz at 60fps)
+    this._frameCounter++;
+    if (this._frameCounter % 3 !== 0) return;
 
     const mapView = this.geo.mapView;
 

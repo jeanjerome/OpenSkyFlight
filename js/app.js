@@ -10,9 +10,15 @@ import Logger from './utils/Logger.js';
 import AtmosphericSky from './atmosphere/AtmosphericSky.js';
 import CloudLayer from './atmosphere/CloudLayer.js';
 import BenchmarkRunner from './benchmark/BenchmarkRunner.js';
+import BenchmarkComparator from './benchmark/BenchmarkComparator.js';
+import GPUTimer from './benchmark/GPUTimer.js';
 
-// --- Renderer ---
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+// --- Renderer (Sprint 2.4: powerPreference + stencil disabled) ---
+const renderer = new THREE.WebGLRenderer({
+  antialias: true,
+  powerPreference: 'high-performance',
+  stencil: false,
+});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, CONFIG.maxPixelRatio));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x0a0a1a);
@@ -36,9 +42,9 @@ const cloudLayer = new CloudLayer(scene);
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 1, 100000);
 camera.position.set(0, 640, 0);
 
-// --- Water plane ---
+// --- Water plane (Sprint 2.1: reduced from 80x80 to 1x1 segments) ---
 function createWaterPlane() {
-  const geo = new THREE.PlaneGeometry(20000, 20000, 80, 80);
+  const geo = new THREE.PlaneGeometry(20000, 20000, 1, 1);
   const mat = new THREE.MeshBasicMaterial({
     color: 0x1a3a5c,
     wireframe: CONFIG.wireframe,
@@ -49,14 +55,19 @@ function createWaterPlane() {
   const mesh = new THREE.Mesh(geo, mat);
   mesh.rotation.x = -Math.PI / 2;
   mesh.position.y = CONFIG.maxHeight * CONFIG.waterLevel;
+  mesh.renderOrder = 99;
   return mesh;
 }
 
 let waterPlane = createWaterPlane();
 scene.add(waterPlane);
 
+// --- Set render order on cloud layer ---
+cloudLayer.mesh.renderOrder = 100;
+
 // --- Terrain Managers ---
 const chunkManager = new ChunkManager(scene);
+chunkManager.textureProvider.setRenderer(renderer);
 const geoTerrainManager = new GeoTerrainManager(scene, renderer);
 
 function getActiveManager() {
@@ -74,6 +85,9 @@ const fpsController = new FPSController(camera, renderer.domElement);
 
 // --- Benchmark ---
 const benchmarkRunner = new BenchmarkRunner();
+
+// --- GPU Timer (Sprint 4.3) ---
+const gpuTimer = new GPUTimer(renderer);
 
 // --- HUD ---
 const hudCanvas = document.getElementById('hud');
@@ -155,6 +169,15 @@ window.addEventListener('keydown', (e) => {
     Logger.info('App', `Info ${active ? 'enabled' : 'disabled'}`);
   }
   if (e.code === 'KeyB') {
+    if (e.shiftKey) {
+      // Shift+B: store last completed benchmark as baseline
+      if (!benchmarkRunner._lastReport) {
+        Logger.warn('App', 'No completed benchmark — run one first before storing baseline');
+        return;
+      }
+      BenchmarkComparator.storeBaseline(benchmarkRunner._lastReport);
+      return;
+    }
     if (benchmarkRunner.isRunning()) {
       benchmarkRunner.stop(fpsController, renderer);
     } else {
@@ -166,7 +189,7 @@ window.addEventListener('keydown', (e) => {
         const hits = groundRaycaster.intersectObjects(chunkManager.getMeshes(), false);
         return hits.length > 0 ? hits[0].point.y : 0;
       };
-      benchmarkRunner.start(fpsController, camera, getGround);
+      benchmarkRunner.start(fpsController, camera, getGround, gpuTimer);
     }
   }
 });
@@ -183,6 +206,40 @@ window.addEventListener('resize', () => {
   hud.resize(window.innerWidth, window.innerHeight);
 });
 
+// --- Dynamic Resolution Scaling (Sprint 4.1) ---
+const basePixelRatio = Math.min(window.devicePixelRatio, CONFIG.maxPixelRatio);
+let currentPixelRatio = basePixelRatio;
+const ftRingBuffer = new Float32Array(30);
+let ftRingIndex = 0;
+let ftRingFilled = false;
+
+function updateAdaptiveQuality(frameTimeMs) {
+  ftRingBuffer[ftRingIndex] = frameTimeMs;
+  ftRingIndex = (ftRingIndex + 1) % 30;
+  if (ftRingIndex === 0) ftRingFilled = true;
+
+  const count = ftRingFilled ? 30 : ftRingIndex;
+  if (count < 10) return; // wait for enough samples
+
+  let sum = 0;
+  for (let i = 0; i < count; i++) sum += ftRingBuffer[i];
+  const avgFt = sum / count;
+
+  let targetRatio = currentPixelRatio;
+  if (avgFt > 20) {
+    // Scale down gradually
+    targetRatio = Math.max(0.5, currentPixelRatio - 0.05);
+  } else if (avgFt < 12) {
+    // Scale up gradually
+    targetRatio = Math.min(basePixelRatio, currentPixelRatio + 0.02);
+  }
+
+  if (Math.abs(targetRatio - currentPixelRatio) > 0.01) {
+    currentPixelRatio = targetRatio;
+    renderer.setPixelRatio(currentPixelRatio);
+  }
+}
+
 // --- Render loop ---
 let prevTime = performance.now();
 
@@ -191,14 +248,21 @@ function animate() {
 
   const now = performance.now();
   const dt = Math.min((now - prevTime) / 1000, 0.1);
+  const frameTimeMs = now - prevTime;
   prevTime = now;
 
   fpsController.update(dt);
-  benchmarkRunner.update(dt, renderer, camera, fpsController);
-  cloudLayer.update(dt, camera.position);
+  // Advance camera path BEFORE render (so camera is positioned for this frame)
+  benchmarkRunner.tickPath(dt, camera, fpsController, renderer);
+  cloudLayer.update(dt, camera.position, camera);
 
+  // Get subsystem timer (only active during benchmark recording)
+  const timer = benchmarkRunner.getSubsystemTimer();
+
+  if (timer) timer.begin('terrain');
   const activeManager = getActiveManager();
   activeManager.update(camera.position);
+  if (timer) timer.end('terrain');
 
   if (CONFIG.terrainMode === 'realworld') {
     // Far plane for geo-three — large value since geo-three handles LOD
@@ -233,13 +297,27 @@ function animate() {
   waterPlane.position.x = camera.position.x;
   waterPlane.position.z = camera.position.z;
 
+  if (timer) timer.begin('render');
+  gpuTimer.beginFrame();
   renderer.render(scene, camera);
+  gpuTimer.endFrame();
+  if (timer) timer.end('render');
 
   // Update HUD after render
+  if (timer) timer.begin('hud');
   hud.update(camera, groundElevation, benchmarkRunner, dt);
+  if (timer) timer.end('hud');
 
   // Update minimap
+  if (timer) timer.begin('minimap');
   minimap.update(camera);
+  if (timer) timer.end('minimap');
+
+  // Record metrics AFTER render so renderer.info reflects this frame
+  benchmarkRunner.recordMetrics(renderer);
+
+  // Dynamic resolution scaling (Sprint 4.1)
+  updateAdaptiveQuality(frameTimeMs);
 
   // FPS counter
   frameCount++;

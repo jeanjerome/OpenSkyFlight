@@ -12,6 +12,11 @@ export default class AtmosphericSky {
     this.ambientLight = ambientLight;
     this.sunDirection = new THREE.Vector3();
 
+    // Sprint 2.6: pre-allocate Color objects to avoid GC pressure
+    this._warmColor = new THREE.Color(0.8, 0.5, 0.3);
+    this._coolColor = new THREE.Color(0.5, 0.7, 1.0);
+    this._fogColor = new THREE.Color();
+
     // Sky mesh
     this.sky = new Sky();
     this.sky.scale.setScalar(4.5e6);
@@ -61,15 +66,14 @@ export default class AtmosphericSky {
     // Fog
     if (CONFIG.fogEnabled) {
       // Interpolate fog color: warm (low sun) to cool blue (high sun)
-      const warmColor = new THREE.Color(0.8, 0.5, 0.3);
-      const coolColor = new THREE.Color(0.5, 0.7, 1.0);
-      const fogColor = warmColor.clone().lerp(coolColor, sunFactor);
+      // Reuse pre-allocated Color objects
+      this._fogColor.copy(this._warmColor).lerp(this._coolColor, sunFactor);
 
       if (this.scene.fog instanceof THREE.FogExp2) {
-        this.scene.fog.color.copy(fogColor);
+        this.scene.fog.color.copy(this._fogColor);
         this.scene.fog.density = CONFIG.fogDensity;
       } else {
-        this.scene.fog = new THREE.FogExp2(fogColor, CONFIG.fogDensity);
+        this.scene.fog = new THREE.FogExp2(this._fogColor, CONFIG.fogDensity);
       }
     } else {
       this.scene.fog = null;

@@ -43,13 +43,13 @@ export default class GeoTerrainManager {
     // Create MapView with HEIGHT_SHADER mode
     this.mapView = new MapView(MapView.HEIGHT_SHADER, this.textureProvider, this.heightProvider);
 
-    // Configure LOD
+    // Configure LOD (Sprint 3.1: tuned for fewer triangles with stable hysteresis)
     const lod = new LODRaycastPruning();
-    lod.subdivisionRays = 11;
+    lod.subdivisionRays = 7;
     lod.thresholdUp = 0.6;
-    lod.thresholdDown = 0.15;
-    lod.maxLeafNodes = 400;
-    lod.pruneGraceMultiplier = 1.8;
+    lod.thresholdDown = 0.20;
+    lod.maxLeafNodes = 300;
+    lod.pruneGraceMultiplier = 2.5;
     lod.pruneMinLevel = 4;
     this.mapView.lod = lod;
 
@@ -94,10 +94,6 @@ export default class GeoTerrainManager {
   _updateTextureSource() {
     if (!this.mapView || this._wireframeMode) return;
     this.reinit();
-  }
-
-  get _effectiveViewDistanceValue() {
-    return this._effectiveViewDistance;
   }
 
   getMeshes() {

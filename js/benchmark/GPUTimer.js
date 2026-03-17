@@ -1,0 +1,87 @@
+import Logger from '../utils/Logger.js';
+
+/**
+ * GPU timing using EXT_disjoint_timer_query_webgl2.
+ * Reads results with a 2-frame delay to avoid pipeline stalls.
+ * Falls back gracefully if the extension is unavailable (e.g. Safari).
+ */
+export default class GPUTimer {
+  constructor(renderer) {
+    this._gl = renderer.getContext();
+    this._ext = this._gl.getExtension('EXT_disjoint_timer_query_webgl2');
+    this._available = !!this._ext;
+    this._pendingQueries = []; // ring buffer of { query, frameId }
+    this._frameId = 0;
+    this._lastGPUTimeMs = 0;
+
+    if (this._available) {
+      Logger.info('GPUTimer', 'EXT_disjoint_timer_query_webgl2 available');
+    } else {
+      Logger.info('GPUTimer', 'GPU timing not available — falling back to CPU-only metrics');
+    }
+  }
+
+  get available() {
+    return this._available;
+  }
+
+  /** Call before renderer.render() */
+  beginFrame() {
+    if (!this._available) return;
+    const gl = this._gl;
+    const query = gl.createQuery();
+    gl.beginQuery(this._ext.TIME_ELAPSED_EXT, query);
+    this._pendingQueries.push({ query, frameId: this._frameId });
+    this._frameId++;
+  }
+
+  /** Call after renderer.render() */
+  endFrame() {
+    if (!this._available) return;
+    const gl = this._gl;
+    gl.endQuery(this._ext.TIME_ELAPSED_EXT);
+
+    // Check for disjoint — GPU results may be invalid
+    const disjoint = gl.getParameter(this._ext.GPU_DISJOINT_EXT);
+    if (disjoint) {
+      // Discard all pending queries
+      for (const p of this._pendingQueries) {
+        gl.deleteQuery(p.query);
+      }
+      this._pendingQueries = [];
+      return;
+    }
+
+    // Harvest results from queries older than 2 frames
+    while (this._pendingQueries.length > 0) {
+      const oldest = this._pendingQueries[0];
+      if (this._frameId - oldest.frameId < 2) break; // too recent
+
+      const available = gl.getQueryParameter(oldest.query, gl.QUERY_RESULT_AVAILABLE);
+      if (!available) break; // not ready yet
+
+      const nanoseconds = gl.getQueryParameter(oldest.query, gl.QUERY_RESULT);
+      this._lastGPUTimeMs = nanoseconds / 1e6;
+      gl.deleteQuery(oldest.query);
+      this._pendingQueries.shift();
+    }
+
+    // Prevent unbounded growth — discard very old queries
+    while (this._pendingQueries.length > 10) {
+      const old = this._pendingQueries.shift();
+      this._gl.deleteQuery(old.query);
+    }
+  }
+
+  /** Returns the last measured GPU render time in milliseconds. */
+  getLastGPUTimeMs() {
+    return this._lastGPUTimeMs;
+  }
+
+  dispose() {
+    for (const p of this._pendingQueries) {
+      this._gl.deleteQuery(p.query);
+    }
+    this._pendingQueries = [];
+  }
+}
