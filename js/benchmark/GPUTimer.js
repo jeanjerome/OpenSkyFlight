@@ -2,12 +2,13 @@ import Logger from '../utils/Logger.js';
 
 /**
  * GPU timing with backend detection.
+ * - WebGPU with timestamp-query: uses renderer.resolveTimestampsAsync() for real GPU timing.
+ * - WebGPU without timestamp-query: falls back to performance.now() around render calls.
  * - WebGL2: uses EXT_disjoint_timer_query_webgl2 (reads results with 2-frame delay).
- * - WebGPU: GPU timestamp queries are optional and rarely exposed;
- *   falls back to performance.now() around render calls.
  */
 export default class GPUTimer {
   constructor(renderer) {
+    this._renderer = renderer;
     this._available = false;
     this._gl = null;
     this._ext = null;
@@ -18,9 +19,17 @@ export default class GPUTimer {
 
     // Detect backend: WebGPURenderer exposes a .backend property
     this._isWebGPU = !!renderer.backend;
+    this._hasTimestampQuery = false;
 
     if (this._isWebGPU) {
-      Logger.info('GPUTimer', 'WebGPU backend — using CPU render timing as surrogate');
+      // Check if trackTimestamp was enabled and the adapter supports it
+      this._hasTimestampQuery = !!renderer.backend.trackTimestamp;
+
+      if (this._hasTimestampQuery) {
+        Logger.info('GPUTimer', 'WebGPU backend — using native GPU timestamp queries');
+      } else {
+        Logger.info('GPUTimer', 'WebGPU backend — timestamp-query not available, using CPU render timing as surrogate');
+      }
     } else {
       // WebGL2 path
       try {
@@ -46,7 +55,9 @@ export default class GPUTimer {
   /** Call before renderer.render() */
   beginFrame() {
     if (this._isWebGPU) {
-      this._cpuRenderStart = performance.now();
+      if (!this._hasTimestampQuery) {
+        this._cpuRenderStart = performance.now();
+      }
       return;
     }
     if (!this._available) return;
@@ -60,7 +71,18 @@ export default class GPUTimer {
   /** Call after renderer.render() */
   endFrame() {
     if (this._isWebGPU) {
-      this._lastGPUTimeMs = performance.now() - this._cpuRenderStart;
+      if (this._hasTimestampQuery) {
+        // Resolve native GPU timestamps asynchronously
+        this._renderer.resolveTimestampsAsync('render').then((durationMs) => {
+          if (durationMs !== undefined && durationMs !== null) {
+            this._lastGPUTimeMs = durationMs;
+          }
+        }).catch(() => {
+          // Silently ignore — timestamp may not be available on every frame
+        });
+      } else {
+        this._lastGPUTimeMs = performance.now() - this._cpuRenderStart;
+      }
       return;
     }
     if (!this._available) return;
@@ -104,8 +126,10 @@ export default class GPUTimer {
   }
 
   dispose() {
-    for (const p of this._pendingQueries) {
-      this._gl.deleteQuery(p.query);
+    if (this._gl) {
+      for (const p of this._pendingQueries) {
+        this._gl.deleteQuery(p.query);
+      }
     }
     this._pendingQueries = [];
   }

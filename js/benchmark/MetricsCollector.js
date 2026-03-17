@@ -208,18 +208,23 @@ export default class MetricsCollector {
     let gpu = 'unknown';
     let backend = 'unknown';
 
+    let gpuTimestamp = false;
+
     try {
-      if (renderer.backend?.adapter?.info) {
-        // WebGPU path
-        const info = renderer.backend.adapter.info;
-        gpu = info.description || info.vendor || 'WebGPU adapter';
+      if (renderer.backend) {
         backend = 'WebGPU';
+        gpuTimestamp = !!renderer.backend.trackTimestamp;
+        const adapter = renderer.backend.adapter;
+        if (adapter) {
+          const info = adapter.info || adapter;
+          gpu = info.description || info.architecture || info.vendor || info.device || 'WebGPU adapter';
+        }
       } else if (renderer.getContext) {
-        // WebGL2 fallback path
         const gl = renderer.getContext();
         const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
         gpu = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : 'unknown';
         backend = 'WebGL2';
+        gpuTimestamp = !!gl.getExtension('EXT_disjoint_timer_query_webgl2');
       }
     } catch (_) {
       // Graceful fallback if context methods are unavailable
@@ -232,6 +237,7 @@ export default class MetricsCollector {
       deviceMemory: navigator.deviceMemory || 0,
       gpu,
       backend,
+      gpuTimestamp,
       canvasWidth: renderer.domElement.clientWidth,
       canvasHeight: renderer.domElement.clientHeight,
       pixelRatio: renderer.getPixelRatio(),

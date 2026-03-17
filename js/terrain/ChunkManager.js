@@ -15,7 +15,7 @@ export default class ChunkManager {
     this.workerReady = false;
     this.requestQueue = [];
 
-    this.material = new THREE.MeshBasicMaterial({
+    this.material = new THREE.MeshBasicNodeMaterial({
       wireframe: true,
       vertexColors: true,
       side: THREE.DoubleSide,
