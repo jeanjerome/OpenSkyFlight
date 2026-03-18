@@ -13,6 +13,7 @@ import BenchmarkRunner from './benchmark/BenchmarkRunner.js';
 import BenchmarkComparator from './benchmark/BenchmarkComparator.js';
 import GPUTimer from './benchmark/GPUTimer.js';
 import AircraftManager from './aircraft/AircraftManager.js';
+import Stats from 'stats.js';
 
 async function initApp() {
   // --- Renderer: WebGPURenderer with automatic WebGL2 fallback ---
@@ -98,6 +99,18 @@ async function initApp() {
   // --- GPU Timer (Sprint 4.3) ---
   const gpuTimer = new GPUTimer(renderer);
 
+  // --- Stats.js ---
+  const stats = new Stats();
+  const gpuPanel = new Stats.Panel('GPU', '#ff9933', '#331100');
+  stats.addPanel(gpuPanel);
+  stats.showPanel(0);
+  stats.dom.style.position = 'fixed';
+  stats.dom.style.top = '0px';
+  stats.dom.style.left = '0px';
+  stats.dom.style.zIndex = '30';
+  stats.dom.style.display = 'none'; // hidden by default, toggled with I key
+  document.body.appendChild(stats.dom);
+
   // --- HUD ---
   const hudCanvas = document.getElementById('hud');
   const hud = new HUD(hudCanvas);
@@ -180,6 +193,7 @@ async function initApp() {
     if (e.code === 'KeyI') {
       const active = hud.toggleStats();
       document.getElementById('help').style.display = active ? 'block' : 'none';
+      stats.dom.style.display = active ? 'block' : 'none';
       Logger.info('App', `Info ${active ? 'enabled' : 'disabled'}`);
     }
     if (e.code === 'KeyB') {
@@ -207,10 +221,6 @@ async function initApp() {
       }
     }
   });
-
-  // --- Stats ---
-  let frameCount = 0;
-  let lastFPSTime = performance.now();
 
   // --- Resize ---
   window.addEventListener('resize', () => {
@@ -259,6 +269,7 @@ async function initApp() {
 
   function animate() {
     requestAnimationFrame(animate);
+    stats.begin();
 
     const now = performance.now();
     const dt = Math.min((now - prevTime) / 1000, 0.1);
@@ -266,8 +277,10 @@ async function initApp() {
     prevTime = now;
 
     fpsController.update(dt);
-    // Position aircraft and chase cam from FPS controller state
-    aircraftManager.update(fpsController.position, fpsController.yaw, fpsController.pitch, fpsController.roll, fpsController.yawRate, fpsController.pitchRate, camera, dt);
+    // During benchmark, camera is driven by the camera path — skip aircraft override
+    if (!benchmarkRunner.isRunning()) {
+      aircraftManager.update(fpsController.position, fpsController.yaw, fpsController.pitch, fpsController.roll, fpsController.yawRate, fpsController.pitchRate, camera, dt);
+    }
     // Advance camera path BEFORE render (so camera is positioned for this frame)
     benchmarkRunner.tickPath(dt, camera, fpsController, renderer);
     cloudLayer.update(dt, camera.position, camera);
@@ -336,19 +349,10 @@ async function initApp() {
     // Dynamic resolution scaling (Sprint 4.1)
     updateAdaptiveQuality(frameTimeMs);
 
-    // FPS counter
-    frameCount++;
-    if (now - lastFPSTime >= 500) {
-      const fps = Math.round(frameCount / ((now - lastFPSTime) / 1000));
-      const tris = renderer.info.render.triangles;
-      const formattedTris = tris >= 1e9 ? (tris / 1e9).toFixed(1) + 'B'
-        : tris >= 1e6 ? (tris / 1e6).toFixed(1) + 'M'
-        : tris >= 1e3 ? (tris / 1e3).toFixed(1) + 'K'
-        : tris;
-      hud.setStats(`${fps} FPS | ${formattedTris} triangles`);
-      frameCount = 0;
-      lastFPSTime = now;
-    }
+    // Update GPU panel with last frame's GPU time
+    gpuPanel.update(gpuTimer.getLastGPUTimeMs(), 30);
+
+    stats.end();
   }
 
   animate();

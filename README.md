@@ -37,6 +37,11 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 - **Built-in benchmark** — automated camera path with FPS/GPU timing, metrics recording, and baseline comparison
 - **Centralized logging** — in-app log panel with level control (DEBUG/INFO/WARN/ERROR)
 
+<!-- Screenshot: chase camera view following the Rafale -->
+![Chase camera view — Rafale flying over real-world terrain](docs/screenshots/chase-camera.png)
+
+*Third-person chase camera following the Rafale over satellite-textured terrain.*
+
 ## Quick Start
 
 No dependencies to install. Start the dev server:
@@ -178,6 +183,18 @@ cache/
 - [ESRI World Imagery](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9) — satellite textures (up to zoom 18+)
 - Node.js — dev server with transparent caching tile proxy and offline prefetch script
 - ES modules + import maps — no bundler needed
+
+## Browser Support
+
+OpenSkyFlight uses **WebGPU** for rendering. Browser support varies significantly because each engine relies on a different backend:
+
+| Browser | Backend | Status | Notes |
+|---|---|---|---|
+| **Chrome & Chromium-based** | Dawn (C++) | **Very Good** | Stable WebGPU since 2023, most mature implementation |
+| **Firefox** | wgpu (Rust) | **Very Good** | ~90% spec coverage, may have minor rendering differences |
+| **Safari** | WebKit + Metal | Very Bad | WebGPU enabled by default since Safari 26 (2025); visual artefacts, flickering, and performance instability due to Metal-specific constraints |
+
+Even with identical WGSL shaders, each browser compiles and optimizes them through a different pipeline, which can produce subtle rendering differences. For the best experience, **use Chrome or a Chromium-based browser**.
 
 ## Data Sources & Attribution
 
