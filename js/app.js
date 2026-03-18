@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CONFIG, onChange } from './utils/config.js';
+import { CONFIG, onChange, update } from './utils/config.js';
 import ChunkManager from './terrain/ChunkManager.js';
 import GeoTerrainManager from './terrain/GeoTerrainManager.js';
 import FPSController from './camera/FPSController.js';
@@ -171,6 +171,11 @@ async function initApp() {
     if (e.code === 'KeyH' && CONFIG.terrainMode === 'realworld') {
       const active = geoTerrainManager.toggleHiRes();
       Logger.info('App', `Hi-res mode (zoom 18) ${active ? 'enabled' : 'disabled'}`);
+    }
+    if (e.code === 'KeyV') {
+      const next = CONFIG.cameraMode === 'chase' ? 'cockpit' : 'chase';
+      update('cameraMode', next);
+      Logger.info('App', `Camera mode: ${next}`);
     }
     if (e.code === 'KeyI') {
       const active = hud.toggleStats();

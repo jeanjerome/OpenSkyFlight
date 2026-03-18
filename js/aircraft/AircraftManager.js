@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import Logger from '../utils/Logger.js';
+import { CONFIG } from '../utils/config.js';
 
 const CHASE_DISTANCE = 30;
 const CHASE_HEIGHT = 8;
@@ -99,20 +100,31 @@ export default class AircraftManager {
     this._visualRoll += (targetRoll - this._visualRoll) * t;
     this._visualPitch += (targetPitch - this._visualPitch) * t;
 
-    // Aircraft gets base orientation + extra visual tilt
-    this._aircraftEuler.set(pitch + this._visualPitch, yaw, roll + this._visualRoll, 'YXZ');
-    this.group.position.copy(aircraftPos);
-    this.group.rotation.copy(this._aircraftEuler);
+    if (CONFIG.cameraMode === 'cockpit') {
+      // First-person: hide aircraft, camera at aircraft position with full rotation (including roll)
+      this.group.visible = false;
+      camera.position.copy(aircraftPos);
+      camera.rotation.order = 'YXZ';
+      camera.rotation.set(pitch, yaw, roll);
+    } else {
+      // Chase: show aircraft with visual tilt, camera behind
+      this.group.visible = true;
 
-    // Chase cam offset uses base orientation (no visual tilt)
-    this._euler.set(pitch, yaw, 0, 'YXZ');
-    this._offset.set(0, CHASE_HEIGHT, CHASE_DISTANCE);
-    this._quat.setFromEuler(this._euler);
-    this._offset.applyQuaternion(this._quat);
+      // Aircraft gets base orientation + extra visual tilt
+      this._aircraftEuler.set(pitch + this._visualPitch, yaw, roll + this._visualRoll, 'YXZ');
+      this.group.position.copy(aircraftPos);
+      this.group.rotation.copy(this._aircraftEuler);
 
-    // Camera: rigid position, level horizon (no roll)
-    camera.position.copy(aircraftPos).add(this._offset);
-    camera.rotation.order = 'YXZ';
-    camera.rotation.set(pitch, yaw, 0);
+      // Chase cam offset uses base orientation (no visual tilt)
+      this._euler.set(pitch, yaw, 0, 'YXZ');
+      this._offset.set(0, CHASE_HEIGHT, CHASE_DISTANCE);
+      this._quat.setFromEuler(this._euler);
+      this._offset.applyQuaternion(this._quat);
+
+      // Camera: rigid position, level horizon (no roll)
+      camera.position.copy(aircraftPos).add(this._offset);
+      camera.rotation.order = 'YXZ';
+      camera.rotation.set(pitch, yaw, 0);
+    }
   }
 }
