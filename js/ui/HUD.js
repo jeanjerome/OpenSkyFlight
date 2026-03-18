@@ -4,7 +4,6 @@ const HUD_COLOR = '#00ff88';
 const HUD_ALPHA = 0.85;
 const HUD_SHADOW_COLOR = 'rgba(0, 0, 0, 0.9)';
 const HUD_SHADOW_BLUR = 2; // Sprint 2.3: reduced from 6 to 2 (avoids costly SW blur path)
-const BADGE_HEIGHT = 24;
 const BADGE_SPACING = 30;
 const COMPASS_POINTS = [
   { deg: 0, label: 'N' },
@@ -24,7 +23,6 @@ export default class HUD {
     this.w = 0;
     this.h = 0;
     this.showStats = false;
-    this.statsText = '';
     this.prevPos = null;
     this.groundSpeed = 0;
     // Sprint 2.2: dirty flag — previous values for change detection
@@ -42,13 +40,6 @@ export default class HUD {
     this.showStats = !this.showStats;
     this._forceRedraw = true;
     return this.showStats;
-  }
-
-  setStats(text) {
-    if (text !== this.statsText) {
-      this.statsText = text;
-      this._forceRedraw = true;
-    }
   }
 
   resize(w, h) {
@@ -115,10 +106,6 @@ export default class HUD {
     this._drawSpeed(ctx, this.groundSpeed);
     // Top-right badges: stack vertically
     let badgeY = 44;
-    if (this.showStats && this.statsText) {
-      this._drawStatsBadge(ctx, badgeY);
-      badgeY += BADGE_SPACING;
-    }
     if (CONFIG.hiResMode) {
       this._drawHiResBadge(ctx, badgeY);
       badgeY += BADGE_SPACING;
@@ -427,33 +414,6 @@ export default class HUD {
     ctx.font = 'bold 12px Courier New';
     ctx.textAlign = 'right';
     ctx.fillText('SPD', x, cy - scaleH / 2 - 14);
-
-    ctx.restore();
-  }
-
-  // --- Stats badge (top-right) ---
-  _drawStatsBadge(ctx, y) {
-    const x = this.w - 20;
-    const label = this.statsText;
-
-    ctx.save();
-    ctx.font = 'bold 13px Courier New';
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-
-    const tw = ctx.measureText(label).width;
-    const pad = 6;
-
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    ctx.fillRect(x - tw - pad * 2, y - 12, tw + pad * 2, BADGE_HEIGHT);
-
-    ctx.strokeStyle = HUD_COLOR;
-    ctx.lineWidth = 1.5;
-    ctx.globalAlpha = HUD_ALPHA;
-    ctx.strokeRect(x - tw - pad * 2, y - 12, tw + pad * 2, BADGE_HEIGHT);
-
-    ctx.fillStyle = HUD_COLOR;
-    ctx.fillText(label, x - pad, y);
 
     ctx.restore();
   }
