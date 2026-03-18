@@ -32,7 +32,12 @@ export default class HUD {
     this._prevSpeed = NaN;
     this._prevBenchRunning = false;
     this._prevBenchBadgeEpoch = 0;
+    this._prevRecording = false;
+    this._prevAutopilot = false;
+    this._prevWpCount = 0;
+    this._prevMenuOpen = false;
     this._forceRedraw = true;
+    this._flightPlanMenu = { open: false, files: [] };
     this.resize();
   }
 
@@ -54,7 +59,7 @@ export default class HUD {
     this._forceRedraw = true;
   }
 
-  update(camera, groundElevation, benchmarkRunner, dt) {
+  update(camera, groundElevation, benchmarkRunner, dt, flightPlanRecorder) {
     const yaw = camera.rotation.y;
     const pitch = camera.rotation.x;
     const altY = camera.position.y;
@@ -78,6 +83,11 @@ export default class HUD {
           : Math.floor(benchmarkRunner.getElapsed()))
       : 0;
 
+    const fpRec = flightPlanRecorder;
+    const isRecording = fpRec ? fpRec.isRecording() : false;
+    const isAutopilot = fpRec ? fpRec.autopilotActive : false;
+    const wpCount = fpRec ? fpRec.getWaypointCount() : 0;
+
     // Sprint 2.2: dirty flag — skip redraw if nothing significant changed
     if (!this._forceRedraw &&
         Math.abs(yaw - this._prevYaw) < 0.001 &&
@@ -85,7 +95,11 @@ export default class HUD {
         Math.abs(altY - this._prevAlt) < 0.5 &&
         Math.abs(this.groundSpeed - this._prevSpeed) < 0.5 &&
         benchRunning === this._prevBenchRunning &&
-        benchBadgeEpoch === this._prevBenchBadgeEpoch) {
+        benchBadgeEpoch === this._prevBenchBadgeEpoch &&
+        isRecording === this._prevRecording &&
+        isAutopilot === this._prevAutopilot &&
+        wpCount === this._prevWpCount &&
+        this._flightPlanMenu.open === this._prevMenuOpen) {
       return;
     }
 
@@ -95,6 +109,10 @@ export default class HUD {
     this._prevSpeed = this.groundSpeed;
     this._prevBenchRunning = benchRunning;
     this._prevBenchBadgeEpoch = benchBadgeEpoch;
+    this._prevRecording = isRecording;
+    this._prevAutopilot = isAutopilot;
+    this._prevWpCount = wpCount;
+    this._prevMenuOpen = this._flightPlanMenu.open;
     this._forceRedraw = false;
 
     const ctx = this.ctx;
@@ -116,7 +134,101 @@ export default class HUD {
       } else {
         this._drawBenchmarkBadge(ctx, benchmarkRunner.getElapsed(), badgeY);
       }
+      badgeY += BADGE_SPACING;
     }
+    if (isRecording) {
+      this._drawFlightPlanRecBadge(ctx, wpCount, badgeY);
+      badgeY += BADGE_SPACING;
+    }
+    if (isAutopilot && fpRec && fpRec.getPlan()) {
+      const plan = fpRec.getPlan();
+      const nextWp = plan.getNextWaypointIndex();
+      const totalWp = fpRec.getWaypointCount();
+      const progressPct = Math.round(plan.getProgress() * 100);
+      this._drawAutopilotBadge(ctx, nextWp, totalWp, progressPct, badgeY);
+    }
+
+    if (this._flightPlanMenu.open) {
+      this._drawFlightPlanMenu(ctx);
+    }
+  }
+
+  openFlightPlanMenu(files) {
+    this._flightPlanMenu = { open: true, files: files || [] };
+    this._forceRedraw = true;
+  }
+
+  closeFlightPlanMenu() {
+    this._flightPlanMenu.open = false;
+    this._forceRedraw = true;
+  }
+
+  isFlightPlanMenuOpen() {
+    return this._flightPlanMenu.open;
+  }
+
+  selectFlightPlan(index) {
+    const files = this._flightPlanMenu.files;
+    if (index >= 0 && index < files.length) {
+      return files[index];
+    }
+    return null;
+  }
+
+  _drawFlightPlanMenu(ctx) {
+    const cx = this.w / 2;
+    const cy = this.h / 2;
+    const boxW = 400;
+    const files = this._flightPlanMenu.files;
+    const lineH = 28;
+    const headerH = 50;
+    const footerH = 36;
+    const listH = Math.max(lineH, files.length * lineH);
+    const boxH = headerH + listH + footerH + 20;
+
+    ctx.save();
+
+    // Background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    ctx.fillRect(cx - boxW / 2, cy - boxH / 2, boxW, boxH);
+
+    // Border
+    ctx.strokeStyle = HUD_COLOR;
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = HUD_ALPHA;
+    ctx.strokeRect(cx - boxW / 2, cy - boxH / 2, boxW, boxH);
+
+    // Title
+    ctx.fillStyle = HUD_COLOR;
+    ctx.font = 'bold 18px Courier New';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText('FLIGHT PLANS', cx, cy - boxH / 2 + 14);
+
+    // List
+    ctx.font = '14px Courier New';
+    ctx.textAlign = 'left';
+    const listY = cy - boxH / 2 + headerH;
+
+    if (files.length === 0) {
+      ctx.fillStyle = '#667766';
+      ctx.textAlign = 'center';
+      ctx.fillText('(no plans found)', cx, listY + 6);
+    } else {
+      ctx.fillStyle = HUD_COLOR;
+      for (let i = 0; i < files.length && i < 9; i++) {
+        const name = files[i].replace('.json', '');
+        ctx.fillText(`${i + 1}. ${name}`, cx - boxW / 2 + 30, listY + i * lineH + 6);
+      }
+    }
+
+    // Footer
+    ctx.fillStyle = '#667766';
+    ctx.font = '12px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('L: close  |  1-9: select  |  Esc: close', cx, cy + boxH / 2 - footerH + 8);
+
+    ctx.restore();
   }
 
   _applyHudShadow(ctx) {
@@ -513,6 +625,60 @@ export default class HUD {
 
     // Text
     ctx.fillStyle = '#ff3333';
+    ctx.fillText(label, x - pad, y);
+
+    ctx.restore();
+  }
+
+  // --- Flight Plan recording badge (top-right) ---
+  _drawFlightPlanRecBadge(ctx, wpCount, y) {
+    const x = this.w - 20;
+    const label = `REC FLTPLAN  WP:${wpCount}`;
+
+    ctx.save();
+    ctx.font = 'bold 13px Courier New';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+
+    const tw = ctx.measureText(label).width;
+    const pad = 6;
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(x - tw - pad * 2, y - 12, tw + pad * 2, 24);
+
+    ctx.strokeStyle = '#ffaa00';
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.9;
+    ctx.strokeRect(x - tw - pad * 2, y - 12, tw + pad * 2, 24);
+
+    ctx.fillStyle = '#ffaa00';
+    ctx.fillText(label, x - pad, y);
+
+    ctx.restore();
+  }
+
+  // --- Autopilot badge (top-right) ---
+  _drawAutopilotBadge(ctx, nextWp, totalWp, progressPct, y) {
+    const x = this.w - 20;
+    const label = `AP  WP ${nextWp}/${totalWp}  ${progressPct}%`;
+
+    ctx.save();
+    ctx.font = 'bold 13px Courier New';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+
+    const tw = ctx.measureText(label).width;
+    const pad = 6;
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(x - tw - pad * 2, y - 12, tw + pad * 2, 24);
+
+    ctx.strokeStyle = '#00ff88';
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.9;
+    ctx.strokeRect(x - tw - pad * 2, y - 12, tw + pad * 2, 24);
+
+    ctx.fillStyle = '#00ff88';
     ctx.fillText(label, x - pad, y);
 
     ctx.restore();

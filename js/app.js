@@ -13,6 +13,7 @@ import BenchmarkRunner from './benchmark/BenchmarkRunner.js';
 import BenchmarkComparator from './benchmark/BenchmarkComparator.js';
 import GPUTimer from './benchmark/GPUTimer.js';
 import AircraftManager from './aircraft/AircraftManager.js';
+import FlightPlanRecorder from './flightplan/FlightPlanRecorder.js';
 import Stats from 'stats.js';
 
 async function initApp() {
@@ -99,6 +100,9 @@ async function initApp() {
   // --- GPU Timer (Sprint 4.3) ---
   const gpuTimer = new GPUTimer(renderer);
 
+  // --- Flight Plan Recorder ---
+  const flightPlanRecorder = new FlightPlanRecorder();
+
   // --- Stats.js ---
   const stats = new Stats();
   const gpuPanel = new Stats.Panel('GPU', '#ff9933', '#331100');
@@ -118,6 +122,7 @@ async function initApp() {
   // --- Minimap ---
   const minimapCanvas = document.getElementById('minimap');
   const minimap = new Minimap(minimapCanvas, geoTerrainManager);
+  minimap.setFlightPlanRecorder(flightPlanRecorder);
 
   // --- Raycaster for ground elevation (procedural mode) ---
   const groundRaycaster = new THREE.Raycaster();
@@ -196,6 +201,73 @@ async function initApp() {
       stats.dom.style.display = active ? 'block' : 'none';
       Logger.info('App', `Info ${active ? 'enabled' : 'disabled'}`);
     }
+    if (e.code === 'KeyL') {
+      if (hud.isFlightPlanMenuOpen()) {
+        hud.closeFlightPlanMenu();
+      } else {
+        fetch('/api/flightplans')
+          .then(r => r.json())
+          .then(files => hud.openFlightPlanMenu(files))
+          .catch(() => Logger.warn('App', 'No flight plans available'));
+      }
+    }
+    if (hud.isFlightPlanMenuOpen() && e.code.startsWith('Digit')) {
+      const idx = parseInt(e.code.charAt(5)) - 1;
+      const file = hud.selectFlightPlan(idx);
+      if (file) {
+        fetch(`/assets/flightplans/${file}`)
+          .then(r => r.json())
+          .then(data => {
+            flightPlanRecorder.loadFromJSON(data);
+            hud.closeFlightPlanMenu();
+          })
+          .catch(() => Logger.warn('App', `Failed to load ${file}`));
+      }
+    }
+    if (e.code === 'Escape' && hud.isFlightPlanMenuOpen()) {
+      hud.closeFlightPlanMenu();
+    }
+    if (e.code === 'KeyN') {
+      if (e.shiftKey) {
+        // Shift+N: clear all waypoints
+        flightPlanRecorder.clear();
+      } else {
+        // N: toggle recording
+        if (flightPlanRecorder.isRecording()) {
+          flightPlanRecorder.stopRecording();
+        } else {
+          flightPlanRecorder.startRecording();
+        }
+      }
+    }
+    if (e.code === 'KeyP') {
+      if (flightPlanRecorder.isRecording()) {
+        flightPlanRecorder.addWaypoint(camera);
+      }
+    }
+    if (e.code === 'KeyG') {
+      if (flightPlanRecorder.autopilotActive) {
+        // Disengage autopilot
+        flightPlanRecorder.autopilotActive = false;
+        fpsController.enabled = true;
+        fpsController.position.copy(camera.position);
+        fpsController.yaw = camera.rotation.y;
+        fpsController.pitch = camera.rotation.x;
+        Logger.info('App', 'Autopilot disengaged');
+      } else {
+        // Engage autopilot
+        if (!flightPlanRecorder.hasValidPlan()) {
+          Logger.warn('App', 'Need at least 2 waypoints to engage autopilot');
+          return;
+        }
+        const plan = flightPlanRecorder.buildPlan(camera);
+        if (plan) {
+          flightPlanRecorder.autopilotActive = true;
+          fpsController.enabled = false;
+          Logger.info('App', 'Autopilot engaged');
+        }
+      }
+    }
     if (e.code === 'KeyB') {
       if (e.shiftKey) {
         // Shift+B: store last completed benchmark as baseline
@@ -217,7 +289,8 @@ async function initApp() {
           const hits = groundRaycaster.intersectObjects(chunkManager.getMeshes(), false);
           return hits.length > 0 ? hits[0].point.y : 0;
         };
-        benchmarkRunner.start(fpsController, camera, getGround, gpuTimer);
+        const userPlan = flightPlanRecorder.hasValidPlan() ? flightPlanRecorder.buildPlan(camera) : null;
+        benchmarkRunner.start(fpsController, camera, getGround, gpuTimer, userPlan);
       }
     }
   });
@@ -277,10 +350,34 @@ async function initApp() {
     prevTime = now;
 
     fpsController.update(dt);
-    // During benchmark, camera is driven by the camera path — skip aircraft override
-    if (!benchmarkRunner.isRunning()) {
+
+    // Autopilot: follow flight plan spline
+    if (flightPlanRecorder.autopilotActive && flightPlanRecorder.getPlan()) {
+      const plan = flightPlanRecorder.getPlan();
+      const getGround = (x, z) => {
+        if (CONFIG.terrainMode === 'realworld') {
+          return geoTerrainManager.getGroundElevation(x, z);
+        }
+        groundRaycaster.set(new THREE.Vector3(x, 10000, z), downDirection);
+        const hits = groundRaycaster.intersectObjects(chunkManager.getMeshes(), false);
+        return hits.length > 0 ? hits[0].point.y : 0;
+      };
+      const ok = plan.update(dt, camera, getGround);
+      if (!ok) {
+        // Plan finished → disengage autopilot
+        flightPlanRecorder.autopilotActive = false;
+        fpsController.enabled = true;
+        fpsController.position.copy(camera.position);
+        fpsController.yaw = camera.rotation.y;
+        fpsController.pitch = camera.rotation.x;
+        Logger.info('App', 'Autopilot: flight plan completed');
+      }
+      aircraftManager.update(camera.position, plan.yaw, plan.pitch, plan.roll, plan.yawRate, plan.pitchRate, camera, dt);
+    } else if (!benchmarkRunner.isRunning()) {
+      // Normal manual flight — update aircraft from FPS controller
       aircraftManager.update(fpsController.position, fpsController.yaw, fpsController.pitch, fpsController.roll, fpsController.yawRate, fpsController.pitchRate, camera, dt);
     }
+
     // Advance camera path BEFORE render (so camera is positioned for this frame)
     benchmarkRunner.tickPath(dt, camera, fpsController, renderer);
     cloudLayer.update(dt, camera.position, camera);
@@ -335,7 +432,7 @@ async function initApp() {
 
     // Update HUD after render
     if (timer) timer.begin('hud');
-    hud.update(camera, groundElevation, benchmarkRunner, dt);
+    hud.update(camera, groundElevation, benchmarkRunner, dt, flightPlanRecorder);
     if (timer) timer.end('hud');
 
     // Update minimap

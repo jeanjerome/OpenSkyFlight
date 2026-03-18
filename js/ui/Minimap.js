@@ -16,6 +16,7 @@ export default class Minimap {
     this._tileCache = new Map(); // "z/x/y" -> Image
     this._pendingLoads = new Set();
     this._worldDir = new THREE.Vector3();
+    this._flightPlanRecorder = null;
 
     // Last draw parameters — used to redraw when tiles arrive
     this._drawParams = null; // { lat, lon, zoom, yaw }
@@ -30,6 +31,10 @@ export default class Minimap {
         this._applyVisibility();
       }
     });
+  }
+
+  setFlightPlanRecorder(recorder) {
+    this._flightPlanRecorder = recorder;
   }
 
   _setupControls() {
@@ -151,6 +156,7 @@ export default class Minimap {
     }
 
     this._drawMarker(halfW, halfH, yaw);
+    this._drawFlightPlan(p, offsetX, offsetY, centerTileX, centerTileY);
 
     // Zoom label
     ctx.fillStyle = 'rgba(0, 10, 5, 0.7)';
@@ -177,6 +183,102 @@ export default class Minimap {
     ctx.strokeStyle = '#003322';
     ctx.lineWidth = 1;
     ctx.stroke();
+    ctx.restore();
+  }
+
+  _worldToPixel(worldX, worldZ, offsetX, offsetY, centerTileX, centerTileY, zoom) {
+    if (!this.geo.mapView) return null;
+    const mapView = this.geo.mapView;
+
+    // World → Mercator
+    const mercX = worldX - mapView.position.x;
+    const mercY = mapView.position.z - worldZ;
+
+    let latLon;
+    try {
+      latLon = UnitsUtils.sphericalToDatums(mercX, mercY);
+    } catch {
+      return null;
+    }
+    const { latitude, longitude } = latLon;
+    if (isNaN(latitude) || isNaN(longitude)) return null;
+
+    const n = 1 << zoom;
+    const xTile = ((longitude + 180) / 360) * n;
+    const latRad = latitude * Math.PI / 180;
+    const yTile = ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n;
+
+    const px = offsetX + (xTile - centerTileX) * TILE_SIZE;
+    const py = offsetY + (yTile - centerTileY) * TILE_SIZE;
+    return { x: px, y: py };
+  }
+
+  _drawFlightPlan(drawParams, offsetX, offsetY, centerTileX, centerTileY) {
+    if (!this._flightPlanRecorder) return;
+    const recorder = this._flightPlanRecorder;
+    const waypoints = recorder.getWaypoints();
+    const plan = recorder.getPlan();
+    const zoom = drawParams.zoom;
+    const ctx = this.ctx;
+
+    // Draw spline if plan is built
+    if (plan && recorder.autopilotActive) {
+      const splinePoints = plan.getSplinePoints(200);
+      ctx.save();
+      ctx.strokeStyle = '#ffaa00';
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.7;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      let started = false;
+      for (const pt of splinePoints) {
+        const px = this._worldToPixel(pt.x, pt.z, offsetX, offsetY, centerTileX, centerTileY, zoom);
+        if (!px) continue;
+        if (!started) {
+          ctx.moveTo(px.x, px.y);
+          started = true;
+        } else {
+          ctx.lineTo(px.x, px.y);
+        }
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+
+    // Draw waypoints
+    if (waypoints.length === 0) return;
+    ctx.save();
+    ctx.font = 'bold 9px Courier New';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+
+    for (let i = 0; i < waypoints.length; i++) {
+      const wp = waypoints[i];
+      const px = this._worldToPixel(wp.position.x, wp.position.z, offsetX, offsetY, centerTileX, centerTileY, zoom);
+      if (!px) continue;
+
+      // Color: green (first), red (last), orange (intermediate)
+      let color;
+      if (i === 0) color = '#00ff88';
+      else if (i === waypoints.length - 1) color = '#ff4444';
+      else color = '#ffaa00';
+
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(px.x, px.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Border
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Number label
+      ctx.fillStyle = '#fff';
+      ctx.fillText(String(i + 1), px.x, px.y - 6);
+    }
+
     ctx.restore();
   }
 
