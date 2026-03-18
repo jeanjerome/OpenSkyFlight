@@ -8,7 +8,7 @@
 // Usage: node scripts/serve.js [--port 3000]
 
 import { createServer } from 'node:http';
-import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { readFile, readdir, mkdir, writeFile } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 import { parseArgs } from 'node:util';
 
@@ -136,14 +136,30 @@ async function serveStatic(req, res, urlPath) {
 }
 
 const TILE_RE = /^\/tiles\/(\w+)\/(\d+)\/(\d+)\/(\d+)\.png$/;
+const FLIGHTPLANS_DIR = join(ROOT, 'assets', 'flightplans');
+
+async function serveFlightPlanList(req, res) {
+  try {
+    const entries = await readdir(FLIGHTPLANS_DIR);
+    const files = entries.filter(f => f.endsWith('.json')).sort();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(files));
+  } catch (_) {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end('[]');
+  }
+}
 
 const server = createServer((req, res) => {
-  const match = req.url.match(TILE_RE);
+  const urlPath = req.url.split('?')[0];
+  const match = urlPath.match(TILE_RE);
   if (match) {
     const [, source, z, x, y] = match;
     serveTile(req, res, source, z, x, y);
+  } else if (urlPath === '/api/flightplans') {
+    serveFlightPlanList(req, res);
   } else {
-    serveStatic(req, res, req.url.split('?')[0]);
+    serveStatic(req, res, urlPath);
   }
 });
 

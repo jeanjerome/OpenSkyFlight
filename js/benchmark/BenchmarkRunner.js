@@ -1,4 +1,4 @@
-import CameraPath from './CameraPath.js';
+import { createDefaultFlightPlan } from '../flightplan/DefaultFlightPlan.js';
 import MetricsCollector from './MetricsCollector.js';
 import BenchmarkComparator from './BenchmarkComparator.js';
 import Logger from '../utils/Logger.js';
@@ -40,18 +40,18 @@ export default class BenchmarkRunner {
     return Math.max(0, WARMUP_DURATION - this.warmupElapsed);
   }
 
-  start(fpsController, camera, getGroundElevation, gpuTimer) {
+  start(fpsController, camera, getGroundElevation, gpuTimer, flightPlan) {
     if (this.running) return;
     this.running = true;
     this.warmup = true;
     this.warmupElapsed = 0;
-    this.cameraPath = new CameraPath(camera);
+    this.cameraPath = flightPlan || createDefaultFlightPlan(camera);
     this.metrics = null;
     this.getGroundElevation = getGroundElevation;
     this.gpuTimer = gpuTimer || null;
     this._stopped = false;
     fpsController.enabled = false;
-    Logger.info('Benchmark', `Warmup ${WARMUP_DURATION}s — then ${this.cameraPath.totalDuration}s benchmark`);
+    Logger.info('Benchmark', `Warmup ${WARMUP_DURATION}s — then ${this.cameraPath.totalDuration.toFixed(0)}s benchmark`);
   }
 
   stop(fpsController, renderer) {
