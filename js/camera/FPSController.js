@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { CONFIG } from '../utils/config.js';
 import Logger from '../utils/Logger.js';
 
@@ -5,10 +6,12 @@ export default class FPSController {
   constructor(camera, domElement) {
     this.camera = camera;
     this.domElement = domElement;
+    this.position = new THREE.Vector3().copy(camera.position);
     this.yaw = 0;
     this.pitch = -0.3;
     this.roll = 0;
     this.yawRate = 0;
+    this.pitchRate = 0;
     this.keys = {};
     this.locked = false;
     this.enabled = true;
@@ -41,6 +44,7 @@ export default class FPSController {
   _onMouseMove(e) {
     if (!this.locked) return;
     this.yawRate = -e.movementX * CONFIG.mouseSensitivity;
+    this.pitchRate = -e.movementY * CONFIG.mouseSensitivity;
     this.yaw -= e.movementX * CONFIG.mouseSensitivity;
     this.pitch -= e.movementY * CONFIG.mouseSensitivity;
     this.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.pitch));
@@ -81,24 +85,20 @@ export default class FPSController {
     const len = Math.sqrt(mx * mx + my * my + mz * mz);
     if (len > 0) { mx /= len; my /= len; mz /= len; }
 
-    this.camera.position.x += mx * speed;
-    this.camera.position.y += my * speed;
-    this.camera.position.z += mz * speed;
+    this.position.x += mx * speed;
+    this.position.y += my * speed;
+    this.position.z += mz * speed;
 
     // Roll (bank) en virage
     const targetRoll = Math.max(-0.5, Math.min(0.5, this.yawRate * 25));
     this.roll += (targetRoll - this.roll) * 5 * dt;
     this.yawRate *= Math.max(0, 1 - 8 * dt);
-
-    this.camera.rotation.order = 'YXZ';
-    this.camera.rotation.y = this.yaw;
-    this.camera.rotation.x = this.pitch;
-    this.camera.rotation.z = this.roll;
+    this.pitchRate *= Math.max(0, 1 - 8 * dt);
 
     const now = performance.now();
     if (now - this._lastLogTime > 2000) {
       this._lastLogTime = now;
-      const p = this.camera.position;
+      const p = this.position;
       Logger.debug('Camera', `pos=(${p.x.toFixed(0)}, ${p.y.toFixed(0)}, ${p.z.toFixed(0)}) pitch=${this.pitch.toFixed(2)} yaw=${this.yaw.toFixed(2)}`);
     }
   }
