@@ -9,6 +9,7 @@ const CONFIG = {
   redistribution: 1.8,
   seed: 'landscape-3d',
   cameraSpeed: 800,
+  cameraMode: 'chase',
   mouseSensitivity: 0.002,
   maxPixelRatio: 2,
   maxChunkRequestsPerFrame: 4,
