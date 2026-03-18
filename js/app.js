@@ -12,6 +12,7 @@ import CloudLayer from './atmosphere/CloudLayer.js';
 import BenchmarkRunner from './benchmark/BenchmarkRunner.js';
 import BenchmarkComparator from './benchmark/BenchmarkComparator.js';
 import GPUTimer from './benchmark/GPUTimer.js';
+import AircraftManager from './aircraft/AircraftManager.js';
 
 async function initApp() {
   // --- Renderer: WebGPURenderer with automatic WebGL2 fallback ---
@@ -85,6 +86,12 @@ async function initApp() {
   // --- FPS Controller ---
   const fpsController = new FPSController(camera, renderer.domElement);
 
+  // --- Aircraft (chase cam) ---
+  const aircraftManager = new AircraftManager(scene);
+  aircraftManager.load('assets/models/rafale/Rafale.gltf').catch((err) => {
+    Logger.warn('App', 'Failed to load Rafale model: ' + err.message);
+  });
+
   // --- Benchmark ---
   const benchmarkRunner = new BenchmarkRunner();
 
@@ -108,7 +115,7 @@ async function initApp() {
   function regenerate() {
     if (CONFIG.terrainMode === 'realworld') {
       geoTerrainManager.reinit();
-      camera.position.set(0, 6000, 0);
+      fpsController.position.set(0, 6000, 0);
     } else {
       chunkManager.reinit();
     }
@@ -146,10 +153,10 @@ async function initApp() {
       waterPlane.visible = CONFIG.terrainMode === 'procedural';
       if (CONFIG.terrainMode === 'realworld') {
         geoTerrainManager.init(CONFIG.lat, CONFIG.lon);
-        camera.position.set(0, 6000, 0);
+        fpsController.position.set(0, 6000, 0);
       } else {
         geoTerrainManager.dispose();
-        camera.position.set(0, 640, 0);
+        fpsController.position.set(0, 640, 0);
       }
     }
   });
@@ -254,6 +261,8 @@ async function initApp() {
     prevTime = now;
 
     fpsController.update(dt);
+    // Position aircraft and chase cam from FPS controller state
+    aircraftManager.update(fpsController.position, fpsController.yaw, fpsController.pitch, fpsController.roll, fpsController.yawRate, fpsController.pitchRate, camera, dt);
     // Advance camera path BEFORE render (so camera is positioned for this frame)
     benchmarkRunner.tickPath(dt, camera, fpsController, renderer);
     cloudLayer.update(dt, camera.position, camera);
