@@ -1,8 +1,8 @@
 # OpenSkyFlight
 
-A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Earth using satellite imagery and elevation data from OpenStreetMap and AWS Terrarium — all rendered in real time with Three.js. No install, no build step.
+A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Earth using satellite imagery and elevation data from OpenStreetMap and AWS Terrarium — all rendered in real time with Three.js WebGPU. No install, no build step.
 
-![WebGL](https://img.shields.io/badge/WebGL-Three.js-green)
+![WebGPU](https://img.shields.io/badge/WebGPU-Three.js-green)
 
 <!-- Hero screenshot: full-screen flight over mountains with HUD, satellite textures, and minimap visible -->
 ![Flying over the Alps with satellite imagery and HUD instruments](docs/screenshots/hero.png)
@@ -14,10 +14,12 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 | Procedural terrain | Real-world terrain |
 |---|---|
 | ![Procedural Simplex noise terrain](docs/screenshots/procedural.png) | ![Real-world elevation with Earth curvature](docs/screenshots/realworld.png) |
-- **Real-world elevation** — decoded from [AWS Terrarium](https://registry.opendata.aws/terrain-tiles/) PNG tiles with spherical Earth curvature
+- **Real-world elevation** — decoded from [AWS Terrarium](https://registry.opendata.aws/terrain-tiles/) PNG tiles on the GPU via TSL `positionNode`, with spherical Earth curvature
 - **Satellite & map textures** — ESRI World Imagery or OpenStreetMap raster overlay, switchable at runtime
 - **Hi-Res mode (zoom 18)** — press `H` to toggle upsampled elevation with zoom-18 satellite textures for sharper close-up detail
 - **Adaptive LOD** — quadtree subdivision based on camera altitude, covering up to the geometric horizon
+- **Rafale aircraft** — 3D GLTF model with animated banking and pitch, chase camera (30 m behind)
+- **Cockpit / chase toggle** — press `V` to switch between first-person cockpit (roll applied to horizon) and third-person chase view
 - **Flight simulator controls** — 6-DOF camera with pointer lock, banking, pitch/yaw
 - **Aircraft-style HUD** — compass, artificial horizon, altimeter (MSL + AGL), speed indicator
 - **MFD cockpit panel** — auto-hiding control panel with military flight display aesthetics
@@ -30,6 +32,9 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 - **Dynamic chunk loading** — spiral-ordered around camera, with frustum culling
 - **Web Worker** — terrain geometry built off the main thread (zero-copy ArrayBuffer transfer)
 - **Local tile cache** — transparent caching proxy, pre-download tiles for offline flight
+- **Atmospheric sky, clouds & fog** — procedural sky with configurable sun position, animated cloud layer, and exponential distance fog
+- **Dynamic resolution scaling** — adaptive pixel ratio based on frame time to maintain smooth performance
+- **Built-in benchmark** — automated camera path with FPS/GPU timing, metrics recording, and baseline comparison
 - **Centralized logging** — in-app log panel with level control (DEBUG/INFO/WARN/ERROR)
 
 ## Quick Start
@@ -52,6 +57,10 @@ The server acts as a **caching proxy** for map tiles — every tile downloaded f
 | Mouse | Look around (yaw / pitch) |
 | `W` / `S` or `↑` / `↓` | Move forward / backward |
 | `A` / `D` or `←` / `→` | Strafe left / right |
+| `V` | Toggle cockpit / chase view |
+| `I` | Toggle info & help overlay |
+| `B` | Start / stop benchmark |
+| `Shift+B` | Store last benchmark as baseline |
 | `H` | Toggle Hi-Res mode (zoom 18) |
 | `X` | Toggle debug tile overlay |
 | `Esc` | Release pointer lock |
@@ -86,7 +95,7 @@ Default location: **Mont Blanc** (45.8326°N, 6.8652°E).
 
 ## How It Works
 
-1. **Elevation** — Terrarium PNG tiles (AWS S3) are decoded into heightmaps (`R×256 + G + B/256 − 32768` meters)
+1. **Elevation** — Terrarium PNG tiles (AWS S3) are decoded into heightmaps on the GPU via a TSL `positionNode` shader (`R×256 + G + B/256 − 32768` meters)
 2. **Mesh generation** — A Web Worker builds terrain geometry from heightmaps, transferred back via zero-copy ArrayBuffers
 3. **LOD system** — `buildLodRings()` uses recursive quadtree subdivision: tiles near the camera are split into 4 children at higher zoom, distant tiles stay coarse
 4. **Earth curvature** — Vertex positions are projected onto a sphere (`_projectOnSphere`), so distant terrain curves away naturally
@@ -121,6 +130,14 @@ cache/
 │   ├── atmosphere/
 │   │   ├── AtmosphericSky.js      Procedural sky, sun positioning & fog
 │   │   └── CloudLayer.js          Animated cloud layer
+│   ├── aircraft/
+│   │   └── AircraftManager.js     Rafale model, chase/cockpit camera modes
+│   ├── benchmark/
+│   │   ├── BenchmarkRunner.js     Automated benchmark with camera path
+│   │   ├── BenchmarkComparator.js Baseline comparison & reporting
+│   │   ├── CameraPath.js          Predefined flight path for benchmarks
+│   │   ├── GPUTimer.js            GPU-side frame timing
+│   │   └── MetricsCollector.js    Per-frame metrics recording
 │   ├── camera/
 │   │   └── FPSController.js       Flight camera (pointer lock, 6-DOF, banking)
 │   ├── terrain/
@@ -151,7 +168,7 @@ cache/
 
 ## Technologies
 
-- [Three.js](https://threejs.org/) v0.183 — 3D rendering (loaded via CDN, no install)
+- [Three.js](https://threejs.org/) v0.183 (WebGPU build) — 3D rendering with TSL shaders (loaded via CDN, no install)
 - [geo-three](https://github.com/tentone/geo-three) — geographic tile management and Mercator projection
 - Web Workers — off-thread terrain generation
 - Canvas 2D — HUD instrument overlay, hi-res badge, and minimap
