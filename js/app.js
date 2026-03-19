@@ -13,6 +13,7 @@ import BenchmarkRunner from './benchmark/BenchmarkRunner.js';
 import BenchmarkComparator from './benchmark/BenchmarkComparator.js';
 import GPUTimer from './benchmark/GPUTimer.js';
 import AircraftManager from './aircraft/AircraftManager.js';
+import ChaseCameraController from './camera/ChaseCameraController.js';
 import FlightPlanRecorder from './flightplan/FlightPlanRecorder.js';
 import Stats from 'stats.js';
 
@@ -93,6 +94,8 @@ async function initApp() {
   aircraftManager.load('assets/models/rafale/Rafale.gltf').catch((err) => {
     Logger.warn('App', 'Failed to load Rafale model: ' + err.message);
   });
+
+  const chaseCameraController = new ChaseCameraController();
 
   // --- Benchmark ---
   const benchmarkRunner = new BenchmarkRunner();
@@ -193,6 +196,7 @@ async function initApp() {
     if (e.code === 'KeyV') {
       const next = CONFIG.cameraMode === 'chase' ? 'cockpit' : 'chase';
       update('cameraMode', next);
+      chaseCameraController.reset();
       Logger.info('App', `Camera mode: ${next}`);
     }
     if (e.code === 'KeyI') {
@@ -351,7 +355,12 @@ async function initApp() {
 
     fpsController.update(dt);
 
-    // Autopilot: follow flight plan spline
+    // Advance benchmark path early so its state is available below
+    benchmarkRunner.tickPath(dt, fpsController, renderer);
+
+    // Build aircraftState from autopilot, benchmark, or manual flight
+    let aircraftState = null;
+
     if (flightPlanRecorder.autopilotActive && flightPlanRecorder.getPlan()) {
       const plan = flightPlanRecorder.getPlan();
       const getGround = (x, z) => {
@@ -362,24 +371,60 @@ async function initApp() {
         const hits = groundRaycaster.intersectObjects(chunkManager.getMeshes(), false);
         return hits.length > 0 ? hits[0].point.y : 0;
       };
-      const ok = plan.update(dt, camera, getGround);
+      const ok = plan.update(dt, getGround);
       if (!ok) {
-        // Plan finished → disengage autopilot
         flightPlanRecorder.autopilotActive = false;
         fpsController.enabled = true;
-        fpsController.position.copy(camera.position);
-        fpsController.yaw = camera.rotation.y;
-        fpsController.pitch = camera.rotation.x;
+        fpsController.position.copy(plan.position);
+        fpsController.yaw = plan.yaw;
+        fpsController.pitch = plan.pitch;
         Logger.info('App', 'Autopilot: flight plan completed');
+      } else {
+        aircraftState = {
+          position: plan.position,
+          yaw: plan.yaw,
+          pitch: plan.pitch,
+          roll: plan.roll,
+          yawRate: plan.yawRate,
+          pitchRate: plan.pitchRate,
+        };
       }
-      aircraftManager.update(camera.position, plan.yaw, plan.pitch, plan.roll, plan.yawRate, plan.pitchRate, camera, dt);
+    } else if (benchmarkRunner.isRunning() && !benchmarkRunner.isWarmup() && benchmarkRunner.cameraPath) {
+      const path = benchmarkRunner.cameraPath;
+      aircraftState = {
+        position: path.position,
+        yaw: path.yaw,
+        pitch: path.pitch,
+        roll: path.roll,
+        yawRate: path.yawRate,
+        pitchRate: path.pitchRate,
+      };
     } else if (!benchmarkRunner.isRunning()) {
-      // Normal manual flight — update aircraft from FPS controller
-      aircraftManager.update(fpsController.position, fpsController.yaw, fpsController.pitch, fpsController.roll, fpsController.yawRate, fpsController.pitchRate, camera, dt);
+      aircraftState = {
+        position: fpsController.position,
+        yaw: fpsController.yaw,
+        pitch: fpsController.pitch,
+        roll: fpsController.roll,
+        yawRate: fpsController.yawRate,
+        pitchRate: fpsController.pitchRate,
+      };
     }
 
-    // Advance camera path BEFORE render (so camera is positioned for this frame)
-    benchmarkRunner.tickPath(dt, camera, fpsController, renderer);
+    if (aircraftState) {
+      aircraftManager.update(aircraftState, dt);
+
+      if (CONFIG.cameraMode === 'cockpit') {
+        aircraftManager.setVisible(false);
+        camera.position.copy(aircraftState.position);
+        camera.rotation.order = 'YXZ';
+        camera.rotation.set(aircraftState.pitch, aircraftState.yaw, aircraftState.roll);
+        chaseCameraController.reset();
+      } else {
+        aircraftManager.setVisible(true);
+        chaseCameraController.update(aircraftState, camera, dt);
+      }
+    }
+
     cloudLayer.update(dt, camera.position, camera);
 
     // Get subsystem timer (only active during benchmark recording)
@@ -432,7 +477,7 @@ async function initApp() {
 
     // Update HUD after render
     if (timer) timer.begin('hud');
-    hud.update(camera, groundElevation, benchmarkRunner, dt, flightPlanRecorder);
+    hud.update(camera, groundElevation, benchmarkRunner, dt, flightPlanRecorder, aircraftState);
     if (timer) timer.end('hud');
 
     // Update minimap

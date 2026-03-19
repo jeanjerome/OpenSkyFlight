@@ -88,7 +88,7 @@ export default class BenchmarkRunner {
    * Advance camera path and handle warmup timing.
    * Call BEFORE renderer.render() so the camera is positioned for this frame.
    */
-  tickPath(dt, camera, fpsController, renderer) {
+  tickPath(dt, fpsController, renderer) {
     if (!this.running) return;
 
     if (this.warmup) {
@@ -101,7 +101,7 @@ export default class BenchmarkRunner {
       return;
     }
 
-    const ok = this.cameraPath.update(dt, camera, this.getGroundElevation);
+    const ok = this.cameraPath.update(dt, this.getGroundElevation);
     if (!ok) {
       this.stop(fpsController, renderer);
     }
