@@ -1,5 +1,7 @@
 import { CONFIG, update } from '../utils/config.js';
 import Logger from '../utils/Logger.js';
+import { showNotification } from './Notification.js';
+import { MACH_1_MS } from '../constants/physics.js';
 
 export default class ControlPanel {
   constructor(onRegenerate) {
@@ -14,16 +16,14 @@ export default class ControlPanel {
     this._setupSlider('maxHeight', 'maxHeight', 100, 2400, 40);
     this._setupSlider('octaves', 'octaves', 1, 8, 1);
     this._setupSpeedSlider();
-    this._setupHudToggle();
-    this._setupMinimapToggle();
-    this._setupLogControls();
     this._setupAtmosphere();
 
-    const wireframeCb = document.getElementById('wireframe');
-    wireframeCb.checked = CONFIG.wireframe;
-    wireframeCb.addEventListener('change', () => {
-      update('wireframe', wireframeCb.checked);
-    });
+    this._bindCheckbox('showHud', 'showHud');
+    this._bindCheckbox('showMinimap', 'showMinimap');
+    this._bindCheckbox('showLogs', 'showLogs');
+    this._bindCheckbox('wireframe', 'wireframe');
+
+    this._setupLogLevel();
 
     const seedInput = document.getElementById('seed');
     seedInput.value = CONFIG.seed;
@@ -31,6 +31,22 @@ export default class ControlPanel {
     regenBtn.addEventListener('click', () => {
       update('seed', seedInput.value || 'landscape-3d');
       if (this.onRegenerate) this.onRegenerate();
+    });
+  }
+
+  _bindCheckbox(elementId, configKey) {
+    const cb = document.getElementById(elementId);
+    cb.checked = CONFIG[configKey];
+    cb.addEventListener('change', () => {
+      update(configKey, cb.checked);
+    });
+  }
+
+  _setupLogLevel() {
+    const logLevelSelect = document.getElementById('logLevel');
+    logLevelSelect.value = CONFIG.logLevel;
+    logLevelSelect.addEventListener('change', () => {
+      update('logLevel', logLevelSelect.value);
     });
   }
 
@@ -53,36 +69,6 @@ export default class ControlPanel {
     trigger.addEventListener('mouseleave', scheduleHide);
     this.panel.addEventListener('mouseenter', showPanel);
     this.panel.addEventListener('mouseleave', scheduleHide);
-  }
-
-  _setupHudToggle() {
-    const hudCb = document.getElementById('showHud');
-    hudCb.checked = CONFIG.showHud;
-    hudCb.addEventListener('change', () => {
-      update('showHud', hudCb.checked);
-    });
-  }
-
-  _setupMinimapToggle() {
-    const cb = document.getElementById('showMinimap');
-    cb.checked = CONFIG.showMinimap;
-    cb.addEventListener('change', () => {
-      update('showMinimap', cb.checked);
-    });
-  }
-
-  _setupLogControls() {
-    const logsCb = document.getElementById('showLogs');
-    logsCb.checked = CONFIG.showLogs;
-    logsCb.addEventListener('change', () => {
-      update('showLogs', logsCb.checked);
-    });
-
-    const logLevelSelect = document.getElementById('logLevel');
-    logLevelSelect.value = CONFIG.logLevel;
-    logLevelSelect.addEventListener('change', () => {
-      update('logLevel', logLevelSelect.value);
-    });
   }
 
   _setupTerrainMode() {
@@ -116,11 +102,7 @@ export default class ControlPanel {
     lonInput.value = CONFIG.lon;
 
     // --- Texture toggle ---
-    const osmCb = document.getElementById('useOsmTexture');
-    osmCb.checked = CONFIG.useOsmTexture;
-    osmCb.addEventListener('change', () => {
-      update('useOsmTexture', osmCb.checked);
-    });
+    this._bindCheckbox('useOsmTexture', 'useOsmTexture');
 
     // --- Texture source ---
     const texSrcSelect = document.getElementById('textureSource');
@@ -138,18 +120,18 @@ export default class ControlPanel {
       if (!query) return;
       try {
         const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
         );
         const data = await res.json();
         if (data.length > 0) {
           latInput.value = parseFloat(data[0].lat).toFixed(4);
           lonInput.value = parseFloat(data[0].lon).toFixed(4);
         } else {
-          alert('Location not found');
+          showNotification('Location not found', 'warn');
         }
       } catch (err) {
         Logger.warn('ControlPanel', `Nominatim search failed: ${err.message}`);
-        alert('Search error');
+        showNotification('Search error', 'error');
       }
     };
 
@@ -172,15 +154,15 @@ export default class ControlPanel {
     const display = document.getElementById('cameraSpeed-val');
     const MIN_LOG = Math.log(1);
     const MAX_LOG = Math.log(4000);
-    const MACH1 = 343;
-
-    slider.min = 0; slider.max = 1000; slider.step = 1;
+    slider.min = 0;
+    slider.max = 1000;
+    slider.step = 1;
 
     const toSpeed = (pos) => Math.exp(MIN_LOG + (pos / 1000) * (MAX_LOG - MIN_LOG));
     const toPos = (speed) => Math.round(((Math.log(speed) - MIN_LOG) / (MAX_LOG - MIN_LOG)) * 1000);
     const formatSpeed = (ms) => {
-      if (ms < MACH1) return Math.round(ms * 3.6) + ' km/h';
-      return 'Mach ' + (ms / MACH1).toFixed(1);
+      if (ms < MACH_1_MS) return Math.round(ms * 3.6) + ' km/h';
+      return 'Mach ' + (ms / MACH_1_MS).toFixed(1);
     };
 
     slider.value = toPos(CONFIG.cameraSpeed);
@@ -199,17 +181,8 @@ export default class ControlPanel {
     this._setupSlider('skyTurbidity', 'skyTurbidity', 1, 10, 0.5);
     this._setupSlider('cloudAltitude', 'cloudAltitude', 500, 12000, 100);
 
-    const cloudsCb = document.getElementById('showClouds');
-    cloudsCb.checked = CONFIG.showClouds;
-    cloudsCb.addEventListener('change', () => {
-      update('showClouds', cloudsCb.checked);
-    });
-
-    const fogCb = document.getElementById('fogEnabled');
-    fogCb.checked = CONFIG.fogEnabled;
-    fogCb.addEventListener('change', () => {
-      update('fogEnabled', fogCb.checked);
-    });
+    this._bindCheckbox('showClouds', 'showClouds');
+    this._bindCheckbox('fogEnabled', 'fogEnabled');
   }
 
   _setupSlider(id, configKey, min, max, step) {

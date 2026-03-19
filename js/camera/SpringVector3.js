@@ -15,8 +15,7 @@ export default class SpringVector3 {
     if (damping === 0) damping = 2 * Math.sqrt(stiffness);
 
     this._delta.subVectors(target, this.value);
-    this._accel.copy(this._delta).multiplyScalar(stiffness)
-      .addScaledVector(this.velocity, -damping);
+    this._accel.copy(this._delta).multiplyScalar(stiffness).addScaledVector(this.velocity, -damping);
 
     this.velocity.addScaledVector(this._accel, dt);
     this.value.addScaledVector(this.velocity, dt);

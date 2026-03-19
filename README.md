@@ -24,6 +24,7 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 - **Aircraft-style HUD** — compass, artificial horizon, altimeter (MSL + AGL), speed indicator
 - **MFD cockpit panel** — auto-hiding control panel with military flight display aesthetics
 - **OSM minimap** — real-time 2D map overlay with airplane marker and independent zoom
+- **Flight plan system** — record waypoints, save/load flight plans, and engage autopilot to follow a path automatically
 
 <!-- Screenshots: HUD close-up | MFD control panel | Minimap -->
 | HUD instruments | MFD control panel | OSM minimap |
@@ -35,6 +36,7 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 - **Atmospheric sky, clouds & fog** — procedural sky with configurable sun position, animated cloud layer, and exponential distance fog
 - **Dynamic resolution scaling** — adaptive pixel ratio based on frame time to maintain smooth performance
 - **Built-in benchmark** — automated camera path with FPS/GPU timing, metrics recording, and baseline comparison
+- **Toast notifications** — non-blocking user feedback for search results and errors
 - **Centralized logging** — in-app log panel with level control (DEBUG/INFO/WARN/ERROR)
 
 <!-- Screenshot: chase camera view following the Rafale -->
@@ -44,7 +46,7 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 
 ## Quick Start
 
-No dependencies to install. Start the dev server:
+No dependencies needed to run the app. Start the dev server:
 
 ```bash
 node scripts/serve.js
@@ -53,6 +55,24 @@ node scripts/serve.js
 Then open [http://localhost:3000](http://localhost:3000) in your browser.
 
 The server acts as a **caching proxy** for map tiles — every tile downloaded from the internet is automatically saved to `cache/` on disk, so it's never fetched twice.
+
+### Development tools (optional)
+
+Install dev dependencies for linting and formatting:
+
+```bash
+npm install
+```
+
+Available scripts:
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Start the dev server |
+| `npm run lint` | Run ESLint |
+| `npm run lint:fix` | Run ESLint with auto-fix |
+| `npm run format` | Format all files with Prettier |
+| `npm run format:check` | Check formatting without modifying files |
 
 ### Controls
 
@@ -64,17 +84,23 @@ The server acts as a **caching proxy** for map tiles — every tile downloaded f
 | `A` / `D` or `←` / `→` | Strafe left / right |
 | `V` | Toggle cockpit / chase view |
 | `I` | Toggle info & help overlay |
-| `B` | Start / stop benchmark |
-| `Shift+B` | Store last benchmark as baseline |
 | `H` | Toggle Hi-Res mode (zoom 18) |
 | `X` | Toggle debug tile overlay |
-| `Esc` | Release pointer lock |
+| `B` | Start / stop benchmark |
+| `Shift+B` | Store last benchmark as baseline |
+| `N` | Start / stop flight plan recording |
+| `Shift+N` | Clear current flight plan |
+| `P` | Add waypoint (while recording) |
+| `L` | Open / close flight plan menu |
+| `G` | Engage / disengage autopilot |
+| `1`–`9` | Select flight plan from menu |
+| `Esc` | Release pointer lock / close menu |
 
 Use the right-side control panel to switch between **Procedural** and **Real-World** modes, adjust terrain parameters, and toggle wireframe or textures.
 
 ## Building geo-three (dev only)
 
-The terrain engine relies on [geo-three](https://github.com/tentone/geo-three), a Three.js geographic tile library. The upstream project no longer appears to be actively maintained, so we vendor its source code in `vendor/geo-three/source/` in order to apply our own patches and extensions (Three.js r152+ compatibility, custom providers, etc.).
+The terrain engine relies on [geo-three](https://github.com/tentone/geo-three), a Three.js geographic tile library. The upstream project no longer appears to be actively maintained, so we vendor its source code in `vendor/geo-three/source/` in order to apply our own patches and extensions (Three.js r152+ compatibility, custom providers, deferred WebGPU resource disposal, etc.).
 
 If you modify the sources, rebuild the bundle:
 
@@ -130,13 +156,22 @@ cache/
 
 ```
 ├── index.html                     Main HTML page (MFD-styled UI)
+├── css/
+│   └── main.css                   External stylesheet with CSS custom properties
 ├── js/
-│   ├── app.js                     Scene setup, render loop & keyboard shortcuts
+│   ├── app.js                     Thin orchestrator: init, wiring & render loop
+│   ├── constants/
+│   │   ├── aircraft.js            Aircraft model dimensions & visual factors
+│   │   ├── camera.js              FOV, altitudes, chase/FPS controller params
+│   │   ├── hud.js                 HUD colors, instrument dimensions, compass data
+│   │   ├── physics.js             Speed of sound, max delta time
+│   │   ├── rendering.js           Clear color, clip planes, adaptive quality thresholds
+│   │   └── terrain.js             Tile sizes, zoom limits, minimap & benchmark params
 │   ├── atmosphere/
 │   │   ├── AtmosphericSky.js      Procedural sky, sun positioning & fog
 │   │   └── CloudLayer.js          Animated cloud layer
 │   ├── aircraft/
-│   │   └── AircraftManager.js     Rafale model, chase/cockpit camera modes
+│   │   └── AircraftManager.js     Rafale model loading & animation
 │   ├── benchmark/
 │   │   ├── BenchmarkRunner.js     Automated benchmark with camera path
 │   │   ├── BenchmarkComparator.js Baseline comparison & reporting
@@ -144,10 +179,21 @@ cache/
 │   │   ├── GPUTimer.js            GPU-side frame timing
 │   │   └── MetricsCollector.js    Per-frame metrics recording
 │   ├── camera/
-│   │   └── FPSController.js       Flight camera (pointer lock, 6-DOF, banking)
+│   │   ├── FPSController.js       Flight camera (pointer lock, 6-DOF, banking)
+│   │   └── ChaseCameraController.js Spring-based third-person camera
+│   ├── flightplan/
+│   │   └── FlightPlanRecorder.js  Waypoint recording, plan loading & autopilot
+│   ├── input/
+│   │   └── InputManager.js        Centralized keyboard dispatch
+│   ├── rendering/
+│   │   └── AdaptiveQualityManager.js Dynamic resolution scaling
+│   ├── scene/
+│   │   ├── SceneSetup.js          Renderer, scene, camera & lights factory
+│   │   └── WaterPlane.js          Animated water plane (procedural mode)
 │   ├── terrain/
 │   │   ├── ChunkManager.js        Chunk lifecycle, LOD dispatch
 │   │   ├── GeoTerrainManager.js   Real-world terrain via geo-three, hi-res toggle
+│   │   ├── GroundElevation.js     Ground elevation utility (both terrain modes)
 │   │   ├── TerrainChunk.js        Geometry & mesh for one chunk
 │   │   ├── NoiseGenerator.js      Simplex noise (fBm)
 │   │   └── terrainWorker.js       Web Worker for off-thread generation
@@ -156,18 +202,27 @@ cache/
 │   │   ├── ElevationProvider.js   Terrarium tile fetch + decode
 │   │   ├── TerrariumProvider.js   geo-three height provider (zoom-15 upsampling to 18)
 │   │   ├── LocalTileProvider.js   geo-three texture provider (via proxy)
-│   │   ├── TextureProvider.js     OSM/satellite tile fetch
+│   │   ├── TextureProvider.js     OSM/satellite tile fetch with deferred disposal
 │   │   └── fetchSemaphore.js      Browser-side concurrency limiter
 │   ├── ui/
-│   │   ├── HUD.js                 Flight instrument overlay + hi-res badge
+│   │   ├── HUD.js                 HUD facade composing sub-modules
+│   │   ├── hud/
+│   │   │   ├── HUDRenderer.js     Canvas rendering of instruments & badges
+│   │   │   ├── FlightPlanMenu.js  Flight plan selection overlay
+│   │   │   └── SpeedTracker.js    Smoothed ground speed computation
 │   │   ├── Minimap.js             OSM minimap with airplane marker
-│   │   └── ControlPanel.js        MFD settings panel
+│   │   ├── ControlPanel.js        MFD settings panel
+│   │   └── Notification.js        Toast notification system
 │   └── utils/
-│       ├── config.js              Reactive configuration system
+│       ├── config.js              Reactive config with validation & JSDoc
 │       └── Logger.js              Centralized logging with UI panel
 ├── scripts/
 │   ├── serve.js                   Dev server with caching tile proxy
 │   └── prefetch-tiles.js          Bulk tile downloader for offline use
+├── package.json                   Dev dependencies (ESLint, Prettier)
+├── eslint.config.js               ESLint 9 flat config (ES modules)
+├── .prettierrc                    Prettier configuration
+├── .editorconfig                  Editor settings (indent, encoding, EOL)
 └── cache/                         Local tile cache (git-ignored)
 ```
 
@@ -183,6 +238,7 @@ cache/
 - [ESRI World Imagery](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9) — satellite textures (up to zoom 18+)
 - Node.js — dev server with transparent caching tile proxy and offline prefetch script
 - ES modules + import maps — no bundler needed
+- [ESLint](https://eslint.org/) 9 + [Prettier](https://prettier.io/) — code quality and formatting (dev only)
 
 ## Browser Support
 

@@ -18,7 +18,7 @@ export default class BenchmarkComparator {
     try {
       localStorage.setItem(BASELINE_KEY, JSON.stringify(baseline));
       Logger.info('Comparator', `Baseline stored (${baseline.summary.fps.avg} FPS avg, ${baseline.summary.fps.p1} P1)`);
-    } catch (e) {
+    } catch {
       Logger.warn('Comparator', 'Failed to store baseline in localStorage');
     }
   }
@@ -48,7 +48,7 @@ export default class BenchmarkComparator {
 
     const delta = (newVal, oldVal) => {
       const diff = newVal - oldVal;
-      const pct = oldVal !== 0 ? ((diff / oldVal) * 100) : 0;
+      const pct = oldVal !== 0 ? (diff / oldVal) * 100 : 0;
       return { old: oldVal, new: newVal, diff: Math.round(diff * 10) / 10, pct: Math.round(pct * 10) / 10 };
     };
 

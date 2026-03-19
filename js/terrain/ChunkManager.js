@@ -1,7 +1,14 @@
 import * as THREE from 'three';
 import TerrainChunk from './TerrainChunk.js';
 import { CONFIG, onChange } from '../utils/config.js';
-import { latLonToTile, tileWorldSize, horizonTiles, nearZoomForAltitude, buildLodRings, EARTH_RADIUS } from '../geo/TileMath.js';
+import {
+  latLonToTile,
+  tileWorldSize,
+  horizonTiles,
+  nearZoomForAltitude,
+  buildLodRings,
+  EARTH_RADIUS,
+} from '../geo/TileMath.js';
 import ElevationProvider from '../geo/ElevationProvider.js';
 import TextureProvider from '../geo/TextureProvider.js';
 import Logger from '../utils/Logger.js';
@@ -67,7 +74,7 @@ export default class ChunkManager {
   }
 
   reinit() {
-    for (const [key, chunk] of this.chunks) {
+    for (const [, chunk] of this.chunks) {
       this.scene.remove(chunk.mesh);
       chunk.dispose();
     }
@@ -91,7 +98,7 @@ export default class ChunkManager {
   }
 
   _onChunkReady(data) {
-    const { cx, cz, positions, colors, indices, uvs, res, zoom } = data;
+    const { cx, cz, positions, colors, indices, uvs, zoom } = data;
 
     // LOD path: zoom is defined → key uses "zoom/tx/ty" format
     if (zoom !== undefined) {
@@ -122,13 +129,7 @@ export default class ChunkManager {
       const posArr = new Float32Array(positions);
       this._projectOnSphere(posArr, worldX, worldZ);
 
-      chunk.buildFromBuffers(
-        posArr,
-        new Float32Array(colors),
-        typedIndices,
-        worldSize,
-        typedUvs
-      );
+      chunk.buildFromBuffers(posArr, new Float32Array(colors), typedIndices, worldSize, typedUvs);
 
       // Positions are already in world-space (spherical), no mesh offset needed
       chunk.mesh.position.set(0, 0, 0);
@@ -169,7 +170,7 @@ export default class ChunkManager {
       new Float32Array(colors),
       typedIndices,
       CONFIG.chunkSize,
-      typedUvs
+      typedUvs,
     );
     this.chunks.set(key, chunk);
     this.scene.add(chunk.mesh);
@@ -246,7 +247,7 @@ export default class ChunkManager {
   _toggleTextures(useTexture) {
     // Clear texture cache when source changes so new source tiles are fetched
     this.textureProvider.clearCache();
-    for (const [key, chunk] of this.chunks) {
+    for (const [, chunk] of this.chunks) {
       if (useTexture) {
         chunk.setTexture(null); // clear old texture first
         if (chunk._lodZoom !== undefined) {
@@ -295,7 +296,7 @@ export default class ChunkManager {
       if (dist > 0) {
         const phi = Math.atan2(wz, wx); // direction on flat plane
         const r = R + wy;
-        positions[i]     = r * Math.sin(theta) * Math.cos(phi);
+        positions[i] = r * Math.sin(theta) * Math.cos(phi);
         positions[i + 1] = r * Math.cos(theta) - R;
         positions[i + 2] = r * Math.sin(theta) * Math.sin(phi);
       } else {
@@ -491,16 +492,19 @@ export default class ChunkManager {
       const worldSize = scale * CONFIG.chunkSize;
 
       const hmCopy = new Float32Array(heightmap);
-      this.worker.postMessage({
-        type: 'generate-real',
-        cx: tx,
-        cz: ty,
-        heightmap: hmCopy,
-        chunkSize: worldSize,
-        elevationScale,
-        res: Math.min(CONFIG.chunkResolution, 256),
-        zoom,
-      }, [hmCopy.buffer]);
+      this.worker.postMessage(
+        {
+          type: 'generate-real',
+          cx: tx,
+          cz: ty,
+          heightmap: hmCopy,
+          chunkSize: worldSize,
+          elevationScale,
+          res: Math.min(CONFIG.chunkResolution, 256),
+          zoom,
+        },
+        [hmCopy.buffer],
+      );
     } catch (err) {
       Logger.warn('ChunkManager', `Elevation fetch failed for tile z${zoom}/${tx}/${ty}: ${err.message}`);
       this.pending.delete(key);

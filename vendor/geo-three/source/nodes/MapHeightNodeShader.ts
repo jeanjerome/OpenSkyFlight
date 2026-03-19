@@ -187,7 +187,8 @@ export class MapHeightNodeShader extends MapHeightNode
 		const hTex = this._heightTextureNode.value;
 		if (hTex && hTex !== MapHeightNodeShader.defaultTerrariumTexture)
 		{
-			hTex.dispose();
+			// Defer to let WebGPU command buffer finish
+			setTimeout(() => { hTex.dispose(); }, 0);
 		}
 	}
 }

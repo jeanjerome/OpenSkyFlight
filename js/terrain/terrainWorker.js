@@ -4,8 +4,14 @@
 const F2 = 0.5 * (Math.sqrt(3) - 1);
 const G2 = (3 - Math.sqrt(3)) / 6;
 const grad3 = [
-  [1, 1], [-1, 1], [1, -1], [-1, -1],
-  [1, 0], [-1, 0], [0, 1], [0, -1],
+  [1, 1],
+  [-1, 1],
+  [1, -1],
+  [-1, -1],
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
 ];
 
 function buildPermTable(seed) {
@@ -44,18 +50,35 @@ function simplex2D(x, y, perm, permMod8) {
   const y2 = y0 - 1 + 2 * G2;
   const ii = i & 255;
   const jj = j & 255;
-  let n0 = 0, n1 = 0, n2 = 0;
+  let n0 = 0,
+    n1 = 0,
+    n2 = 0;
   let t0 = 0.5 - x0 * x0 - y0 * y0;
-  if (t0 > 0) { t0 *= t0; const gi = permMod8[ii + perm[jj]]; n0 = t0 * t0 * (grad3[gi][0] * x0 + grad3[gi][1] * y0); }
+  if (t0 > 0) {
+    t0 *= t0;
+    const gi = permMod8[ii + perm[jj]];
+    n0 = t0 * t0 * (grad3[gi][0] * x0 + grad3[gi][1] * y0);
+  }
   let t1 = 0.5 - x1 * x1 - y1 * y1;
-  if (t1 > 0) { t1 *= t1; const gi = permMod8[ii + i1 + perm[jj + j1]]; n1 = t1 * t1 * (grad3[gi][0] * x1 + grad3[gi][1] * y1); }
+  if (t1 > 0) {
+    t1 *= t1;
+    const gi = permMod8[ii + i1 + perm[jj + j1]];
+    n1 = t1 * t1 * (grad3[gi][0] * x1 + grad3[gi][1] * y1);
+  }
   let t2 = 0.5 - x2 * x2 - y2 * y2;
-  if (t2 > 0) { t2 *= t2; const gi = permMod8[ii + 1 + perm[jj + 1]]; n2 = t2 * t2 * (grad3[gi][0] * x2 + grad3[gi][1] * y2); }
+  if (t2 > 0) {
+    t2 *= t2;
+    const gi = permMod8[ii + 1 + perm[jj + 1]];
+    n2 = t2 * t2 * (grad3[gi][0] * x2 + grad3[gi][1] * y2);
+  }
   return 70 * (n0 + n1 + n2);
 }
 
 function fbm(x, y, perm, permMod8, octaves, lacunarity, persistence) {
-  let value = 0, amplitude = 1, frequency = 1, max = 0;
+  let value = 0,
+    amplitude = 1,
+    frequency = 1,
+    max = 0;
   for (let i = 0; i < octaves; i++) {
     value += amplitude * simplex2D(x * frequency, y * frequency, perm, permMod8);
     max += amplitude;
@@ -66,21 +89,22 @@ function fbm(x, y, perm, permMod8, octaves, lacunarity, persistence) {
 }
 
 const COLOR_STOPS = [
-  { t: 0.00, r: 0.10, g: 0.15, b: 0.50 },
-  { t: 0.15, r: 0.15, g: 0.30, b: 0.60 },
-  { t: 0.20, r: 0.76, g: 0.70, b: 0.50 },
-  { t: 0.30, r: 0.30, g: 0.60, b: 0.20 },
-  { t: 0.50, r: 0.20, g: 0.45, b: 0.15 },
-  { t: 0.65, r: 0.45, g: 0.35, b: 0.20 },
-  { t: 0.80, r: 0.55, g: 0.45, b: 0.35 },
-  { t: 0.90, r: 0.70, g: 0.65, b: 0.60 },
-  { t: 1.00, r: 0.95, g: 0.95, b: 0.97 },
+  { t: 0.0, r: 0.1, g: 0.15, b: 0.5 },
+  { t: 0.15, r: 0.15, g: 0.3, b: 0.6 },
+  { t: 0.2, r: 0.76, g: 0.7, b: 0.5 },
+  { t: 0.3, r: 0.3, g: 0.6, b: 0.2 },
+  { t: 0.5, r: 0.2, g: 0.45, b: 0.15 },
+  { t: 0.65, r: 0.45, g: 0.35, b: 0.2 },
+  { t: 0.8, r: 0.55, g: 0.45, b: 0.35 },
+  { t: 0.9, r: 0.7, g: 0.65, b: 0.6 },
+  { t: 1.0, r: 0.95, g: 0.95, b: 0.97 },
 ];
 
 function getColor(h) {
   for (let i = 1; i < COLOR_STOPS.length; i++) {
     if (h <= COLOR_STOPS[i].t) {
-      const a = COLOR_STOPS[i - 1], b = COLOR_STOPS[i];
+      const a = COLOR_STOPS[i - 1],
+        b = COLOR_STOPS[i];
       const t = (h - a.t) / (b.t - a.t);
       return [a.r + t * (b.r - a.r), a.g + t * (b.g - a.g), a.b + t * (b.b - a.b)];
     }
@@ -152,10 +176,12 @@ self.onmessage = function (e) {
     }
     const indices = count <= 65536 ? new Uint16Array(idxArr) : new Uint32Array(idxArr);
 
-    self.postMessage(
-      { type: 'chunk', cx, cz, positions, colors, indices, uvs, res, zoom },
-      [positions.buffer, colors.buffer, indices.buffer, uvs.buffer]
-    );
+    self.postMessage({ type: 'chunk', cx, cz, positions, colors, indices, uvs, res, zoom }, [
+      positions.buffer,
+      colors.buffer,
+      indices.buffer,
+      uvs.buffer,
+    ]);
     return;
   }
 
@@ -201,9 +227,10 @@ self.onmessage = function (e) {
     }
     const indices = count <= 65536 ? new Uint16Array(idxArr) : new Uint32Array(idxArr);
 
-    self.postMessage(
-      { type: 'chunk', cx, cz, positions, colors, indices, res },
-      [positions.buffer, colors.buffer, indices.buffer]
-    );
+    self.postMessage({ type: 'chunk', cx, cz, positions, colors, indices, res }, [
+      positions.buffer,
+      colors.buffer,
+      indices.buffer,
+    ]);
   }
 };

@@ -27,10 +27,7 @@ export default class AtmosphericSky {
 
     // React to config changes
     this._unsub = onChange((key) => {
-      if ([
-        'sunElevation', 'sunAzimuth', 'skyTurbidity', 'skyRayleigh',
-        'fogEnabled', 'fogDensity',
-      ].includes(key)) {
+      if (['sunElevation', 'sunAzimuth', 'skyTurbidity', 'skyRayleigh', 'fogEnabled', 'fogDensity'].includes(key)) {
         this._updateSky();
       }
     });
@@ -58,7 +55,7 @@ export default class AtmosphericSky {
 
     // Modulate light intensity based on sun elevation
     const elevNorm = Math.max(0, sunElevation) / 90; // 0 at horizon, 1 at zenith
-    const sunFactor = Math.sin(elevNorm * Math.PI / 2); // smooth ramp
+    const sunFactor = Math.sin((elevNorm * Math.PI) / 2); // smooth ramp
     this.dirLight.intensity = 0.2 + sunFactor * 1.2;
     this.ambientLight.intensity = 0.1 + sunFactor * 0.3;
 

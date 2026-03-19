@@ -28,7 +28,7 @@ export default class FlightPlanRecorder {
     return {
       name: `flightplan-${now.toISOString().slice(0, 19).replace(/[:.]/g, '-')}`,
       date: now.toISOString(),
-      waypoints: this._waypoints.map(wp => ({
+      waypoints: this._waypoints.map((wp) => ({
         x: Math.round(wp.position.x * 10) / 10,
         y: Math.round(wp.position.y * 10) / 10,
         z: Math.round(wp.position.z * 10) / 10,
@@ -66,15 +66,13 @@ export default class FlightPlanRecorder {
   }
 
   addWaypoint(camera) {
-    const wp = new Waypoint(
-      camera.position.x,
-      camera.position.y,
-      camera.position.z,
-      camera.rotation.y
-    );
+    const wp = new Waypoint(camera.position.x, camera.position.y, camera.position.z, camera.rotation.y);
     this._waypoints.push(wp);
     this._plan = null; // invalidate existing plan
-    Logger.info('FlightPlan', `Waypoint ${this._waypoints.length} added at (${wp.position.x.toFixed(0)}, ${wp.position.y.toFixed(0)}, ${wp.position.z.toFixed(0)})`);
+    Logger.info(
+      'FlightPlan',
+      `Waypoint ${this._waypoints.length} added at (${wp.position.x.toFixed(0)}, ${wp.position.y.toFixed(0)}, ${wp.position.z.toFixed(0)})`,
+    );
   }
 
   buildPlan(camera) {

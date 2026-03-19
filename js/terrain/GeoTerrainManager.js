@@ -1,4 +1,4 @@
-import { MapView, MapHeightNodeShader, LODRaycastPruning, UnitsUtils, DebugProvider } from 'geo-three';
+import { MapView, LODRaycastPruning, UnitsUtils, DebugProvider } from 'geo-three';
 import { CONFIG, onChange } from '../utils/config.js';
 import LocalTileProvider from '../geo/LocalTileProvider.js';
 import TerrariumProvider from '../geo/TerrariumProvider.js';
@@ -47,7 +47,7 @@ export default class GeoTerrainManager {
     const lod = new LODRaycastPruning();
     lod.subdivisionRays = 7;
     lod.thresholdUp = 0.6;
-    lod.thresholdDown = 0.20;
+    lod.thresholdDown = 0.2;
     lod.maxLeafNodes = 300;
     lod.pruneGraceMultiplier = 2.5;
     lod.pruneMinLevel = 4;
@@ -65,7 +65,7 @@ export default class GeoTerrainManager {
     this._effectiveViewDistance = 1e6;
   }
 
-  update(cameraPosition) {
+  update(_cameraPosition) {
     if (!this.mapView) return;
     if (this._wireframeMode) this._enforceWireframe();
   }
@@ -117,7 +117,6 @@ export default class GeoTerrainManager {
     this.init(CONFIG.lat, CONFIG.lon);
   }
 
-
   /**
    * Compute ground elevation at a world position.
    * Converts world coords to lat/lon, finds the tile, and samples the cached heightmap.
@@ -147,10 +146,8 @@ export default class GeoTerrainManager {
     const zoom = Math.min(CONFIG.zoom, 12);
     const n = 1 << zoom;
     const tileX = Math.floor(((longitude + 180) / 360) * n);
-    const latRad = latitude * Math.PI / 180;
-    const tileY = Math.floor(
-      ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n
-    );
+    const latRad = (latitude * Math.PI) / 180;
+    const tileY = Math.floor(((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n);
 
     // Try to get cached heightmap
     const key = `${zoom}/${tileX}/${tileY}`;
@@ -162,8 +159,8 @@ export default class GeoTerrainManager {
     }
 
     // Compute fractional position within the tile (0..1)
-    const fracX = (((longitude + 180) / 360) * n) - tileX;
-    const fracY = (((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n) - tileY;
+    const fracX = ((longitude + 180) / 360) * n - tileX;
+    const fracY = ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n - tileY;
 
     // Sample heightmap with bilinear interpolation
     const px = Math.min(fracX * 255, 254);
@@ -178,10 +175,7 @@ export default class GeoTerrainManager {
     const h01 = heightmap[(iy + 1) * 256 + ix];
     const h11 = heightmap[(iy + 1) * 256 + ix + 1];
 
-    const heightMeters = h00 * (1 - fx) * (1 - fy)
-                       + h10 * fx * (1 - fy)
-                       + h01 * (1 - fx) * fy
-                       + h11 * fx * fy;
+    const heightMeters = h00 * (1 - fx) * (1 - fy) + h10 * fx * (1 - fy) + h01 * (1 - fx) * fy + h11 * fx * fy;
 
     // geo-three HEIGHT_SHADER works in its own coordinate space
     // The height in world units depends on how geo-three scales the terrain

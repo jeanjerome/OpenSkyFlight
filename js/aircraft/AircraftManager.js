@@ -1,13 +1,15 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import Logger from '../utils/Logger.js';
-
-const VISUAL_ROLL_FACTOR = 120;
-const VISUAL_ROLL_MAX = 1.57;
-const VISUAL_PITCH_FACTOR = 15;
-const VISUAL_PITCH_ANGLE_FACTOR = 1.0;
-const VISUAL_PITCH_MAX = 0.4;
-const VISUAL_SMOOTH = 5;
+import {
+  AIRCRAFT_TARGET_LENGTH,
+  VISUAL_ROLL_FACTOR,
+  VISUAL_ROLL_MAX,
+  VISUAL_PITCH_FACTOR,
+  VISUAL_PITCH_ANGLE_FACTOR,
+  VISUAL_PITCH_MAX,
+  VISUAL_SMOOTH,
+} from '../constants/aircraft.js';
 
 export default class AircraftManager {
   constructor(scene) {
@@ -30,8 +32,7 @@ export default class AircraftManager {
     const size = new THREE.Vector3();
     box.getSize(size);
     const maxDim = Math.max(size.x, size.y, size.z);
-    const targetLength = 15;
-    const scaleFactor = targetLength / maxDim;
+    const scaleFactor = AIRCRAFT_TARGET_LENGTH / maxDim;
     this.mesh.scale.setScalar(scaleFactor);
 
     const center = new THREE.Vector3();
@@ -55,25 +56,51 @@ export default class AircraftManager {
     });
 
     const gearParts = new Set([
-      'GearBoxRear', 'GearBoxFront',
-      'DoorsRear1L', 'DoorsRear1R', 'DoorsRear2L', 'DoorsRear2R',
-      'DoorsFront1', 'DoorsFront2R', 'DoorsFront2L',
-      'WheelL', 'WheelR', 'NoseWheelL', 'NoseWheelR',
-      'UpperStrutL', 'UpperStrutR', 'MainStrutL', 'MainStrutR',
-      'SideStrutL', 'SideStrutR',
-      'Strut1L', 'Strut1R', 'Strut2L', 'Strut2R', 'Strut3L', 'Strut3R',
-      'FrontMainStrut', 'FrontLowerStrut', 'FrontStrut1', 'FrontStrut2',
+      'GearBoxRear',
+      'GearBoxFront',
+      'DoorsRear1L',
+      'DoorsRear1R',
+      'DoorsRear2L',
+      'DoorsRear2R',
+      'DoorsFront1',
+      'DoorsFront2R',
+      'DoorsFront2L',
+      'WheelL',
+      'WheelR',
+      'NoseWheelL',
+      'NoseWheelR',
+      'UpperStrutL',
+      'UpperStrutR',
+      'MainStrutL',
+      'MainStrutR',
+      'SideStrutL',
+      'SideStrutR',
+      'Strut1L',
+      'Strut1R',
+      'Strut2L',
+      'Strut2R',
+      'Strut3L',
+      'Strut3R',
+      'FrontMainStrut',
+      'FrontLowerStrut',
+      'FrontStrut1',
+      'FrontStrut2',
       'FrontLights',
     ]);
     this.mesh.traverse((child) => {
       if (gearParts.has(child.name)) child.visible = false;
     });
 
-    this.group.traverse((child) => { child.frustumCulled = false; });
+    this.group.traverse((child) => {
+      child.frustumCulled = false;
+    });
 
     this.scene.add(this.group);
     this.ready = true;
-    Logger.info('Aircraft', `Rafale loaded — scaled ${scaleFactor.toFixed(2)}x (${size.x.toFixed(1)}×${size.y.toFixed(1)}×${size.z.toFixed(1)} → ${targetLength}m)`);
+    Logger.info(
+      'Aircraft',
+      `Rafale loaded — scaled ${scaleFactor.toFixed(2)}x (${size.x.toFixed(1)}×${size.y.toFixed(1)}×${size.z.toFixed(1)} → ${AIRCRAFT_TARGET_LENGTH}m)`,
+    );
   }
 
   update(state, dt) {

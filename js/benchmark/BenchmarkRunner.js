@@ -2,8 +2,7 @@ import { createDefaultFlightPlan } from '../flightplan/DefaultFlightPlan.js';
 import MetricsCollector from './MetricsCollector.js';
 import BenchmarkComparator from './BenchmarkComparator.js';
 import Logger from '../utils/Logger.js';
-
-const WARMUP_DURATION = 15; // seconds — camera stays still, tiles load
+import { BENCHMARK_WARMUP_DURATION as WARMUP_DURATION } from '../constants/terrain.js';
 
 export default class BenchmarkRunner {
   constructor() {
@@ -12,7 +11,6 @@ export default class BenchmarkRunner {
     this.warmupElapsed = 0;
     this.cameraPath = null;
     this.metrics = null;
-    this.getGroundElevation = null;
     this._lastReport = null;
     this.gpuTimer = null;
     this._stopped = false; // flag to signal stop was called during tickPath
@@ -40,18 +38,20 @@ export default class BenchmarkRunner {
     return Math.max(0, WARMUP_DURATION - this.warmupElapsed);
   }
 
-  start(fpsController, camera, getGroundElevation, gpuTimer, flightPlan) {
+  start(fpsController, camera, gpuTimer, flightPlan) {
     if (this.running) return;
     this.running = true;
     this.warmup = true;
     this.warmupElapsed = 0;
     this.cameraPath = flightPlan || createDefaultFlightPlan(camera);
     this.metrics = null;
-    this.getGroundElevation = getGroundElevation;
     this.gpuTimer = gpuTimer || null;
     this._stopped = false;
     fpsController.enabled = false;
-    Logger.info('Benchmark', `Warmup ${WARMUP_DURATION}s — then ${this.cameraPath.totalDuration.toFixed(0)}s benchmark`);
+    Logger.info(
+      'Benchmark',
+      `Warmup ${WARMUP_DURATION}s — then ${this.cameraPath.totalDuration.toFixed(0)}s benchmark`,
+    );
   }
 
   stop(fpsController, renderer) {
@@ -67,7 +67,10 @@ export default class BenchmarkRunner {
 
       if (report.summary) {
         Logger.info('Benchmark', `Completed — ${report.summary.totalFrames} frames, avg ${report.summary.fps.avg} FPS`);
-        Logger.info('Benchmark', `P1=${report.summary.fps.p1} P5=${report.summary.fps.p5} min=${report.summary.fps.min} max=${report.summary.fps.max}`);
+        Logger.info(
+          'Benchmark',
+          `P1=${report.summary.fps.p1} P5=${report.summary.fps.p5} min=${report.summary.fps.min} max=${report.summary.fps.max}`,
+        );
 
         // A/B comparison against stored baseline
         const comparison = BenchmarkComparator.compare(report);
@@ -81,7 +84,6 @@ export default class BenchmarkRunner {
 
     this.cameraPath = null;
     this.metrics = null;
-    this.getGroundElevation = null;
   }
 
   /**
@@ -101,7 +103,7 @@ export default class BenchmarkRunner {
       return;
     }
 
-    const ok = this.cameraPath.update(dt, this.getGroundElevation);
+    const ok = this.cameraPath.update(dt);
     if (!ok) {
       this.stop(fpsController, renderer);
     }

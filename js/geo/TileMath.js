@@ -8,9 +8,7 @@ export function latLonToTile(lat, lon, zoom) {
   const n = 1 << zoom;
   const x = Math.floor(((lon + 180) / 360) * n);
   const latRad = lat * DEG2RAD;
-  const y = Math.floor(
-    ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n
-  );
+  const y = Math.floor(((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n);
   return { x, y };
 }
 
@@ -68,9 +66,7 @@ export function nearZoomForAltitude(altMeters, baseZoom, minZoom = 3) {
  * @returns {Array<{zoom: number, tiles: Array<{tx: number, ty: number}>}>}
  */
 export function buildLodRings(camTile, nearZoom, minZoom, _unused, baseZoom, altMeters) {
-  const horizonMeters = altMeters > 0
-    ? Math.sqrt(2 * EARTH_RADIUS * altMeters + altMeters * altMeters)
-    : Infinity;
+  const horizonMeters = altMeters > 0 ? Math.sqrt(2 * EARTH_RADIUS * altMeters + altMeters * altMeters) : Infinity;
 
   // Subdivide when camera is within K × tileSize metres of the tile centre.
   // K ≈ 6 gives ~256 px per tile on a 1920 px / 70° FOV screen.
@@ -81,17 +77,13 @@ export function buildLodRings(camTile, nearZoom, minZoom, _unused, baseZoom, alt
   const visited = new Set();
 
   // Pick a start zoom where a small grid covers the horizon
-  const startZoom = horizonMeters < Infinity
-    ? Math.max(minZoom, Math.floor(Math.log2(40075016.686 / (horizonMeters / 3))))
-    : minZoom;
+  const startZoom =
+    horizonMeters < Infinity ? Math.max(minZoom, Math.floor(Math.log2(40075016.686 / (horizonMeters / 3)))) : minZoom;
   const clamped = Math.min(startZoom, nearZoom);
   const startScale = 1 << (baseZoom - clamped);
   const startCamTx = Math.floor(camTile.x / startScale);
   const startCamTy = Math.floor(camTile.y / startScale);
-  const startRadius = Math.min(
-    Math.ceil(horizonMeters / tileWorldSize(clamped)) + 1,
-    20,
-  );
+  const startRadius = Math.min(Math.ceil(horizonMeters / tileWorldSize(clamped)) + 1, 20);
 
   function visit(tx, ty, z) {
     const key = `${z}/${tx}/${ty}`;
@@ -111,7 +103,8 @@ export function buildLodRings(camTile, nearZoom, minZoom, _unused, baseZoom, alt
 
     if (z < nearZoom && distMeters < tileWorldSize(z) * SUBDIVIDE_K) {
       // Close enough → show 4 children at higher zoom
-      const c = tx * 2, r = ty * 2;
+      const c = tx * 2,
+        r = ty * 2;
       visit(c, r, z + 1);
       visit(c + 1, r, z + 1);
       visit(c, r + 1, z + 1);
@@ -136,6 +129,9 @@ export function buildLodRings(camTile, nearZoom, minZoom, _unused, baseZoom, alt
   for (let z = nearZoom; z >= minZoom; z--) {
     if (byZoom[z]?.length) rings.push({ zoom: z, tiles: byZoom[z] });
   }
-  Logger.debug('TileMath', `buildLodRings: nearZoom=${nearZoom}, startZoom=${clamped}, total=${tileList.length} tiles, ${rings.length} rings`);
+  Logger.debug(
+    'TileMath',
+    `buildLodRings: nearZoom=${nearZoom}, startZoom=${clamped}, total=${tileList.length} tiles, ${rings.length} rings`,
+  );
   return rings;
 }

@@ -50,10 +50,12 @@ export default class MetricsCollector {
     const subs = this.subsystemTimer.flush();
 
     // Memory (Chrome only)
-    const mem = performance.memory ? {
-      jsHeapUsed: performance.memory.usedJSHeapSize,
-      jsHeapTotal: performance.memory.totalJSHeapSize,
-    } : null;
+    const mem = performance.memory
+      ? {
+          jsHeapUsed: performance.memory.usedJSHeapSize,
+          jsHeapTotal: performance.memory.totalJSHeapSize,
+        }
+      : null;
 
     // GPU time (Sprint 4.3)
     const gpuMs = gpuTimer ? gpuTimer.getLastGPUTimeMs() : 0;
@@ -72,22 +74,22 @@ export default class MetricsCollector {
     });
   }
 
-  getSummary(renderer) {
+  getSummary(_renderer) {
     // Skip first frame (no meaningful frameTime)
     const measured = this.frames.slice(1);
     if (measured.length === 0) return null;
 
-    const fpsValues = measured.map(f => f.fps).sort((a, b) => a - b);
-    const ftValues = measured.map(f => f.ft).sort((a, b) => a - b);
-    const triValues = measured.map(f => f.tri);
-    const dcValues = measured.map(f => f.dc);
+    const fpsValues = measured.map((f) => f.fps).sort((a, b) => a - b);
+    const ftValues = measured.map((f) => f.ft).sort((a, b) => a - b);
+    const triValues = measured.map((f) => f.tri);
+    const dcValues = measured.map((f) => f.dc);
 
     const percentile = (arr, p) => {
-      const idx = Math.max(0, Math.ceil(arr.length * p / 100) - 1);
+      const idx = Math.max(0, Math.ceil((arr.length * p) / 100) - 1);
       return arr[idx];
     };
-    const avg = arr => arr.reduce((s, v) => s + v, 0) / arr.length;
-    const round1 = v => Math.round(v * 10) / 10;
+    const avg = (arr) => arr.reduce((s, v) => s + v, 0) / arr.length;
+    const round1 = (v) => Math.round(v * 10) / 10;
 
     // --- Histogram of frame times ---
     const histogram = { '<8ms': 0, '<16.7ms': 0, '<33.3ms': 0, '<50ms': 0, '>=50ms': 0 };
@@ -100,7 +102,7 @@ export default class MetricsCollector {
     }
 
     // --- Jank detection ---
-    const avgFt = avg(measured.map(f => f.ft));
+    const avgFt = avg(measured.map((f) => f.ft));
     let jankCount = 0;
     let longestStableStreak = 0;
     let currentStreak = 0;
@@ -123,9 +125,7 @@ export default class MetricsCollector {
     }
     const subsAgg = {};
     for (const name of subsNames) {
-      const vals = measured
-        .map(f => (f.subs && f.subs[name]) || 0)
-        .sort((a, b) => a - b);
+      const vals = measured.map((f) => (f.subs && f.subs[name]) || 0).sort((a, b) => a - b);
       subsAgg[name] = {
         avg: round1(avg(vals)),
         p95: round1(percentile(vals, 95)),
@@ -134,10 +134,10 @@ export default class MetricsCollector {
     }
 
     // --- Memory stats ---
-    const memFrames = measured.filter(f => f.mem);
+    const memFrames = measured.filter((f) => f.mem);
     let memSummary = null;
     if (memFrames.length > 0) {
-      const heapUsed = memFrames.map(f => f.mem.jsHeapUsed);
+      const heapUsed = memFrames.map((f) => f.mem.jsHeapUsed);
       memSummary = {
         jsHeapUsed: {
           min: Math.min(...heapUsed),
@@ -145,23 +145,23 @@ export default class MetricsCollector {
           avg: Math.round(avg(heapUsed)),
         },
         geometries: {
-          min: Math.min(...measured.map(f => f.geo)),
-          max: Math.max(...measured.map(f => f.geo)),
-          avg: Math.round(avg(measured.map(f => f.geo))),
+          min: Math.min(...measured.map((f) => f.geo)),
+          max: Math.max(...measured.map((f) => f.geo)),
+          avg: Math.round(avg(measured.map((f) => f.geo))),
         },
         textures: {
-          min: Math.min(...measured.map(f => f.tex)),
-          max: Math.max(...measured.map(f => f.tex)),
-          avg: Math.round(avg(measured.map(f => f.tex))),
+          min: Math.min(...measured.map((f) => f.tex)),
+          max: Math.max(...measured.map((f) => f.tex)),
+          avg: Math.round(avg(measured.map((f) => f.tex))),
         },
       };
     }
 
     // --- GPU time aggregation ---
-    const gpuFrames = measured.filter(f => f.gpu && f.gpu > 0);
+    const gpuFrames = measured.filter((f) => f.gpu && f.gpu > 0);
     let gpuSummary = null;
     if (gpuFrames.length > 0) {
-      const gpuVals = gpuFrames.map(f => f.gpu).sort((a, b) => a - b);
+      const gpuVals = gpuFrames.map((f) => f.gpu).sort((a, b) => a - b);
       gpuSummary = {
         avg: round1(avg(gpuVals)),
         p95: round1(percentile(gpuVals, 95)),
@@ -226,7 +226,7 @@ export default class MetricsCollector {
         backend = 'WebGL2';
         gpuTimestamp = !!gl.getExtension('EXT_disjoint_timer_query_webgl2');
       }
-    } catch (_) {
+    } catch {
       // Graceful fallback if context methods are unavailable
     }
 

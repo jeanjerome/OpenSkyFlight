@@ -232,14 +232,18 @@ class MapNode extends Mesh {
         const self = this;
         try {
             const material = self.material;
+            const map = material.map;
             material.dispose();
-            if (material.map && material.map !== MapNode.defaultTexture) {
-                material.map.dispose();
+            // Defer texture disposal to let the WebGPU command buffer finish
+            if (map && map !== MapNode.defaultTexture) {
+                setTimeout(() => { map.dispose(); }, 0);
             }
         }
         catch (e) { }
         try {
-            self.geometry.dispose();
+            const geo = self.geometry;
+            // Defer geometry disposal to let WebGPU command buffer finish
+            setTimeout(() => { geo.dispose(); }, 0);
         }
         catch (e) { }
     }
@@ -926,7 +930,8 @@ class MapHeightNodeShader extends MapHeightNode {
         super.dispose();
         const hTex = this._heightTextureNode.value;
         if (hTex && hTex !== MapHeightNodeShader.defaultTerrariumTexture) {
-            hTex.dispose();
+            // Defer to let WebGPU command buffer finish
+            setTimeout(() => { hTex.dispose(); }, 0);
         }
     }
 }

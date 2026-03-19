@@ -10,9 +10,8 @@ export default class LocalTileProvider extends MapProvider {
 
   fetchTile(zoom, x, y) {
     return new Promise((resolve) => {
-      const path = this.source === 'osm'
-        ? `/tiles/osm/${zoom}/${x}/${y}.png`
-        : `/tiles/satellite/${zoom}/${x}/${y}.png`;
+      const path =
+        this.source === 'osm' ? `/tiles/osm/${zoom}/${x}/${y}.png` : `/tiles/satellite/${zoom}/${x}/${y}.png`;
 
       const image = new Image();
       image.crossOrigin = 'anonymous';
@@ -20,7 +19,8 @@ export default class LocalTileProvider extends MapProvider {
       image.onerror = () => {
         // Fallback: 1×1 transparent canvas to unblock geo-three nodeReady
         const c = document.createElement('canvas');
-        c.width = 1; c.height = 1;
+        c.width = 1;
+        c.height = 1;
         resolve(c);
       };
       image.src = path;
