@@ -69,8 +69,6 @@ export default class TerrainChunk {
         indices.push(b, d, c);
       }
     }
-    return res * res <= 65536
-      ? new Uint16Array(indices)
-      : new Uint32Array(indices);
+    return res * res <= 65536 ? new Uint16Array(indices) : new Uint32Array(indices);
   }
 }

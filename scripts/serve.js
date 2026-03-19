@@ -45,23 +45,21 @@ function releaseOutbound() {
 }
 
 const SOURCES = {
-  terrarium: (z, x, y) =>
-    `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`,
-  osm: (z, x, y) =>
-    `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
+  terrarium: (z, x, y) => `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`,
+  osm: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
   satellite: (z, x, y) =>
     `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,
 };
 
 const MIME = {
   '.html': 'text/html',
-  '.js':   'application/javascript',
-  '.css':  'text/css',
-  '.png':  'image/png',
-  '.jpg':  'image/jpeg',
+  '.js': 'application/javascript',
+  '.css': 'text/css',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
   '.json': 'application/json',
-  '.svg':  'image/svg+xml',
-  '.ico':  'image/x-icon',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
 };
 
 // Content types per source (ESRI satellite returns JPEG, others PNG)
@@ -82,7 +80,9 @@ async function serveTile(req, res, source, z, x, y) {
     res.writeHead(200, { 'Content-Type': contentType, 'X-Cache': 'HIT' });
     res.end(data);
     return;
-  } catch (_) { /* cache miss */ }
+  } catch (_) {
+    /* cache miss */
+  }
 
   // Fetch from remote
   const urlFn = SOURCES[source];
@@ -141,7 +141,7 @@ const FLIGHTPLANS_DIR = join(ROOT, 'assets', 'flightplans');
 async function serveFlightPlanList(req, res) {
   try {
     const entries = await readdir(FLIGHTPLANS_DIR);
-    const files = entries.filter(f => f.endsWith('.json')).sort();
+    const files = entries.filter((f) => f.endsWith('.json')).sort();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(files));
   } catch (_) {

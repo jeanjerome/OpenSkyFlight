@@ -1,0 +1,486 @@
+/* ── CSS Custom Properties ── */
+:root {
+  --color-primary: #00ff88;
+  --color-primary-dim: #00cc66;
+  --color-border: #005533;
+  --color-border-dark: #003322;
+  --color-bg-dark: #0a0a1a;
+  --color-bg-panel: rgba(0, 10, 5, 0.92);
+  --color-bg-panel-header: rgba(0, 10, 5, 0.95);
+  --color-bg-overlay: rgba(0, 10, 5, 0.88);
+  --color-bg-input: rgba(0, 255, 136, 0.05);
+  --color-bg-btn-hover: rgba(0, 255, 136, 0.12);
+  --color-bg-btn-active: rgba(0, 255, 136, 0.25);
+  --color-shadow-panel: rgba(0, 255, 136, 0.15);
+  --color-shadow-focus: rgba(0, 255, 136, 0.2);
+  --color-text: #ccc;
+  --color-option-bg: #001a0d;
+
+  --font-mono: 'Courier New', monospace;
+
+  --z-hud: 9;
+  --z-crosshair: 10;
+  --z-help: 10;
+  --z-trigger: 19;
+  --z-panel: 20;
+  --z-minimap: 20;
+  --z-log: 15;
+  --z-stats: 30;
+
+  --panel-width: 280px;
+  --transition-panel: transform 0.25s ease;
+  --transition-btn: background 0.15s, box-shadow 0.15s;
+}
+
+/* ── Reset ── */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-bg-dark);
+  font-family: var(--font-mono);
+  color: var(--color-text);
+}
+
+#canvas-container {
+  width: 100%;
+  height: 100%;
+}
+canvas {
+  display: block;
+}
+
+/* ── HUD Overlay ── */
+#hud {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: var(--z-hud);
+}
+
+/* ── Crosshair ── */
+#crosshair {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px;
+  height: 20px;
+  pointer-events: none;
+  z-index: var(--z-crosshair);
+}
+#crosshair::before,
+#crosshair::after {
+  content: '';
+  position: absolute;
+  background: rgba(255, 255, 255, 0.5);
+}
+#crosshair::before {
+  width: 2px;
+  height: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+}
+#crosshair::after {
+  height: 2px;
+  width: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* ── Help Overlay ── */
+#help {
+  display: none;
+  position: fixed;
+  bottom: 12px;
+  left: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 8px 14px;
+  font-size: 12px;
+  border-radius: 4px;
+  line-height: 1.6;
+  pointer-events: none;
+  z-index: var(--z-help);
+}
+
+/* ── Panel Trigger Zone ── */
+#panel-trigger {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 20px;
+  height: 100%;
+  z-index: var(--z-trigger);
+}
+
+/* ── MFD Control Panel ── */
+#control-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  background: var(--color-bg-panel);
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 255, 136, 0.03) 2px,
+    rgba(0, 255, 136, 0.03) 4px
+  );
+  width: var(--panel-width);
+  height: 100%;
+  font-size: 12px;
+  z-index: var(--z-panel);
+  border-left: 2px solid var(--color-primary);
+  border-radius: 0;
+  box-shadow: -4px 0 20px var(--color-shadow-panel);
+  transform: translateX(100%);
+  transition: var(--transition-panel);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+#control-panel.visible {
+  transform: translateX(0);
+}
+
+/* Scrollbar */
+#control-panel::-webkit-scrollbar {
+  width: 4px;
+}
+#control-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+#control-panel::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+}
+
+/* ── MFD Header ── */
+.mfd-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-bg-panel-header);
+  border-bottom: 1px solid var(--color-border);
+  padding: 10px 14px;
+  font-size: 11px;
+  color: var(--color-primary);
+  letter-spacing: 2px;
+  text-align: center;
+}
+.mfd-header span {
+  opacity: 0.5;
+}
+
+.mfd-body {
+  padding: 10px 14px 14px;
+  flex: 1;
+}
+
+/* ── Section Labels ── */
+.mfd-section-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--color-primary-dim);
+  letter-spacing: 2px;
+  margin: 14px 0 10px;
+  text-transform: uppercase;
+}
+.mfd-section-label::before,
+.mfd-section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-border-dark);
+}
+
+/* ── Control Groups ── */
+.ctrl-group {
+  margin-bottom: 8px;
+}
+.ctrl-group label {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 2px;
+  font-size: 11px;
+  color: var(--color-primary-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.ctrl-group label span {
+  color: var(--color-primary);
+}
+.ctrl-group input[type='range'] {
+  width: 100%;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+  height: 4px;
+}
+.ctrl-group.checkbox-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ctrl-group.checkbox-group input[type='checkbox'] {
+  accent-color: var(--color-primary);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+.ctrl-group.checkbox-group label {
+  margin-bottom: 0;
+  font-size: 11px;
+  cursor: pointer;
+}
+.ctrl-group input[type='text'],
+.ctrl-group input[type='number'] {
+  width: 100%;
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  color: var(--color-primary);
+  padding: 4px 8px;
+  border-radius: 0;
+  font-family: inherit;
+  font-size: 11px;
+}
+.ctrl-group input[type='text']:focus,
+.ctrl-group input[type='number']:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 6px var(--color-shadow-focus);
+}
+.ctrl-group select {
+  width: 100%;
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  color: var(--color-primary);
+  padding: 4px 8px;
+  border-radius: 0;
+  font-family: inherit;
+  font-size: 11px;
+}
+.ctrl-group select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+.ctrl-group select option {
+  background: var(--color-option-bg);
+  color: var(--color-primary);
+}
+
+/* ── MFD Buttons ── */
+.mfd-btn {
+  width: 100%;
+  padding: 7px;
+  margin-top: 8px;
+  background: transparent;
+  border: 1px solid var(--color-primary);
+  color: var(--color-primary);
+  border-radius: 0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: var(--transition-btn);
+}
+.mfd-btn:hover {
+  background: var(--color-bg-btn-hover);
+  box-shadow: 0 0 10px var(--color-shadow-focus);
+}
+.mfd-btn:active {
+  background: var(--color-bg-btn-active);
+}
+
+/* ── Search Row ── */
+.search-row {
+  display: flex;
+  gap: 4px;
+}
+.search-row input {
+  flex: 1;
+}
+#searchBtn {
+  background: transparent;
+  border: 1px solid var(--color-primary);
+  color: var(--color-primary);
+  padding: 4px 10px;
+  border-radius: 0;
+  cursor: pointer;
+  font-size: 13px;
+}
+#searchBtn:hover {
+  background: var(--color-bg-btn-hover);
+}
+
+/* ── Section Separator ── */
+.section-separator {
+  border: none;
+  border-top: 1px solid var(--color-border-dark);
+  margin: 12px 0;
+}
+
+/* ── Minimap Panel ── */
+#minimap-container {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  width: 260px;
+  background: var(--color-bg-overlay);
+  border: 1px solid var(--color-border);
+  border-right: none;
+  border-bottom: none;
+  z-index: var(--z-minimap);
+  display: none;
+  flex-direction: column;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+#minimap-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-primary-dim);
+  letter-spacing: 1px;
+  font-size: 10px;
+}
+.minimap-zoom-btns {
+  display: flex;
+  gap: 4px;
+}
+.minimap-zoom-btns button {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-primary-dim);
+  padding: 0 6px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  letter-spacing: 0;
+}
+.minimap-zoom-btns button:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+#minimap {
+  display: block;
+  width: 256px;
+  height: 256px;
+  margin: 0 auto 2px;
+}
+
+/* ── Log Panel ── */
+#log-panel-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 520px;
+  max-height: 220px;
+  background: var(--color-bg-overlay);
+  border: 1px solid var(--color-border);
+  border-bottom: none;
+  border-left: none;
+  z-index: var(--z-log);
+  display: none;
+  flex-direction: column;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+#log-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-primary-dim);
+  letter-spacing: 1px;
+  font-size: 10px;
+}
+#log-panel-clear {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-primary-dim);
+  padding: 1px 8px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+#log-panel-clear:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+#log-panel {
+  overflow-y: auto;
+  flex: 1;
+  padding: 4px 8px;
+  max-height: 186px;
+  line-height: 1.4;
+}
+#log-panel::-webkit-scrollbar {
+  width: 4px;
+}
+#log-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+#log-panel::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+}
+
+/* ── Notifications ── */
+#notification-container {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.notification {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 8px 18px;
+  border-radius: 4px;
+  opacity: 0;
+  transform: translateY(-10px);
+  transition:
+    opacity 0.3s,
+    transform 0.3s;
+  pointer-events: auto;
+}
+.notification.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.notification-info {
+  background: rgba(0, 40, 20, 0.9);
+  color: var(--color-primary);
+  border: 1px solid var(--color-border);
+}
+.notification-warn {
+  background: rgba(40, 30, 0, 0.9);
+  color: #ffaa33;
+  border: 1px solid #664400;
+}
+.notification-error {
+  background: rgba(40, 0, 0, 0.9);
+  color: #ff4444;
+  border: 1px solid #660000;
+}

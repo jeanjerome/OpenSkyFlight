@@ -50,13 +50,14 @@ export default class ElevationProvider {
       const pixels = imageData.data;
 
       const heightmap = new Float32Array(256 * 256);
-      let min = Infinity, max = -Infinity;
+      let min = Infinity,
+        max = -Infinity;
       for (let i = 0; i < 256 * 256; i++) {
         const p = i * 4;
         const r = pixels[p];
         const g = pixels[p + 1];
         const b = pixels[p + 2];
-        const h = (r * 256 + g + b / 256) - 32768;
+        const h = r * 256 + g + b / 256 - 32768;
         heightmap[i] = h;
         if (h < min) min = h;
         if (h > max) max = h;

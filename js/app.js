@@ -1,5 +1,19 @@
 import * as THREE from 'three';
 import { CONFIG, onChange, update } from './utils/config.js';
+import {
+  CLOUD_RENDER_ORDER,
+  REALWORLD_FAR_PLANE,
+  PROCEDURAL_MIN_FAR,
+  PROCEDURAL_NEAR_FAR_RATIO,
+  CLIP_PLANE_EPSILON,
+  PROCEDURAL_FAR_MULTIPLIER,
+} from './constants/rendering.js';
+import { REALWORLD_START_ALTITUDE, PROCEDURAL_START_ALTITUDE, DEFAULT_NEAR } from './constants/camera.js';
+import { MAX_DELTA_TIME } from './constants/physics.js';
+import { createRenderer, createScene, createCamera, setupResizeHandler } from './scene/SceneSetup.js';
+import WaterPlane from './scene/WaterPlane.js';
+import AdaptiveQualityManager from './rendering/AdaptiveQualityManager.js';
+import InputManager from './input/InputManager.js';
 import ChunkManager from './terrain/ChunkManager.js';
 import GeoTerrainManager from './terrain/GeoTerrainManager.js';
 import FPSController from './camera/FPSController.js';
@@ -18,60 +32,21 @@ import FlightPlanRecorder from './flightplan/FlightPlanRecorder.js';
 import Stats from 'stats.js';
 
 async function initApp() {
-  // --- Renderer: WebGPURenderer with automatic WebGL2 fallback ---
-  const renderer = new THREE.WebGPURenderer({
-    antialias: true,
-    powerPreference: 'high-performance',
-    trackTimestamp: true,
-  });
-  await renderer.init();
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, CONFIG.maxPixelRatio));
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setClearColor(0x0a0a1a);
-  document.getElementById('canvas-container').appendChild(renderer.domElement);
+  // --- Core scene ---
+  const renderer = await createRenderer();
+  const { scene, dirLight, ambientLight } = createScene();
+  const camera = createCamera();
 
-  // --- Scene ---
-  const scene = new THREE.Scene();
-
-  // --- Lighting ---
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
-  scene.add(ambientLight);
-  const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-  dirLight.position.set(1, 0.5, 0.8);
-  scene.add(dirLight);
-
-  // --- Atmospheric sky & clouds ---
-  const atmosphericSky = new AtmosphericSky(scene, dirLight, ambientLight);
+  // --- Atmosphere ---
+  // Side-effect: registers itself with scene, dirLight, and ambientLight
+  new AtmosphericSky(scene, dirLight, ambientLight);
   const cloudLayer = new CloudLayer(scene);
+  cloudLayer.mesh.renderOrder = CLOUD_RENDER_ORDER;
 
-  // --- Camera ---
-  const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 1, 100000);
-  camera.position.set(0, 640, 0);
+  // --- Water ---
+  const waterPlane = new WaterPlane(scene);
 
-  // --- Water plane (Sprint 2.1: reduced from 80x80 to 1x1 segments) ---
-  function createWaterPlane() {
-    const geo = new THREE.PlaneGeometry(20000, 20000, 1, 1);
-    const mat = new THREE.MeshBasicNodeMaterial({
-      color: 0x1a3a5c,
-      wireframe: CONFIG.wireframe,
-      transparent: true,
-      opacity: 0.4,
-      side: THREE.DoubleSide,
-    });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.position.y = CONFIG.maxHeight * CONFIG.waterLevel;
-    mesh.renderOrder = 99;
-    return mesh;
-  }
-
-  let waterPlane = createWaterPlane();
-  scene.add(waterPlane);
-
-  // --- Set render order on cloud layer ---
-  cloudLayer.mesh.renderOrder = 100;
-
-  // --- Terrain Managers ---
+  // --- Terrain ---
   const chunkManager = new ChunkManager(scene);
   chunkManager.textureProvider.setRenderer(renderer);
   const geoTerrainManager = new GeoTerrainManager(scene, renderer);
@@ -80,31 +55,29 @@ async function initApp() {
     return CONFIG.terrainMode === 'realworld' ? geoTerrainManager : chunkManager;
   }
 
-  // Initialize realworld if that's the default mode
   if (CONFIG.terrainMode === 'realworld') {
     geoTerrainManager.init(CONFIG.lat, CONFIG.lon);
-    camera.position.set(0, 6000, 0); // Start above terrain (meters)
+    camera.position.set(0, REALWORLD_START_ALTITUDE, 0);
   }
 
-  // --- FPS Controller ---
+  // --- Controllers ---
   const fpsController = new FPSController(camera, renderer.domElement);
-
-  // --- Aircraft (chase cam) ---
+  const chaseCameraController = new ChaseCameraController();
   const aircraftManager = new AircraftManager(scene);
   aircraftManager.load('assets/models/rafale/Rafale.gltf').catch((err) => {
     Logger.warn('App', 'Failed to load Rafale model: ' + err.message);
   });
 
-  const chaseCameraController = new ChaseCameraController();
-
-  // --- Benchmark ---
+  // --- Systems ---
   const benchmarkRunner = new BenchmarkRunner();
-
-  // --- GPU Timer (Sprint 4.3) ---
   const gpuTimer = new GPUTimer(renderer);
-
-  // --- Flight Plan Recorder ---
   const flightPlanRecorder = new FlightPlanRecorder();
+  const adaptiveQuality = new AdaptiveQualityManager(renderer);
+
+  // --- Ground elevation ---
+  const groundRaycaster = new THREE.Raycaster();
+  const downDirection = new THREE.Vector3(0, -1, 0);
+  let groundElevation = 0;
 
   // --- Stats.js ---
   const stats = new Stats();
@@ -115,231 +88,174 @@ async function initApp() {
   stats.dom.style.top = '0px';
   stats.dom.style.left = '0px';
   stats.dom.style.zIndex = '30';
-  stats.dom.style.display = 'none'; // hidden by default, toggled with I key
+  stats.dom.style.display = 'none';
   document.body.appendChild(stats.dom);
 
-  // --- HUD ---
-  const hudCanvas = document.getElementById('hud');
-  const hud = new HUD(hudCanvas);
-
-  // --- Minimap ---
-  const minimapCanvas = document.getElementById('minimap');
-  const minimap = new Minimap(minimapCanvas, geoTerrainManager);
+  // --- UI ---
+  const hud = new HUD(document.getElementById('hud'));
+  const minimap = new Minimap(document.getElementById('minimap'), geoTerrainManager);
   minimap.setFlightPlanRecorder(flightPlanRecorder);
-
-  // --- Raycaster for ground elevation (procedural mode) ---
-  const groundRaycaster = new THREE.Raycaster();
-  const downDirection = new THREE.Vector3(0, -1, 0);
-  let groundElevation = 0;
+  const hudCanvas = document.getElementById('hud');
 
   // --- Control Panel ---
   function regenerate() {
     if (CONFIG.terrainMode === 'realworld') {
       geoTerrainManager.reinit();
-      fpsController.position.set(0, 6000, 0);
+      fpsController.position.set(0, REALWORLD_START_ALTITUDE, 0);
     } else {
       chunkManager.reinit();
     }
-
-    scene.remove(waterPlane);
-    waterPlane.geometry.dispose();
-    waterPlane.material.dispose();
-    waterPlane = createWaterPlane();
-    waterPlane.visible = CONFIG.terrainMode === 'procedural';
-    scene.add(waterPlane);
+    waterPlane.recreate();
   }
+  // Side-effect: binds DOM controls to CONFIG
+  new ControlPanel(regenerate);
 
-  const controlPanel = new ControlPanel(regenerate);
-
-  // --- Logger panel init ---
+  // --- Logger panel ---
   Logger.bindPanel(document.getElementById('log-panel'));
   document.getElementById('log-panel-clear').addEventListener('click', () => Logger.clear());
   Logger.info('App', 'Application started');
 
-  // Update water level when maxHeight changes
+  // --- Resize ---
+  setupResizeHandler(camera, renderer, hud);
+
+  // --- Config listeners ---
   onChange((key, value) => {
-    if (key === 'maxHeight') {
-      waterPlane.position.y = CONFIG.maxHeight * CONFIG.waterLevel;
-    }
-    if (key === 'wireframe') {
-      waterPlane.material.wireframe = CONFIG.wireframe;
-    }
-    if (key === 'viewDistance') {
-      // handled by terrain managers
-    }
-    if (key === 'showHud') {
-      hudCanvas.style.display = value ? 'block' : 'none';
-    }
+    if (key === 'maxHeight') waterPlane.updateWaterLevel();
+    if (key === 'wireframe') waterPlane.wireframe = CONFIG.wireframe;
+    if (key === 'showHud') hudCanvas.style.display = value ? 'block' : 'none';
     if (key === 'terrainMode') {
       waterPlane.visible = CONFIG.terrainMode === 'procedural';
       if (CONFIG.terrainMode === 'realworld') {
         geoTerrainManager.init(CONFIG.lat, CONFIG.lon);
-        fpsController.position.set(0, 6000, 0);
+        fpsController.position.set(0, REALWORLD_START_ALTITUDE, 0);
       } else {
         geoTerrainManager.dispose();
-        fpsController.position.set(0, 640, 0);
+        fpsController.position.set(0, PROCEDURAL_START_ALTITUDE, 0);
       }
     }
   });
 
+  // --- Input bindings ---
+  const input = new InputManager();
 
-  // --- Debug tile toggle (X key) ---
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyX' && CONFIG.terrainMode === 'realworld') {
+  input.onWhen(
+    'KeyX',
+    () => CONFIG.terrainMode === 'realworld',
+    () => {
       const active = geoTerrainManager.toggleDebug();
       Logger.info('App', `Debug tiles ${active ? 'enabled' : 'disabled'}`);
-    }
-    if (e.code === 'KeyH' && CONFIG.terrainMode === 'realworld') {
+    },
+  );
+
+  input.onWhen(
+    'KeyH',
+    () => CONFIG.terrainMode === 'realworld',
+    () => {
       const active = geoTerrainManager.toggleHiRes();
       Logger.info('App', `Hi-res mode (zoom 18) ${active ? 'enabled' : 'disabled'}`);
-    }
-    if (e.code === 'KeyV') {
-      const next = CONFIG.cameraMode === 'chase' ? 'cockpit' : 'chase';
-      update('cameraMode', next);
-      chaseCameraController.reset();
-      Logger.info('App', `Camera mode: ${next}`);
-    }
-    if (e.code === 'KeyI') {
-      const active = hud.toggleStats();
-      document.getElementById('help').style.display = active ? 'block' : 'none';
-      stats.dom.style.display = active ? 'block' : 'none';
-      Logger.info('App', `Info ${active ? 'enabled' : 'disabled'}`);
-    }
-    if (e.code === 'KeyL') {
-      if (hud.isFlightPlanMenuOpen()) {
-        hud.closeFlightPlanMenu();
-      } else {
-        fetch('/api/flightplans')
-          .then(r => r.json())
-          .then(files => hud.openFlightPlanMenu(files))
-          .catch(() => Logger.warn('App', 'No flight plans available'));
-      }
-    }
-    if (hud.isFlightPlanMenuOpen() && e.code.startsWith('Digit')) {
-      const idx = parseInt(e.code.charAt(5)) - 1;
-      const file = hud.selectFlightPlan(idx);
-      if (file) {
-        fetch(`/assets/flightplans/${file}`)
-          .then(r => r.json())
-          .then(data => {
-            flightPlanRecorder.loadFromJSON(data);
-            hud.closeFlightPlanMenu();
-          })
-          .catch(() => Logger.warn('App', `Failed to load ${file}`));
-      }
-    }
-    if (e.code === 'Escape' && hud.isFlightPlanMenuOpen()) {
+    },
+  );
+
+  input.on('KeyV', () => {
+    const next = CONFIG.cameraMode === 'chase' ? 'cockpit' : 'chase';
+    update('cameraMode', next);
+    chaseCameraController.reset();
+    Logger.info('App', `Camera mode: ${next}`);
+  });
+
+  input.on('KeyI', () => {
+    const active = hud.toggleStats();
+    document.getElementById('help').style.display = active ? 'block' : 'none';
+    stats.dom.style.display = active ? 'block' : 'none';
+    Logger.info('App', `Info ${active ? 'enabled' : 'disabled'}`);
+  });
+
+  input.on('KeyL', async () => {
+    if (hud.isFlightPlanMenuOpen()) {
       hud.closeFlightPlanMenu();
-    }
-    if (e.code === 'KeyN') {
-      if (e.shiftKey) {
-        // Shift+N: clear all waypoints
-        flightPlanRecorder.clear();
-      } else {
-        // N: toggle recording
-        if (flightPlanRecorder.isRecording()) {
-          flightPlanRecorder.stopRecording();
-        } else {
-          flightPlanRecorder.startRecording();
-        }
+    } else {
+      try {
+        const r = await fetch('/api/flightplans');
+        const files = await r.json();
+        hud.openFlightPlanMenu(files);
+      } catch {
+        Logger.warn('App', 'No flight plans available');
       }
     }
-    if (e.code === 'KeyP') {
-      if (flightPlanRecorder.isRecording()) {
-        flightPlanRecorder.addWaypoint(camera);
+  });
+
+  input.onPrefix('Digit', async (e) => {
+    if (!hud.isFlightPlanMenuOpen()) return;
+    const idx = parseInt(e.code.charAt(5)) - 1;
+    const file = hud.selectFlightPlan(idx);
+    if (file) {
+      try {
+        const r = await fetch(`/assets/flightplans/${file}`);
+        const data = await r.json();
+        flightPlanRecorder.loadFromJSON(data);
+        hud.closeFlightPlanMenu();
+      } catch {
+        Logger.warn('App', `Failed to load ${file}`);
       }
     }
-    if (e.code === 'KeyG') {
-      if (flightPlanRecorder.autopilotActive) {
-        // Disengage autopilot
-        flightPlanRecorder.autopilotActive = false;
-        fpsController.enabled = true;
-        fpsController.position.copy(camera.position);
-        fpsController.yaw = camera.rotation.y;
-        fpsController.pitch = camera.rotation.x;
-        Logger.info('App', 'Autopilot disengaged');
-      } else {
-        // Engage autopilot
-        if (!flightPlanRecorder.hasValidPlan()) {
-          Logger.warn('App', 'Need at least 2 waypoints to engage autopilot');
-          return;
-        }
-        const plan = flightPlanRecorder.buildPlan(camera);
-        if (plan) {
-          flightPlanRecorder.autopilotActive = true;
-          fpsController.enabled = false;
-          Logger.info('App', 'Autopilot engaged');
-        }
-      }
+  });
+
+  input.on('Escape', () => {
+    if (hud.isFlightPlanMenuOpen()) hud.closeFlightPlanMenu();
+  });
+
+  input.on('KeyN', (e) => {
+    if (e.shiftKey) {
+      flightPlanRecorder.clear();
+    } else if (flightPlanRecorder.isRecording()) {
+      flightPlanRecorder.stopRecording();
+    } else {
+      flightPlanRecorder.startRecording();
     }
-    if (e.code === 'KeyB') {
-      if (e.shiftKey) {
-        // Shift+B: store last completed benchmark as baseline
-        if (!benchmarkRunner._lastReport) {
-          Logger.warn('App', 'No completed benchmark — run one first before storing baseline');
-          return;
-        }
-        BenchmarkComparator.storeBaseline(benchmarkRunner._lastReport);
+  });
+
+  input.on('KeyP', () => {
+    if (flightPlanRecorder.isRecording()) flightPlanRecorder.addWaypoint(camera);
+  });
+
+  input.on('KeyG', () => {
+    if (flightPlanRecorder.autopilotActive) {
+      flightPlanRecorder.autopilotActive = false;
+      fpsController.enabled = true;
+      fpsController.position.copy(camera.position);
+      fpsController.yaw = camera.rotation.y;
+      fpsController.pitch = camera.rotation.x;
+      Logger.info('App', 'Autopilot disengaged');
+    } else {
+      if (!flightPlanRecorder.hasValidPlan()) {
+        Logger.warn('App', 'Need at least 2 waypoints to engage autopilot');
         return;
       }
-      if (benchmarkRunner.isRunning()) {
-        benchmarkRunner.stop(fpsController, renderer);
-      } else {
-        const getGround = (x, z) => {
-          if (CONFIG.terrainMode === 'realworld') {
-            return geoTerrainManager.getGroundElevation(x, z);
-          }
-          groundRaycaster.set(new THREE.Vector3(x, 10000, z), downDirection);
-          const hits = groundRaycaster.intersectObjects(chunkManager.getMeshes(), false);
-          return hits.length > 0 ? hits[0].point.y : 0;
-        };
-        const userPlan = flightPlanRecorder.hasValidPlan() ? flightPlanRecorder.buildPlan(camera) : null;
-        benchmarkRunner.start(fpsController, camera, getGround, gpuTimer, userPlan);
+      const plan = flightPlanRecorder.buildPlan(camera);
+      if (plan) {
+        flightPlanRecorder.autopilotActive = true;
+        fpsController.enabled = false;
+        Logger.info('App', 'Autopilot engaged');
       }
     }
   });
 
-  // --- Resize ---
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    hud.resize(window.innerWidth, window.innerHeight);
+  input.on('KeyB', (e) => {
+    if (e.shiftKey) {
+      if (!benchmarkRunner._lastReport) {
+        Logger.warn('App', 'No completed benchmark — run one first before storing baseline');
+        return;
+      }
+      BenchmarkComparator.storeBaseline(benchmarkRunner._lastReport);
+      return;
+    }
+    if (benchmarkRunner.isRunning()) {
+      benchmarkRunner.stop(fpsController, renderer);
+    } else {
+      const userPlan = flightPlanRecorder.hasValidPlan() ? flightPlanRecorder.buildPlan(camera) : null;
+      benchmarkRunner.start(fpsController, camera, gpuTimer, userPlan);
+    }
   });
-
-  // --- Dynamic Resolution Scaling (Sprint 4.1) ---
-  const basePixelRatio = Math.min(window.devicePixelRatio, CONFIG.maxPixelRatio);
-  let currentPixelRatio = basePixelRatio;
-  const ftRingBuffer = new Float32Array(30);
-  let ftRingIndex = 0;
-  let ftRingFilled = false;
-
-  function updateAdaptiveQuality(frameTimeMs) {
-    ftRingBuffer[ftRingIndex] = frameTimeMs;
-    ftRingIndex = (ftRingIndex + 1) % 30;
-    if (ftRingIndex === 0) ftRingFilled = true;
-
-    const count = ftRingFilled ? 30 : ftRingIndex;
-    if (count < 10) return; // wait for enough samples
-
-    let sum = 0;
-    for (let i = 0; i < count; i++) sum += ftRingBuffer[i];
-    const avgFt = sum / count;
-
-    let targetRatio = currentPixelRatio;
-    if (avgFt > 20) {
-      // Scale down gradually
-      targetRatio = Math.max(0.5, currentPixelRatio - 0.05);
-    } else if (avgFt < 12) {
-      // Scale up gradually
-      targetRatio = Math.min(basePixelRatio, currentPixelRatio + 0.02);
-    }
-
-    if (Math.abs(targetRatio - currentPixelRatio) > 0.01) {
-      currentPixelRatio = targetRatio;
-      renderer.setPixelRatio(currentPixelRatio);
-    }
-  }
 
   // --- Render loop ---
   let prevTime = performance.now();
@@ -349,29 +265,20 @@ async function initApp() {
     stats.begin();
 
     const now = performance.now();
-    const dt = Math.min((now - prevTime) / 1000, 0.1);
+    const dt = Math.min((now - prevTime) / 1000, MAX_DELTA_TIME);
     const frameTimeMs = now - prevTime;
     prevTime = now;
 
+    // --- Input phase ---
     fpsController.update(dt);
-
-    // Advance benchmark path early so its state is available below
     benchmarkRunner.tickPath(dt, fpsController, renderer);
 
-    // Build aircraftState from autopilot, benchmark, or manual flight
+    // --- Aircraft state ---
     let aircraftState = null;
 
     if (flightPlanRecorder.autopilotActive && flightPlanRecorder.getPlan()) {
       const plan = flightPlanRecorder.getPlan();
-      const getGround = (x, z) => {
-        if (CONFIG.terrainMode === 'realworld') {
-          return geoTerrainManager.getGroundElevation(x, z);
-        }
-        groundRaycaster.set(new THREE.Vector3(x, 10000, z), downDirection);
-        const hits = groundRaycaster.intersectObjects(chunkManager.getMeshes(), false);
-        return hits.length > 0 ? hits[0].point.y : 0;
-      };
-      const ok = plan.update(dt, getGround);
+      const ok = plan.update(dt);
       if (!ok) {
         flightPlanRecorder.autopilotActive = false;
         fpsController.enabled = true;
@@ -410,9 +317,9 @@ async function initApp() {
       };
     }
 
+    // --- Camera phase ---
     if (aircraftState) {
       aircraftManager.update(aircraftState, dt);
-
       if (CONFIG.cameraMode === 'cockpit') {
         aircraftManager.setVisible(false);
         camera.position.copy(aircraftState.position);
@@ -425,49 +332,41 @@ async function initApp() {
       }
     }
 
+    // --- Environment phase ---
     cloudLayer.update(dt, camera.position, camera);
 
-    // Get subsystem timer (only active during benchmark recording)
     const timer = benchmarkRunner.getSubsystemTimer();
 
+    // --- Terrain phase ---
     if (timer) timer.begin('terrain');
-    const activeManager = getActiveManager();
-    activeManager.update(camera.position);
+    getActiveManager().update(camera.position);
     if (timer) timer.end('terrain');
 
     if (CONFIG.terrainMode === 'realworld') {
-      // Far plane for geo-three — large value since geo-three handles LOD
-      const farNeeded = 1e7;
-      if (Math.abs(camera.far - farNeeded) > 100) {
+      const farNeeded = REALWORLD_FAR_PLANE;
+      if (Math.abs(camera.far - farNeeded) > CLIP_PLANE_EPSILON) {
         camera.far = farNeeded;
-        camera.near = 1;
+        camera.near = DEFAULT_NEAR;
         camera.updateProjectionMatrix();
-        Logger.debug('App', 'Realworld clip planes updated', { near: 1, far: farNeeded });
+        Logger.debug('App', 'Realworld clip planes updated', { near: DEFAULT_NEAR, far: farNeeded });
       }
-
-      // AGL from elevation lookup
       groundElevation = geoTerrainManager.getGroundElevation(camera.position.x, camera.position.z);
     } else {
-      // Adapt far/near plane to effective view distance so distant tiles stay visible
-      const farNeeded = chunkManager._effectiveViewDistance * CONFIG.chunkSize * 1.5;
-      if (Math.abs(camera.far - farNeeded) > 100) {
-        camera.far = Math.max(5000, farNeeded);
-        camera.near = Math.max(1, farNeeded * 0.0001);
+      const farNeeded = chunkManager._effectiveViewDistance * CONFIG.chunkSize * PROCEDURAL_FAR_MULTIPLIER;
+      if (Math.abs(camera.far - farNeeded) > CLIP_PLANE_EPSILON) {
+        camera.far = Math.max(PROCEDURAL_MIN_FAR, farNeeded);
+        camera.near = Math.max(DEFAULT_NEAR, farNeeded * PROCEDURAL_NEAR_FAR_RATIO);
         camera.updateProjectionMatrix();
         Logger.debug('App', 'Clip planes updated', { near: camera.near, far: camera.far });
       }
-
-      // Raycast down to measure ground elevation
       groundRaycaster.set(camera.position, downDirection);
-      const meshes = chunkManager.getMeshes();
-      const hits = groundRaycaster.intersectObjects(meshes, false);
+      const hits = groundRaycaster.intersectObjects(chunkManager.getMeshes(), false);
       groundElevation = hits.length > 0 ? hits[0].point.y : 0;
     }
 
-    // Keep water plane centered on camera XZ
-    waterPlane.position.x = camera.position.x;
-    waterPlane.position.z = camera.position.z;
+    waterPlane.followCamera(camera.position);
 
+    // --- Render phase ---
     if (timer) timer.begin('render');
     gpuTimer.beginFrame();
     renderer.info.reset();
@@ -475,23 +374,18 @@ async function initApp() {
     gpuTimer.endFrame();
     if (timer) timer.end('render');
 
-    // Update HUD after render
+    // --- Overlay phase ---
     if (timer) timer.begin('hud');
     hud.update(camera, groundElevation, benchmarkRunner, dt, flightPlanRecorder, aircraftState);
     if (timer) timer.end('hud');
 
-    // Update minimap
     if (timer) timer.begin('minimap');
     minimap.update(camera);
     if (timer) timer.end('minimap');
 
-    // Record metrics AFTER render so renderer.info reflects this frame
+    // --- Post-render phase ---
     benchmarkRunner.recordMetrics(renderer);
-
-    // Dynamic resolution scaling (Sprint 4.1)
-    updateAdaptiveQuality(frameTimeMs);
-
-    // Update GPU panel with last frame's GPU time
+    adaptiveQuality.update(frameTimeMs);
     gpuPanel.update(gpuTimer.getLastGPUTimeMs(), 30);
 
     stats.end();

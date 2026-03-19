@@ -1,19 +1,26 @@
 import * as THREE from 'three';
 import { CONFIG } from '../utils/config.js';
 
-const MIN_AGL = 50;
-const TARGET_AGL = 150;
-const LOOKAHEAD_DISTANCES = [200, 500, 1000];
 const PITCH_SMOOTH = 3.0;
 const YAW_SMOOTH = 3.0;
 const MAX_PITCH = 0.25;
 const MIN_PITCH = -0.15;
-const TERRAIN_PITCH_GAIN = 0.003;
 
-function clamp(v, min, max) { return v < min ? min : v > max ? max : v; }
-function lerp(a, b, t) { return a + (b - a) * clamp(t, 0, 1); }
-function angleDiff(a, b) { let d = a - b; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; }
-function lerpAngle(a, b, t) { return a + angleDiff(b, a) * clamp(t, 0, 1); }
+function clamp(v, min, max) {
+  return v < min ? min : v > max ? max : v;
+}
+function lerp(a, b, t) {
+  return a + (b - a) * clamp(t, 0, 1);
+}
+function angleDiff(a, b) {
+  let d = a - b;
+  while (d > Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
+  return d;
+}
+function lerpAngle(a, b, t) {
+  return a + angleDiff(b, a) * clamp(t, 0, 1);
+}
 
 export default class FlightPlan {
   constructor(waypoints, camera) {
@@ -36,7 +43,7 @@ export default class FlightPlan {
   }
 
   _buildSpline() {
-    const points = this.waypoints.map(wp => wp.position.clone());
+    const points = this.waypoints.map((wp) => wp.position.clone());
     this.positionSpline = new THREE.CatmullRomCurve3(points, false, 'centripetal', 0.5);
 
     // Total arc length → duration at CONFIG.cameraSpeed
@@ -71,7 +78,7 @@ export default class FlightPlan {
     return kf[kf.length - 1].yaw;
   }
 
-  update(dt, getGroundElevation) {
+  update(dt) {
     if (this.finished) return false;
 
     this.elapsed += dt;
@@ -90,55 +97,23 @@ export default class FlightPlan {
     const targetYaw = Math.atan2(-tangent.x, -tangent.z);
 
     // 3. Pitch from spline tangent
-    let targetPitch = Math.asin(clamp(tangent.y, -1, 1));
-    targetPitch = clamp(targetPitch, MIN_PITCH, MAX_PITCH);
+    const targetPitch = clamp(Math.asin(clamp(tangent.y, -1, 1)), MIN_PITCH, MAX_PITCH);
 
-    // 4. Terrain avoidance
-    if (getGroundElevation) {
-      const sinYaw = Math.sin(this.yaw);
-      const cosYaw = Math.cos(this.yaw);
-      let maxElevation = getGroundElevation(targetPos.x, targetPos.z);
-
-      for (const dist of LOOKAHEAD_DISTANCES) {
-        const probeX = targetPos.x + (-sinYaw) * dist;
-        const probeZ = targetPos.z + (-cosYaw) * dist;
-        const elev = getGroundElevation(probeX, probeZ);
-        if (elev > maxElevation) maxElevation = elev;
-      }
-
-      const targetAltitude = maxElevation + TARGET_AGL;
-      if (targetPos.y < targetAltitude) {
-        const altitudeError = targetAltitude - targetPos.y;
-        const correction = clamp(altitudeError * TERRAIN_PITCH_GAIN, 0, MAX_PITCH);
-        targetPitch = clamp(targetPitch + correction, MIN_PITCH, MAX_PITCH);
-        targetPos.y = Math.max(targetPos.y, maxElevation + MIN_AGL);
-      }
-    }
-
-    // 5. Smooth yaw — compute rate before updating
+    // 4. Smooth yaw — compute rate before updating
     const prevYaw = this.yaw;
     const prevPitch = this.pitch;
     this.yaw = lerpAngle(this.yaw, targetYaw, YAW_SMOOTH * dt);
 
-    // 6. Smooth pitch
+    // 5. Smooth pitch
     this.pitch = lerp(this.pitch, targetPitch, PITCH_SMOOTH * dt);
     this.pitch = clamp(this.pitch, MIN_PITCH, MAX_PITCH);
 
-    // 7. Expose per-frame deltas (same scale as FPSController.yawRate/pitchRate)
+    // 6. Expose per-frame deltas (same scale as FPSController.yawRate/pitchRate)
     this.yawRate = angleDiff(this.yaw, prevYaw);
     this.pitchRate = this.pitch - prevPitch;
 
-    // 8. Store position (decoupled from camera — app.js handles camera placement)
+    // 7. Store position (decoupled from camera — app.js handles camera placement)
     this.position.copy(targetPos);
-
-    // 9. Safety net: hard clamp MIN_AGL
-    if (getGroundElevation) {
-      const ground = getGroundElevation(this.position.x, this.position.z);
-      const minY = ground + MIN_AGL;
-      if (this.position.y < minY) {
-        this.position.y = minY;
-      }
-    }
 
     return true;
   }

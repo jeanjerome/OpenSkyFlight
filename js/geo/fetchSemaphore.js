@@ -1,7 +1,7 @@
 // Shared browser-side semaphore to limit concurrent fetch requests
 // and avoid ERR_INSUFFICIENT_RESOURCES.
 
-const MAX_CONCURRENT = 6;
+import { MAX_CONCURRENT_FETCHES as MAX_CONCURRENT } from '../constants/rendering.js';
 let active = 0;
 const queue = [];
 

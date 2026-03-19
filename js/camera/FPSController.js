@@ -1,6 +1,14 @@
 import * as THREE from 'three';
 import { CONFIG } from '../utils/config.js';
 import Logger from '../utils/Logger.js';
+import {
+  PITCH_CLAMP,
+  MAX_ROLL,
+  ROLL_SENSITIVITY,
+  ROLL_DAMP_SPEED,
+  RATE_DAMP_FACTOR,
+  INITIAL_PITCH,
+} from '../constants/camera.js';
 
 export default class FPSController {
   constructor(camera, domElement) {
@@ -8,7 +16,7 @@ export default class FPSController {
     this.domElement = domElement;
     this.position = new THREE.Vector3().copy(camera.position);
     this.yaw = 0;
-    this.pitch = -0.3;
+    this.pitch = INITIAL_PITCH;
     this.roll = 0;
     this.yawRate = 0;
     this.pitchRate = 0;
@@ -47,7 +55,7 @@ export default class FPSController {
     this.pitchRate = -e.movementY * CONFIG.mouseSensitivity;
     this.yaw -= e.movementX * CONFIG.mouseSensitivity;
     this.pitch -= e.movementY * CONFIG.mouseSensitivity;
-    this.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.pitch));
+    this.pitch = Math.max(-PITCH_CLAMP, Math.min(PITCH_CLAMP, this.pitch));
   }
 
   _onKeyDown(e) {
@@ -75,31 +83,54 @@ export default class FPSController {
     const rx = cosYaw;
     const rz = -sinYaw;
 
-    let mx = 0, my = 0, mz = 0;
+    let mx = 0,
+      my = 0,
+      mz = 0;
 
-    if (this.keys['ArrowUp'] || this.keys['KeyW']) { mx += fx; my += fy; mz += fz; }
-    if (this.keys['ArrowDown'] || this.keys['KeyS']) { mx -= fx; my -= fy; mz -= fz; }
-    if (this.keys['ArrowLeft'] || this.keys['KeyA']) { mx -= rx; mz -= rz; }
-    if (this.keys['ArrowRight'] || this.keys['KeyD']) { mx += rx; mz += rz; }
+    if (this.keys['ArrowUp'] || this.keys['KeyW']) {
+      mx += fx;
+      my += fy;
+      mz += fz;
+    }
+    if (this.keys['ArrowDown'] || this.keys['KeyS']) {
+      mx -= fx;
+      my -= fy;
+      mz -= fz;
+    }
+    if (this.keys['ArrowLeft'] || this.keys['KeyA']) {
+      mx -= rx;
+      mz -= rz;
+    }
+    if (this.keys['ArrowRight'] || this.keys['KeyD']) {
+      mx += rx;
+      mz += rz;
+    }
 
     const len = Math.sqrt(mx * mx + my * my + mz * mz);
-    if (len > 0) { mx /= len; my /= len; mz /= len; }
+    if (len > 0) {
+      mx /= len;
+      my /= len;
+      mz /= len;
+    }
 
     this.position.x += mx * speed;
     this.position.y += my * speed;
     this.position.z += mz * speed;
 
     // Roll (bank) en virage
-    const targetRoll = Math.max(-0.5, Math.min(0.5, this.yawRate * 25));
-    this.roll += (targetRoll - this.roll) * 5 * dt;
-    this.yawRate *= Math.max(0, 1 - 8 * dt);
-    this.pitchRate *= Math.max(0, 1 - 8 * dt);
+    const targetRoll = Math.max(-MAX_ROLL, Math.min(MAX_ROLL, this.yawRate * ROLL_SENSITIVITY));
+    this.roll += (targetRoll - this.roll) * ROLL_DAMP_SPEED * dt;
+    this.yawRate *= Math.max(0, 1 - RATE_DAMP_FACTOR * dt);
+    this.pitchRate *= Math.max(0, 1 - RATE_DAMP_FACTOR * dt);
 
     const now = performance.now();
     if (now - this._lastLogTime > 2000) {
       this._lastLogTime = now;
       const p = this.position;
-      Logger.debug('Camera', `pos=(${p.x.toFixed(0)}, ${p.y.toFixed(0)}, ${p.z.toFixed(0)}) pitch=${this.pitch.toFixed(2)} yaw=${this.yaw.toFixed(2)}`);
+      Logger.debug(
+        'Camera',
+        `pos=(${p.x.toFixed(0)}, ${p.y.toFixed(0)}, ${p.z.toFixed(0)}) pitch=${this.pitch.toFixed(2)} yaw=${this.yaw.toFixed(2)}`,
+      );
     }
   }
 

@@ -1,4 +1,5 @@
 import { MapProvider } from 'geo-three';
+import { SOURCE_MAX_ZOOM, TILE_SIZE } from '../constants/terrain.js';
 
 /**
  * Fetches Terrarium-encoded elevation tiles from the local proxy.
@@ -11,7 +12,6 @@ import { MapProvider } from 'geo-three';
  * Source tiles go up to zoom 15. For zoom > 15, the parent tile at zoom 15
  * is fetched and the relevant sub-region is extracted and upscaled.
  */
-const SOURCE_MAX_ZOOM = 15;
 
 export default class TerrariumProvider extends MapProvider {
   constructor() {
@@ -21,7 +21,7 @@ export default class TerrariumProvider extends MapProvider {
     this._parentCache = new Map();
   }
 
-  fetchTile(zoom, x, y) {
+  async fetchTile(zoom, x, y) {
     if (zoom <= SOURCE_MAX_ZOOM) {
       return this._fetchImage(zoom, x, y);
     }
@@ -33,25 +33,24 @@ export default class TerrariumProvider extends MapProvider {
     const scale = 1 << dz;
     const localX = x - (parentX << dz);
     const localY = y - (parentY << dz);
-    const srcSize = 256 / scale;
+    const srcSize = TILE_SIZE / scale;
     const srcX = localX * srcSize;
     const srcY = localY * srcSize;
 
-    return this._getParentImage(parentX, parentY).then((parentImage) => {
-      if (!parentImage) return this._flatImage();
+    const parentImage = await this._getParentImage(parentX, parentY);
+    if (!parentImage) return this._flatImage();
 
-      // Extract sub-region from parent and upscale to 256x256
-      const size = 256;
-      const srcCanvas = document.createElement('canvas');
-      srcCanvas.width = size;
-      srcCanvas.height = size;
-      const srcCtx = srcCanvas.getContext('2d');
-      srcCtx.drawImage(parentImage, 0, 0, size, size);
-      const srcData = srcCtx.getImageData(srcX, srcY, srcSize, srcSize);
+    // Extract sub-region from parent and upscale to TILE_SIZE x TILE_SIZE
+    const size = TILE_SIZE;
+    const srcCanvas = document.createElement('canvas');
+    srcCanvas.width = size;
+    srcCanvas.height = size;
+    const srcCtx = srcCanvas.getContext('2d');
+    srcCtx.drawImage(parentImage, 0, 0, size, size);
+    const srcData = srcCtx.getImageData(srcX, srcY, srcSize, srcSize);
 
-      // Upscale with bilinear interpolation, output stays Terrarium-encoded
-      return this._upsampleTerrariumTile(srcData, srcSize);
-    });
+    // Upscale with bilinear interpolation, output stays Terrarium-encoded
+    return this._upsampleTerrariumTile(srcData, srcSize);
   }
 
   /**
@@ -96,7 +95,7 @@ export default class TerrariumProvider extends MapProvider {
    * Upsample a sub-region with bilinear interpolation, outputting Terrarium-encoded pixels.
    */
   _upsampleTerrariumTile(srcData, srcSize) {
-    const size = 256;
+    const size = TILE_SIZE;
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
@@ -108,8 +107,8 @@ export default class TerrariumProvider extends MapProvider {
     for (let dy = 0; dy < size; dy++) {
       for (let dx = 0; dx < size; dx++) {
         // Map destination pixel to source position
-        const sx = (dx + 0.5) * srcSize / size - 0.5;
-        const sy = (dy + 0.5) * srcSize / size - 0.5;
+        const sx = ((dx + 0.5) * srcSize) / size - 0.5;
+        const sy = ((dy + 0.5) * srcSize) / size - 0.5;
         const x0 = Math.max(0, Math.floor(sx));
         const y0 = Math.max(0, Math.floor(sy));
         const x1 = Math.min(srcSize - 1, x0 + 1);
@@ -124,16 +123,15 @@ export default class TerrariumProvider extends MapProvider {
         const h11 = this._decodeTerrariumAt(src, y1 * srcSize + x1);
 
         // Bilinear interpolation
-        const h = h00 * (1 - fx) * (1 - fy) + h10 * fx * (1 - fy)
-                + h01 * (1 - fx) * fy + h11 * fx * fy;
+        const h = h00 * (1 - fx) * (1 - fy) + h10 * fx * (1 - fy) + h01 * (1 - fx) * fy + h11 * fx * fy;
 
         // Re-encode as Terrarium: R*256 + G + B/256 - 32768 = h
         // → R*256 + G + B/256 = h + 32768
         const hClamped = Math.max(0, h + 32768);
         const p = (dy * size + dx) * 4;
-        out[p]     = Math.floor(hClamped / 256) & 0xFF;       // R
-        out[p + 1] = Math.floor(hClamped) & 0xFF;              // G
-        out[p + 2] = Math.floor((hClamped % 1) * 256) & 0xFF;  // B
+        out[p] = Math.floor(hClamped / 256) & 0xff; // R
+        out[p + 1] = Math.floor(hClamped) & 0xff; // G
+        out[p + 2] = Math.floor((hClamped % 1) * 256) & 0xff; // B
         out[p + 3] = 255;
       }
     }
@@ -159,8 +157,8 @@ export default class TerrariumProvider extends MapProvider {
     const imageData = ctx.createImageData(1, 1);
     const pixels = imageData.data;
     pixels[0] = 128; // R
-    pixels[1] = 0;   // G
-    pixels[2] = 0;   // B
+    pixels[1] = 0; // G
+    pixels[2] = 0; // B
     pixels[3] = 255;
     ctx.putImageData(imageData, 0, 0);
     return canvas;

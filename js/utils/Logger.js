@@ -33,10 +33,14 @@ function log(level, module, message, data) {
 
   // Console output
   const prefix = `[${entry.time}] [${level}] [${module}]`;
-  const consoleFn = level === 'ERROR' ? console.error
-    : level === 'WARN' ? console.warn
-    : level === 'DEBUG' ? console.debug
-    : console.log;
+  const consoleFn =
+    level === 'ERROR'
+      ? console.error
+      : level === 'WARN'
+        ? console.warn
+        : level === 'DEBUG'
+          ? console.debug
+          : console.log;
   if (data !== undefined) {
     consoleFn(prefix, message, data);
   } else {
@@ -59,12 +63,22 @@ function appendToPanel(entry) {
 }
 
 const Logger = {
-  debug(module, message, data) { log('DEBUG', module, message, data); },
-  info(module, message, data) { log('INFO', module, message, data); },
-  warn(module, message, data) { log('WARN', module, message, data); },
-  error(module, message, data) { log('ERROR', module, message, data); },
+  debug(module, message, data) {
+    log('DEBUG', module, message, data);
+  },
+  info(module, message, data) {
+    log('INFO', module, message, data);
+  },
+  warn(module, message, data) {
+    log('WARN', module, message, data);
+  },
+  error(module, message, data) {
+    log('ERROR', module, message, data);
+  },
 
-  getBuffer() { return buffer; },
+  getBuffer() {
+    return buffer;
+  },
 
   bindPanel(el) {
     panelEl = el;
@@ -93,7 +107,8 @@ const Logger = {
 
 onChange((key) => {
   if (key === 'showLogs') {
-    if (CONFIG.showLogs) Logger.show(); else Logger.hide();
+    if (CONFIG.showLogs) Logger.show();
+    else Logger.hide();
   }
 });
 

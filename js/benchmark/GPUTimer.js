@@ -36,7 +36,7 @@ export default class GPUTimer {
         this._gl = renderer.getContext();
         this._ext = this._gl.getExtension('EXT_disjoint_timer_query_webgl2');
         this._available = !!this._ext;
-      } catch (_) {
+      } catch {
         // getContext() may not return a WebGL2 context
       }
 
@@ -72,14 +72,18 @@ export default class GPUTimer {
   endFrame() {
     if (this._isWebGPU) {
       if (this._hasTimestampQuery) {
-        // Resolve native GPU timestamps asynchronously
-        this._renderer.resolveTimestampsAsync('render').then((durationMs) => {
-          if (durationMs !== undefined && durationMs !== null) {
-            this._lastGPUTimeMs = durationMs;
-          }
-        }).catch(() => {
-          // Silently ignore — timestamp may not be available on every frame
-        });
+        // Intentional fire-and-forget: GPU timestamp resolves asynchronously
+        // and result is consumed on next frame via getLastGPUTimeMs()
+        this._renderer
+          .resolveTimestampsAsync('render')
+          .then((durationMs) => {
+            if (durationMs !== undefined && durationMs !== null) {
+              this._lastGPUTimeMs = durationMs;
+            }
+          })
+          .catch(() => {
+            // Silently ignore — timestamp may not be available on every frame
+          });
       } else {
         this._lastGPUTimeMs = performance.now() - this._cpuRenderStart;
       }

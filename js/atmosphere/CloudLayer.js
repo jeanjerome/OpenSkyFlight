@@ -10,7 +10,7 @@ function generateNoiseTexture(size) {
 
   // Simple hash-based noise matching the original shader
   function hash(x, y) {
-    return ((Math.sin(x * 127.1 + y * 311.7) * 43758.5453123) % 1 + 1) % 1;
+    return (((Math.sin(x * 127.1 + y * 311.7) * 43758.5453123) % 1) + 1) % 1;
   }
 
   function noise(px, py) {

@@ -4,20 +4,20 @@ import FlightPlan from './FlightPlan.js';
 
 // Reproduced from the old CameraPath segments
 const FLIGHT_SEGMENTS = [
-  { duration: 30, yawRate: 0,      pitchBias: 0 },
-  { duration: 25, yawRate: 0.025,  pitchBias: 0 },
-  { duration: 20, yawRate: 0,      pitchBias: 0 },
-  { duration: 15, yawRate: 0,      pitchBias: 0.04 },
-  { duration: 30, yawRate: -0.03,  pitchBias: 0 },
-  { duration: 20, yawRate: 0,      pitchBias: -0.03 },
-  { duration: 25, yawRate: 0,      pitchBias: 0 },
-  { duration: 20, yawRate: 0.04,   pitchBias: 0 },
-  { duration: 15, yawRate: 0,      pitchBias: 0.04 },
-  { duration: 20, yawRate: 0,      pitchBias: 0 },
+  { duration: 30, yawRate: 0, pitchBias: 0 },
+  { duration: 25, yawRate: 0.025, pitchBias: 0 },
+  { duration: 20, yawRate: 0, pitchBias: 0 },
+  { duration: 15, yawRate: 0, pitchBias: 0.04 },
+  { duration: 30, yawRate: -0.03, pitchBias: 0 },
+  { duration: 20, yawRate: 0, pitchBias: -0.03 },
+  { duration: 25, yawRate: 0, pitchBias: 0 },
+  { duration: 20, yawRate: 0.04, pitchBias: 0 },
+  { duration: 15, yawRate: 0, pitchBias: 0.04 },
+  { duration: 20, yawRate: 0, pitchBias: 0 },
   { duration: 25, yawRate: -0.025, pitchBias: 0 },
-  { duration: 15, yawRate: 0,      pitchBias: -0.03 },
-  { duration: 20, yawRate: 0,      pitchBias: 0 },
-  { duration: 20, yawRate: 0.035,  pitchBias: 0 },
+  { duration: 15, yawRate: 0, pitchBias: -0.03 },
+  { duration: 20, yawRate: 0, pitchBias: 0 },
+  { duration: 20, yawRate: 0.035, pitchBias: 0 },
 ];
 
 export function createDefaultFlightPlan(camera) {

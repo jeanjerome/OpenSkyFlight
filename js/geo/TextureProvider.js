@@ -16,7 +16,7 @@ export default class TextureProvider {
   setRenderer(renderer) {
     try {
       this._maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
-    } catch (_) {
+    } catch {
       this._maxAnisotropy = 16; // sensible default when capabilities API differs
     }
     Logger.debug('Texture', `Max anisotropy: ${this._maxAnisotropy}`);
@@ -65,7 +65,11 @@ export default class TextureProvider {
   }
 
   clearCache() {
-    for (const tex of this._cache.values()) tex.dispose();
+    // Defer texture disposal to let WebGPU command buffer finish
+    const textures = [...this._cache.values()];
+    setTimeout(() => {
+      for (const tex of textures) tex.dispose();
+    }, 0);
     this._cache.clear();
   }
 }

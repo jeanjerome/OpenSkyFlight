@@ -2,9 +2,13 @@ import * as THREE from 'three';
 import { CONFIG, update, onChange } from '../utils/config.js';
 import { UnitsUtils } from 'geo-three';
 import Logger from '../utils/Logger.js';
-
-const TILE_SIZE = 256;
-const GRID = 5; // 5x5 tile grid
+import {
+  TILE_SIZE,
+  MINIMAP_GRID as GRID,
+  MINIMAP_CACHE_LIMIT,
+  MINIMAP_UPDATE_INTERVAL,
+  MINIMAP_REDRAW_DEBOUNCE,
+} from '../constants/terrain.js';
 
 export default class Minimap {
   constructor(canvas, geoTerrainManager) {
@@ -45,14 +49,18 @@ export default class Minimap {
       update('minimapZoom', Math.max(CONFIG.minimapZoom - 1, 3));
     });
 
-    this.container.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      if (e.deltaY < 0) {
-        update('minimapZoom', Math.min(CONFIG.minimapZoom + 1, 18));
-      } else {
-        update('minimapZoom', Math.max(CONFIG.minimapZoom - 1, 3));
-      }
-    }, { passive: false });
+    this.container.addEventListener(
+      'wheel',
+      (e) => {
+        e.preventDefault();
+        if (e.deltaY < 0) {
+          update('minimapZoom', Math.min(CONFIG.minimapZoom + 1, 18));
+        } else {
+          update('minimapZoom', Math.max(CONFIG.minimapZoom - 1, 3));
+        }
+      },
+      { passive: false },
+    );
   }
 
   _applyVisibility() {
@@ -67,7 +75,7 @@ export default class Minimap {
 
     // Sprint 3.2: only run every 3 frames (~20Hz at 60fps)
     this._frameCounter++;
-    if (this._frameCounter % 3 !== 0) return;
+    if (this._frameCounter % MINIMAP_UPDATE_INTERVAL !== 0) return;
 
     const mapView = this.geo.mapView;
 
@@ -91,11 +99,13 @@ export default class Minimap {
 
     // Only redraw when something actually changed
     const p = this._drawParams;
-    if (p &&
-        Math.round(latitude * 1e5) === Math.round(p.lat * 1e5) &&
-        Math.round(longitude * 1e5) === Math.round(p.lon * 1e5) &&
-        zoom === p.zoom &&
-        Math.round(yaw * 100) === Math.round(p.yaw * 100)) {
+    if (
+      p &&
+      Math.round(latitude * 1e5) === Math.round(p.lat * 1e5) &&
+      Math.round(longitude * 1e5) === Math.round(p.lon * 1e5) &&
+      zoom === p.zoom &&
+      Math.round(yaw * 100) === Math.round(p.yaw * 100)
+    ) {
       return;
     }
 
@@ -114,7 +124,7 @@ export default class Minimap {
 
     // Fractional tile coordinates
     const xTile = ((lon + 180) / 360) * n;
-    const latRad = lat * Math.PI / 180;
+    const latRad = (lat * Math.PI) / 180;
     const yTile = ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n;
 
     const centerTileX = Math.floor(xTile);
@@ -205,7 +215,7 @@ export default class Minimap {
 
     const n = 1 << zoom;
     const xTile = ((longitude + 180) / 360) * n;
-    const latRad = latitude * Math.PI / 180;
+    const latRad = (latitude * Math.PI) / 180;
     const yTile = ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n;
 
     const px = offsetX + (xTile - centerTileX) * TILE_SIZE;
@@ -288,7 +298,7 @@ export default class Minimap {
     this._redrawTimer = setTimeout(() => {
       this._redrawTimer = null;
       this._draw();
-    }, 100);
+    }, MINIMAP_REDRAW_DEBOUNCE);
   }
 
   _getTile(z, x, y) {
@@ -303,7 +313,7 @@ export default class Minimap {
     img.onload = () => {
       this._tileCache.set(key, img);
       this._pendingLoads.delete(key);
-      if (this._tileCache.size > 200) {
+      if (this._tileCache.size > MINIMAP_CACHE_LIMIT) {
         const first = this._tileCache.keys().next().value;
         this._tileCache.delete(first);
       }

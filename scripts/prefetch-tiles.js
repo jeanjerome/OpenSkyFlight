@@ -9,11 +9,11 @@ import { parseArgs } from 'node:util';
 
 const { values } = parseArgs({
   options: {
-    lat:    { type: 'string' },
-    lon:    { type: 'string' },
-    zoom:   { type: 'string', default: '12' },
+    lat: { type: 'string' },
+    lon: { type: 'string' },
+    zoom: { type: 'string', default: '12' },
     radius: { type: 'string', default: '12' },
-    delay:  { type: 'string', default: '100' },
+    delay: { type: 'string', default: '100' },
   },
 });
 
@@ -24,7 +24,9 @@ const radius = parseInt(values.radius, 10);
 const delay = parseInt(values.delay, 10);
 
 if (isNaN(lat) || isNaN(lon)) {
-  console.error('Usage: node scripts/prefetch-tiles.js --lat <lat> --lon <lon> [--zoom 12] [--radius 12] [--delay 100]');
+  console.error(
+    'Usage: node scripts/prefetch-tiles.js --lat <lat> --lon <lon> [--zoom 12] [--radius 12] [--delay 100]',
+  );
   process.exit(1);
 }
 
@@ -32,14 +34,14 @@ if (isNaN(lat) || isNaN(lon)) {
 function latLonToTile(lat, lon, zoom) {
   const n = 1 << zoom;
   const x = Math.floor(((lon + 180) / 360) * n);
-  const latRad = lat * Math.PI / 180;
+  const latRad = (lat * Math.PI) / 180;
   const y = Math.floor(((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n);
   return { x, y };
 }
 
 const center = latLonToTile(lat, lon, zoom);
 console.log(`Center tile: ${center.x}, ${center.y} (zoom ${zoom})`);
-console.log(`Radius: ${radius} → grid ${(2 * radius + 1)}×${(2 * radius + 1)} = ${(2 * radius + 1) ** 2} tiles per source`);
+console.log(`Radius: ${radius} → grid ${2 * radius + 1}×${2 * radius + 1} = ${(2 * radius + 1) ** 2} tiles per source`);
 
 const sources = [
   {
@@ -55,14 +57,15 @@ const sources = [
   {
     name: 'satellite',
     ext: 'jpg',
-    urlTemplate: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,
+    urlTemplate: (z, x, y) =>
+      `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,
   },
 ];
 
 const cacheDir = join(process.cwd(), 'cache');
 
 function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function downloadTile(source, z, x, y) {
@@ -124,7 +127,7 @@ async function main() {
   console.log('\nDone!');
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error(err);
   process.exit(1);
 });

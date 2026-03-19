@@ -355,24 +355,27 @@ export abstract class MapNode extends Mesh
 
 		const self = this as Mesh;
 
-		try 
+		try
 		{
 			const material = self.material as Material;
+			// @ts-ignore
+			const map = material.map;
 			material.dispose();
 
-			// @ts-ignore
-			if (material.map && material.map !== MapNode.defaultTexture)
+			// Defer texture disposal to let the WebGPU command buffer finish
+			if (map && map !== MapNode.defaultTexture)
 			{
-				// @ts-ignore
-				material.map.dispose();
+				setTimeout(() => { map.dispose(); }, 0);
 			}
 		}
 		catch (e) {}
 		
-		try 
+		try
 		{
-			self.geometry.dispose();
+			const geo = self.geometry;
+			// Defer geometry disposal to let WebGPU command buffer finish
+			setTimeout(() => { geo.dispose(); }, 0);
 		}
-		catch (e) {}	
+		catch (e) {}
 	}
 }
