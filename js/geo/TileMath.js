@@ -120,7 +120,7 @@ export function buildLodRings(camTile, nearZoom, minZoom, _unused, baseZoom, alt
     }
   }
 
-  // Group by zoom (high → low) to match the ring format expected by ChunkManager
+  // Group by zoom (high → low)
   const byZoom = {};
   for (const t of tileList) {
     (byZoom[t.zoom] ||= []).push({ tx: t.tx, ty: t.ty });

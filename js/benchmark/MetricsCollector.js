@@ -246,11 +246,7 @@ export default class MetricsCollector {
 
   getConfigSnapshot() {
     return {
-      terrainMode: CONFIG.terrainMode,
-      chunkResolution: CONFIG.chunkResolution,
-      viewDistance: CONFIG.viewDistance,
       hiResMode: CONFIG.hiResMode,
-      wireframe: CONFIG.wireframe,
       zoom: CONFIG.zoom,
       fogEnabled: CONFIG.fogEnabled,
       showClouds: CONFIG.showClouds,

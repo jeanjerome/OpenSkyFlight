@@ -1,20 +1,7 @@
 /**
  * @typedef {Object} AppConfig
  *
- * Procedural terrain:
- * @property {number}  chunkSize              - Chunk size in world units (default: 256)
- * @property {number}  chunkResolution        - Vertices per chunk side, range [16..128] (default: 64)
- * @property {number}  viewDistance            - Chunk radius around camera, range [2..25] (default: 12)
- * @property {number}  maxHeight              - Maximum terrain height, range [100..2400] (default: 960)
- * @property {number}  octaves                - Noise octave count, range [1..8] (default: 6)
- * @property {number}  lacunarity             - Frequency multiplier per octave (default: 2.0)
- * @property {number}  persistence            - Amplitude multiplier per octave (default: 0.5)
- * @property {number}  redistribution         - Elevation curve power (default: 1.8)
- * @property {string}  seed                   - Noise seed string (default: 'landscape-3d')
- * @property {number}  waterLevel             - Water plane height as fraction of maxHeight (default: 0.18)
- *
  * Real-world terrain:
- * @property {string}  terrainMode            - 'procedural' | 'realworld' (default: 'realworld')
  * @property {number}  lat                    - Latitude in decimal degrees (default: 45.8326 — Mont Blanc)
  * @property {number}  lon                    - Longitude in decimal degrees (default: 6.8652)
  * @property {number}  zoom                   - Tile zoom level (default: 15)
@@ -32,8 +19,6 @@
  *
  * Rendering:
  * @property {number}  maxPixelRatio          - Maximum device pixel ratio (default: 2)
- * @property {number}  maxChunkRequestsPerFrame - Chunk requests per frame (default: 4)
- * @property {boolean} wireframe              - Enable wireframe rendering (default: true)
  *
  * Atmosphere:
  * @property {number}  sunElevation           - Sun elevation angle in degrees, range [0..90] (default: 80)
@@ -56,10 +41,6 @@
 
 /** Validation rules: { min, max } for numeric clamping */
 const CONFIG_VALIDATION = {
-  chunkResolution: { min: 16, max: 128 },
-  viewDistance: { min: 2, max: 25 },
-  maxHeight: { min: 100, max: 2400 },
-  octaves: { min: 1, max: 8 },
   cameraSpeed: { min: 1, max: 4000 },
   sunElevation: { min: 0, max: 90 },
   sunAzimuth: { min: 0, max: 360 },
@@ -74,23 +55,10 @@ const CONFIG_VALIDATION = {
 
 /** @type {AppConfig} */
 const CONFIG = {
-  chunkSize: 256,
-  chunkResolution: 64,
-  viewDistance: 12,
-  maxHeight: 960,
-  octaves: 6,
-  lacunarity: 2.0,
-  persistence: 0.5,
-  redistribution: 1.8,
-  seed: 'landscape-3d',
   cameraSpeed: 800,
   cameraMode: 'chase',
   mouseSensitivity: 0.002,
   maxPixelRatio: 2,
-  maxChunkRequestsPerFrame: 4,
-  wireframe: true,
-  waterLevel: 0.18,
-  terrainMode: 'realworld', // 'procedural' | 'realworld'
   lat: 45.8326, // Mont Blanc default
   lon: 6.8652,
   zoom: 15,

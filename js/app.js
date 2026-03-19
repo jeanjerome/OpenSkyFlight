@@ -3,18 +3,13 @@ import { CONFIG, onChange, update } from './utils/config.js';
 import {
   CLOUD_RENDER_ORDER,
   REALWORLD_FAR_PLANE,
-  PROCEDURAL_MIN_FAR,
-  PROCEDURAL_NEAR_FAR_RATIO,
   CLIP_PLANE_EPSILON,
-  PROCEDURAL_FAR_MULTIPLIER,
 } from './constants/rendering.js';
-import { REALWORLD_START_ALTITUDE, PROCEDURAL_START_ALTITUDE, DEFAULT_NEAR } from './constants/camera.js';
+import { REALWORLD_START_ALTITUDE, DEFAULT_NEAR } from './constants/camera.js';
 import { MAX_DELTA_TIME } from './constants/physics.js';
 import { createRenderer, createScene, createCamera, setupResizeHandler } from './scene/SceneSetup.js';
-import WaterPlane from './scene/WaterPlane.js';
 import AdaptiveQualityManager from './rendering/AdaptiveQualityManager.js';
 import InputManager from './input/InputManager.js';
-import ChunkManager from './terrain/ChunkManager.js';
 import GeoTerrainManager from './terrain/GeoTerrainManager.js';
 import FPSController from './camera/FPSController.js';
 import ControlPanel from './ui/ControlPanel.js';
@@ -43,22 +38,9 @@ async function initApp() {
   const cloudLayer = new CloudLayer(scene);
   cloudLayer.mesh.renderOrder = CLOUD_RENDER_ORDER;
 
-  // --- Water ---
-  const waterPlane = new WaterPlane(scene);
-
   // --- Terrain ---
-  const chunkManager = new ChunkManager(scene);
-  chunkManager.textureProvider.setRenderer(renderer);
   const geoTerrainManager = new GeoTerrainManager(scene, renderer);
-
-  function getActiveManager() {
-    return CONFIG.terrainMode === 'realworld' ? geoTerrainManager : chunkManager;
-  }
-
-  if (CONFIG.terrainMode === 'realworld') {
-    geoTerrainManager.init(CONFIG.lat, CONFIG.lon);
-    camera.position.set(0, REALWORLD_START_ALTITUDE, 0);
-  }
+  geoTerrainManager.init(CONFIG.lat, CONFIG.lon);
 
   // --- Controllers ---
   const fpsController = new FPSController(camera, renderer.domElement);
@@ -75,8 +57,6 @@ async function initApp() {
   const adaptiveQuality = new AdaptiveQualityManager(renderer);
 
   // --- Ground elevation ---
-  const groundRaycaster = new THREE.Raycaster();
-  const downDirection = new THREE.Vector3(0, -1, 0);
   let groundElevation = 0;
 
   // --- Stats.js ---
@@ -99,13 +79,8 @@ async function initApp() {
 
   // --- Control Panel ---
   function regenerate() {
-    if (CONFIG.terrainMode === 'realworld') {
-      geoTerrainManager.reinit();
-      fpsController.position.set(0, REALWORLD_START_ALTITUDE, 0);
-    } else {
-      chunkManager.reinit();
-    }
-    waterPlane.recreate();
+    geoTerrainManager.reinit();
+    fpsController.position.set(0, REALWORLD_START_ALTITUDE, 0);
   }
   // Side-effect: binds DOM controls to CONFIG
   new ControlPanel(regenerate);
@@ -120,41 +95,21 @@ async function initApp() {
 
   // --- Config listeners ---
   onChange((key, value) => {
-    if (key === 'maxHeight') waterPlane.updateWaterLevel();
-    if (key === 'wireframe') waterPlane.wireframe = CONFIG.wireframe;
     if (key === 'showHud') hudCanvas.style.display = value ? 'block' : 'none';
-    if (key === 'terrainMode') {
-      waterPlane.visible = CONFIG.terrainMode === 'procedural';
-      if (CONFIG.terrainMode === 'realworld') {
-        geoTerrainManager.init(CONFIG.lat, CONFIG.lon);
-        fpsController.position.set(0, REALWORLD_START_ALTITUDE, 0);
-      } else {
-        geoTerrainManager.dispose();
-        fpsController.position.set(0, PROCEDURAL_START_ALTITUDE, 0);
-      }
-    }
   });
 
   // --- Input bindings ---
   const input = new InputManager();
 
-  input.onWhen(
-    'KeyX',
-    () => CONFIG.terrainMode === 'realworld',
-    () => {
-      const active = geoTerrainManager.toggleDebug();
-      Logger.info('App', `Debug tiles ${active ? 'enabled' : 'disabled'}`);
-    },
-  );
+  input.on('KeyX', () => {
+    const active = geoTerrainManager.toggleDebug();
+    Logger.info('App', `Debug tiles ${active ? 'enabled' : 'disabled'}`);
+  });
 
-  input.onWhen(
-    'KeyH',
-    () => CONFIG.terrainMode === 'realworld',
-    () => {
-      const active = geoTerrainManager.toggleHiRes();
-      Logger.info('App', `Hi-res mode (zoom 18) ${active ? 'enabled' : 'disabled'}`);
-    },
-  );
+  input.on('KeyH', () => {
+    const active = geoTerrainManager.toggleHiRes();
+    Logger.info('App', `Hi-res mode (zoom 18) ${active ? 'enabled' : 'disabled'}`);
+  });
 
   input.on('KeyV', () => {
     const next = CONFIG.cameraMode === 'chase' ? 'cockpit' : 'chase';
@@ -339,32 +294,17 @@ async function initApp() {
 
     // --- Terrain phase ---
     if (timer) timer.begin('terrain');
-    getActiveManager().update(camera.position);
+    geoTerrainManager.update(camera.position);
     if (timer) timer.end('terrain');
 
-    if (CONFIG.terrainMode === 'realworld') {
-      const farNeeded = REALWORLD_FAR_PLANE;
-      if (Math.abs(camera.far - farNeeded) > CLIP_PLANE_EPSILON) {
-        camera.far = farNeeded;
-        camera.near = DEFAULT_NEAR;
-        camera.updateProjectionMatrix();
-        Logger.debug('App', 'Realworld clip planes updated', { near: DEFAULT_NEAR, far: farNeeded });
-      }
-      groundElevation = geoTerrainManager.getGroundElevation(camera.position.x, camera.position.z);
-    } else {
-      const farNeeded = chunkManager._effectiveViewDistance * CONFIG.chunkSize * PROCEDURAL_FAR_MULTIPLIER;
-      if (Math.abs(camera.far - farNeeded) > CLIP_PLANE_EPSILON) {
-        camera.far = Math.max(PROCEDURAL_MIN_FAR, farNeeded);
-        camera.near = Math.max(DEFAULT_NEAR, farNeeded * PROCEDURAL_NEAR_FAR_RATIO);
-        camera.updateProjectionMatrix();
-        Logger.debug('App', 'Clip planes updated', { near: camera.near, far: camera.far });
-      }
-      groundRaycaster.set(camera.position, downDirection);
-      const hits = groundRaycaster.intersectObjects(chunkManager.getMeshes(), false);
-      groundElevation = hits.length > 0 ? hits[0].point.y : 0;
+    const farNeeded = REALWORLD_FAR_PLANE;
+    if (Math.abs(camera.far - farNeeded) > CLIP_PLANE_EPSILON) {
+      camera.far = farNeeded;
+      camera.near = DEFAULT_NEAR;
+      camera.updateProjectionMatrix();
+      Logger.debug('App', 'Realworld clip planes updated', { near: DEFAULT_NEAR, far: farNeeded });
     }
-
-    waterPlane.followCamera(camera.position);
+    groundElevation = geoTerrainManager.getGroundElevation(camera.position.x, camera.position.z);
 
     // --- Render phase ---
     if (timer) timer.begin('render');

@@ -79,16 +79,13 @@ export default class CloudLayer {
       if (key === 'cloudOpacity') {
         this._uOpacity.value = CONFIG.cloudOpacity;
       }
-      if (key === 'terrainMode') {
-        this._rebuildGeometry();
-      }
     });
 
     Logger.info('CloudLayer', 'Cloud layer initialized (TSL + pre-computed noise texture)');
   }
 
   _buildMesh() {
-    const size = CONFIG.terrainMode === 'realworld' ? 80000 : 8000;
+    const size = 80000;
     const geo = new THREE.PlaneGeometry(size, size, 1, 1);
 
     const uvOffset = uv().add(this._uTime.mul(vec2(0.0025, 0.00125)));
@@ -108,16 +105,6 @@ export default class CloudLayer {
     this.mesh.visible = CONFIG.showClouds;
     this.mesh.renderOrder = 100;
     this.scene.add(this.mesh);
-  }
-
-  _rebuildGeometry() {
-    if (this.mesh) {
-      this.scene.remove(this.mesh);
-      this.mesh.geometry.dispose();
-      this.mesh.material.dispose();
-    }
-    this._buildMesh();
-    Logger.debug('CloudLayer', 'Geometry rebuilt for mode', CONFIG.terrainMode);
   }
 
   update(dt, cameraPosition, camera) {

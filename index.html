@@ -66,16 +66,6 @@
         <input type="range" id="cameraSpeed" />
       </div>
 
-      <div class="ctrl-group" id="sim-viewdistance-group">
-        <label>VIEW DISTANCE <span id="viewDistance-val"></span></label>
-        <input type="range" id="viewDistance" />
-      </div>
-
-      <div class="ctrl-group checkbox-group" id="sim-wireframe-group">
-        <input type="checkbox" id="wireframe" checked />
-        <label for="wireframe">WIREFRAME</label>
-      </div>
-
       <div class="ctrl-group checkbox-group">
         <input type="checkbox" id="showHud" checked />
         <label for="showHud">HUD OVERLAY</label>
@@ -104,15 +94,7 @@
       <!-- ── CONFIGURATION ── -->
       <div class="mfd-section-label">CONFIGURATION</div>
 
-      <div class="ctrl-group">
-        <label>MODE</label>
-        <select id="terrainMode">
-          <option value="procedural">Procedural</option>
-          <option value="realworld">Real world</option>
-        </select>
-      </div>
-
-      <div id="realworld-controls" style="display:none">
+      <div id="realworld-controls">
         <div class="ctrl-group">
           <label>SEARCH LOCATION</label>
           <div class="search-row">
@@ -142,26 +124,6 @@
         <button id="loadTerrain" class="mfd-btn">LOAD TERRAIN</button>
         <hr class="section-separator" />
       </div>
-
-      <div id="procedural-controls">
-        <div class="ctrl-group">
-          <label>RESOLUTION <span id="resolution-val"></span></label>
-          <input type="range" id="resolution" />
-        </div>
-        <div class="ctrl-group">
-          <label>MAX HEIGHT <span id="maxHeight-val"></span></label>
-          <input type="range" id="maxHeight" />
-        </div>
-        <div class="ctrl-group">
-          <label>OCTAVES <span id="octaves-val"></span></label>
-          <input type="range" id="octaves" />
-        </div>
-        <div class="ctrl-group">
-          <label>SEED</label>
-          <input type="text" id="seed" />
-        </div>
-        <button id="regenerate" class="mfd-btn">REGENERATE TERRAIN</button>
-      </div><!-- /procedural-controls -->
 
       <!-- ── ATMOSPHERE ── -->
       <div class="mfd-section-label">ATMOSPHERE</div>
