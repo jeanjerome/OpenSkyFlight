@@ -31,7 +31,7 @@ export default class Minimap {
     this._setupControls();
     this._applyVisibility();
     onChange((key) => {
-      if (key === 'showMinimap' || key === 'terrainMode') {
+      if (key === 'showMinimap') {
         this._applyVisibility();
       }
     });
@@ -64,13 +64,13 @@ export default class Minimap {
   }
 
   _applyVisibility() {
-    const visible = CONFIG.showMinimap && CONFIG.terrainMode === 'realworld';
+    const visible = CONFIG.showMinimap;
     this.container.style.display = visible ? 'flex' : 'none';
   }
 
   /** Called every frame from the animation loop. */
   update(camera) {
-    if (!CONFIG.showMinimap || CONFIG.terrainMode !== 'realworld') return;
+    if (!CONFIG.showMinimap) return;
     if (!this.geo.mapView) return;
 
     // Sprint 3.2: only run every 3 frames (~20Hz at 60fps)

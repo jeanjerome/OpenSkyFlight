@@ -9,11 +9,6 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 
 ## Features
 
-- **Dual terrain modes** — procedural (Simplex noise) or real-world (elevation tiles)
-
-| Procedural terrain | Real-world terrain |
-|---|---|
-| ![Procedural Simplex noise terrain](docs/screenshots/procedural.png) | ![Real-world elevation with Earth curvature](docs/screenshots/realworld.png) |
 - **Real-world elevation** — decoded from [AWS Terrarium](https://registry.opendata.aws/terrain-tiles/) PNG tiles on the GPU via TSL `positionNode`, with spherical Earth curvature
 - **Satellite & map textures** — ESRI World Imagery or OpenStreetMap raster overlay, switchable at runtime
 - **Hi-Res mode (zoom 18)** — press `H` to toggle upsampled elevation with zoom-18 satellite textures for sharper close-up detail
@@ -30,8 +25,6 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 | HUD instruments | MFD control panel | OSM minimap |
 |---|---|---|
 | ![HUD with compass, horizon, altimeter and speed](docs/screenshots/hud.png) | ![MFD cockpit-style control panel](docs/screenshots/mfd-panel.png) | ![OSM minimap with airplane marker](docs/screenshots/minimap.png) |
-- **Dynamic chunk loading** — spiral-ordered around camera, with frustum culling
-- **Web Worker** — terrain geometry built off the main thread (zero-copy ArrayBuffer transfer)
 - **Local tile cache** — transparent caching proxy, pre-download tiles for offline flight
 - **Atmospheric sky, clouds & fog** — procedural sky with configurable sun position, animated cloud layer, and exponential distance fog
 - **Dynamic resolution scaling** — adaptive pixel ratio based on frame time to maintain smooth performance
@@ -96,7 +89,7 @@ Available scripts:
 | `1`–`9` | Select flight plan from menu |
 | `Esc` | Release pointer lock / close menu |
 
-Use the right-side control panel to switch between **Procedural** and **Real-World** modes, adjust terrain parameters, and toggle wireframe or textures.
+Use the right-side control panel to search locations, load terrain, and toggle wireframe or textures.
 
 ## Building geo-three (dev only)
 
@@ -114,7 +107,7 @@ This produces `vendor/geo-three/geo-three.module.js`, which the app already impo
 
 ## Real-World Mode
 
-Switch to **Real-World** in the control panel, enter coordinates (or search a place name), then click **Load Terrain**. The app fetches elevation data from AWS Terrarium and optionally overlays satellite or OSM textures.
+Enter coordinates (or search a place name) in the control panel, then click **Load Terrain**. The app fetches elevation data from AWS Terrarium and optionally overlays satellite or OSM textures.
 
 Default location: **Mont Blanc** (45.8326°N, 6.8652°E).
 
@@ -127,8 +120,7 @@ Default location: **Mont Blanc** (45.8326°N, 6.8652°E).
 ## How It Works
 
 1. **Elevation** — Terrarium PNG tiles (AWS S3) are decoded into heightmaps on the GPU via a TSL `positionNode` shader (`R×256 + G + B/256 − 32768` meters)
-2. **Mesh generation** — A Web Worker builds terrain geometry from heightmaps, transferred back via zero-copy ArrayBuffers
-3. **LOD system** — `buildLodRings()` uses recursive quadtree subdivision: tiles near the camera are split into 4 children at higher zoom, distant tiles stay coarse
+2. **LOD system** — `buildLodRings()` uses recursive quadtree subdivision: tiles near the camera are split into 4 children at higher zoom, distant tiles stay coarse
 4. **Earth curvature** — Vertex positions are projected onto a sphere (`_projectOnSphere`), so distant terrain curves away naturally
 5. **Textures** — Satellite (ESRI) or OSM tiles are fetched on demand and applied as `CanvasTexture` to terrain meshes
 6. **Caching** — A Node.js proxy intercepts all `/tiles/` requests: serves from disk on hit, fetches upstream on miss, caches for next time
@@ -188,15 +180,9 @@ cache/
 │   ├── rendering/
 │   │   └── AdaptiveQualityManager.js Dynamic resolution scaling
 │   ├── scene/
-│   │   ├── SceneSetup.js          Renderer, scene, camera & lights factory
-│   │   └── WaterPlane.js          Animated water plane (procedural mode)
+│   │   └── SceneSetup.js          Renderer, scene, camera & lights factory
 │   ├── terrain/
-│   │   ├── ChunkManager.js        Chunk lifecycle, LOD dispatch
-│   │   ├── GeoTerrainManager.js   Real-world terrain via geo-three, hi-res toggle
-│   │   ├── GroundElevation.js     Ground elevation utility (both terrain modes)
-│   │   ├── TerrainChunk.js        Geometry & mesh for one chunk
-│   │   ├── NoiseGenerator.js      Simplex noise (fBm)
-│   │   └── terrainWorker.js       Web Worker for off-thread generation
+│   │   └── GeoTerrainManager.js   Real-world terrain via geo-three, hi-res toggle
 │   ├── geo/
 │   │   ├── TileMath.js            Slippy Map math, quadtree LOD, horizon calc
 │   │   ├── ElevationProvider.js   Terrarium tile fetch + decode
@@ -230,7 +216,6 @@ cache/
 
 - [Three.js](https://threejs.org/) v0.183 (WebGPU build) — 3D rendering with TSL shaders (loaded via CDN, no install)
 - [geo-three](https://github.com/tentone/geo-three) — geographic tile management and Mercator projection
-- Web Workers — off-thread terrain generation
 - Canvas 2D — HUD instrument overlay, hi-res badge, and minimap
 - [three/examples — Sky](https://threejs.org/examples/?q=sky#webgl_shaders_sky) — procedural atmospheric sky and sun
 - [AWS Terrarium Tiles](https://registry.opendata.aws/terrain-tiles/) — elevation data (zoom 0–15, upsampled to 18 in hi-res mode)

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../utils/config.js';
 import { CLEAR_COLOR, AMBIENT_INTENSITY, DIR_LIGHT_INTENSITY, DIR_LIGHT_POSITION } from '../constants/rendering.js';
-import { DEFAULT_FOV, DEFAULT_NEAR, DEFAULT_FAR, PROCEDURAL_START_ALTITUDE } from '../constants/camera.js';
+import { DEFAULT_FOV, DEFAULT_NEAR, DEFAULT_FAR, REALWORLD_START_ALTITUDE } from '../constants/camera.js';
 
 export async function createRenderer() {
   const renderer = new THREE.WebGPURenderer({
@@ -34,7 +34,7 @@ export function createCamera() {
     DEFAULT_NEAR,
     DEFAULT_FAR,
   );
-  camera.position.set(0, PROCEDURAL_START_ALTITUDE, 0);
+  camera.position.set(0, REALWORLD_START_ALTITUDE, 0);
   return camera;
 }
 

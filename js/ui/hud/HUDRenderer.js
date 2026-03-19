@@ -216,15 +216,9 @@ export default class HUDRenderer {
     const x = w / 2 + INSTRUMENT_OFFSET_X;
     const cy = h / 2;
 
-    let alt = altY;
-    let agl = altY - groundElevation;
-    let unit = '';
-
-    if (CONFIG.terrainMode === 'realworld') {
-      alt = altY;
-      agl = altY - groundElevation;
-      unit = 'm';
-    }
+    const alt = altY;
+    const agl = altY - groundElevation;
+    const unit = 'm';
 
     ctx.save();
     this._applyHudShadow(ctx);
@@ -253,7 +247,7 @@ export default class HUDRenderer {
 
     ctx.fillText(Math.round(alt), x + 12, cy);
 
-    const step = CONFIG.terrainMode === 'realworld' ? 100 : 50;
+    const step = 100;
     const pxPerUnit = INSTRUMENT_SCALE_HEIGHT / (step * 4);
     const baseAlt = Math.round(alt / step) * step;
 
@@ -275,11 +269,11 @@ export default class HUDRenderer {
 
     ctx.font = 'bold 12px Courier New';
     ctx.textAlign = 'left';
-    ctx.fillText('ALT' + (unit ? ' ' + unit : ''), x, cy - INSTRUMENT_SCALE_HEIGHT / 2 - 14);
+    ctx.fillText('ALT m', x, cy - INSTRUMENT_SCALE_HEIGHT / 2 - 14);
 
     ctx.font = 'bold 13px Courier New';
     ctx.fillText(
-      'AGL ' + Math.round(Math.max(0, agl)) + (unit ? ' ' + unit : ''),
+      'AGL ' + Math.round(Math.max(0, agl)) + ' m',
       x - 10,
       cy + INSTRUMENT_SCALE_HEIGHT / 2 + 20,
     );

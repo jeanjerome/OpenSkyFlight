@@ -10,28 +10,15 @@ export default class ControlPanel {
     this._hideTimeout = null;
 
     this._setupHoverBehavior();
-    this._setupTerrainMode();
-    this._setupSlider('resolution', 'chunkResolution', 16, 128, 1);
-    this._setupSlider('viewDistance', 'viewDistance', 2, 25, 1);
-    this._setupSlider('maxHeight', 'maxHeight', 100, 2400, 40);
-    this._setupSlider('octaves', 'octaves', 1, 8, 1);
+    this._setupRealworldControls();
     this._setupSpeedSlider();
     this._setupAtmosphere();
 
     this._bindCheckbox('showHud', 'showHud');
     this._bindCheckbox('showMinimap', 'showMinimap');
     this._bindCheckbox('showLogs', 'showLogs');
-    this._bindCheckbox('wireframe', 'wireframe');
 
     this._setupLogLevel();
-
-    const seedInput = document.getElementById('seed');
-    seedInput.value = CONFIG.seed;
-    const regenBtn = document.getElementById('regenerate');
-    regenBtn.addEventListener('click', () => {
-      update('seed', seedInput.value || 'landscape-3d');
-      if (this.onRegenerate) this.onRegenerate();
-    });
   }
 
   _bindCheckbox(elementId, configKey) {
@@ -71,30 +58,7 @@ export default class ControlPanel {
     this.panel.addEventListener('mouseleave', scheduleHide);
   }
 
-  _setupTerrainMode() {
-    const modeSelect = document.getElementById('terrainMode');
-    const realworldControls = document.getElementById('realworld-controls');
-    const proceduralControls = document.getElementById('procedural-controls');
-    const viewDistGroup = document.getElementById('sim-viewdistance-group');
-    const wireframeGroup = document.getElementById('sim-wireframe-group');
-
-    modeSelect.value = CONFIG.terrainMode;
-
-    const togglePanels = (mode) => {
-      realworldControls.style.display = mode === 'realworld' ? 'block' : 'none';
-      proceduralControls.style.display = mode === 'procedural' ? 'block' : 'none';
-      viewDistGroup.style.display = mode === 'procedural' ? '' : 'none';
-      wireframeGroup.style.display = mode === 'procedural' ? '' : 'none';
-    };
-    togglePanels(CONFIG.terrainMode);
-
-    modeSelect.addEventListener('change', () => {
-      const mode = modeSelect.value;
-      update('terrainMode', mode);
-      togglePanels(mode);
-      if (this.onRegenerate) this.onRegenerate();
-    });
-
+  _setupRealworldControls() {
     // --- Lat/Lon ---
     const latInput = document.getElementById('lat');
     const lonInput = document.getElementById('lon');
@@ -198,9 +162,6 @@ export default class ControlPanel {
       const v = Number(slider.value);
       display.textContent = v;
       update(configKey, v);
-      if (['chunkResolution', 'octaves', 'maxHeight'].includes(configKey)) {
-        if (this.onRegenerate) this.onRegenerate();
-      }
     });
   }
 }

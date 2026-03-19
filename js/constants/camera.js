@@ -7,9 +7,6 @@ export const DEFAULT_NEAR = 1;
 /** Default far plane */
 export const DEFAULT_FAR = 100000;
 
-/** Starting altitude in procedural mode */
-export const PROCEDURAL_START_ALTITUDE = 640;
-
 /** Starting altitude in realworld mode (meters) */
 export const REALWORLD_START_ALTITUDE = 6000;
 

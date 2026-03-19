@@ -12,7 +12,7 @@ export default class GeoTerrainManager {
     this.textureProvider = null;
     this.heightProvider = null;
     this.elevationProvider = new ElevationProvider();
-    this._effectiveViewDistance = CONFIG.viewDistance;
+    this._effectiveViewDistance = 0;
     this._centerCoords = null; // Mercator coords of center lat/lon
     this._wireframeMode = !CONFIG.useOsmTexture;
     this._debugMode = false;

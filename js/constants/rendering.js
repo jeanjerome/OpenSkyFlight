@@ -4,20 +4,8 @@ export const CLEAR_COLOR = 0x0a0a1a;
 /** Maximum concurrent fetch requests to avoid ERR_INSUFFICIENT_RESOURCES */
 export const MAX_CONCURRENT_FETCHES = 6;
 
-/** Render order for water plane (below clouds) */
-export const WATER_RENDER_ORDER = 99;
-
 /** Render order for cloud layer (above water) */
 export const CLOUD_RENDER_ORDER = 100;
-
-/** Water plane geometry size (world units) */
-export const WATER_PLANE_SIZE = 20000;
-
-/** Water plane color */
-export const WATER_COLOR = 0x1a3a5c;
-
-/** Water plane opacity */
-export const WATER_OPACITY = 0.4;
 
 // --- Adaptive quality (dynamic resolution scaling) ---
 
@@ -50,17 +38,8 @@ export const ADAPTIVE_RATIO_EPSILON = 0.01;
 /** Far plane for realworld mode (geo-three handles LOD) */
 export const REALWORLD_FAR_PLANE = 1e7;
 
-/** Minimum far plane for procedural mode */
-export const PROCEDURAL_MIN_FAR = 5000;
-
-/** Near/far ratio for procedural mode */
-export const PROCEDURAL_NEAR_FAR_RATIO = 0.0001;
-
 /** Clip plane change threshold before updating projection */
 export const CLIP_PLANE_EPSILON = 100;
-
-/** Far plane multiplier for procedural view distance */
-export const PROCEDURAL_FAR_MULTIPLIER = 1.5;
 
 // --- Ambient / directional light defaults ---
 
