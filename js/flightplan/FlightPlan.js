@@ -28,6 +28,10 @@ export default class FlightPlan {
     this.yawRate = 0;
     this.pitchRate = 0;
 
+    // Exposed position (decoupled from camera)
+    this.position = new THREE.Vector3();
+    this.position.copy(camera.position);
+
     this._buildSpline();
   }
 
@@ -67,7 +71,7 @@ export default class FlightPlan {
     return kf[kf.length - 1].yaw;
   }
 
-  update(dt, camera, getGroundElevation) {
+  update(dt, getGroundElevation) {
     if (this.finished) return false;
 
     this.elapsed += dt;
@@ -124,19 +128,15 @@ export default class FlightPlan {
     this.yawRate = angleDiff(this.yaw, prevYaw);
     this.pitchRate = this.pitch - prevPitch;
 
-    // 8. Apply position and rotation (no roll — AircraftManager handles visual banking)
-    camera.position.copy(targetPos);
-    camera.rotation.order = 'YXZ';
-    camera.rotation.y = this.yaw;
-    camera.rotation.x = this.pitch;
-    camera.rotation.z = 0;
+    // 8. Store position (decoupled from camera — app.js handles camera placement)
+    this.position.copy(targetPos);
 
     // 9. Safety net: hard clamp MIN_AGL
     if (getGroundElevation) {
-      const ground = getGroundElevation(camera.position.x, camera.position.z);
+      const ground = getGroundElevation(this.position.x, this.position.z);
       const minY = ground + MIN_AGL;
-      if (camera.position.y < minY) {
-        camera.position.y = minY;
+      if (this.position.y < minY) {
+        this.position.y = minY;
       }
     }
 

@@ -1,15 +1,13 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import Logger from '../utils/Logger.js';
-import { CONFIG } from '../utils/config.js';
 
-const CHASE_DISTANCE = 30;
-const CHASE_HEIGHT = 8;
-const VISUAL_ROLL_FACTOR = 25;   // how much yawRate translates to visual bank
-const VISUAL_ROLL_MAX = 0.8;     // max bank angle (radians, ~45°)
-const VISUAL_PITCH_FACTOR = 15;  // how much pitchRate translates to visual pitch
-const VISUAL_PITCH_MAX = 0.4;    // max extra pitch (radians, ~23°)
-const VISUAL_SMOOTH = 5;         // lerp speed for visual rotations
+const VISUAL_ROLL_FACTOR = 120;
+const VISUAL_ROLL_MAX = 1.57;
+const VISUAL_PITCH_FACTOR = 15;
+const VISUAL_PITCH_ANGLE_FACTOR = 1.0;
+const VISUAL_PITCH_MAX = 0.4;
+const VISUAL_SMOOTH = 5;
 
 export default class AircraftManager {
   constructor(scene) {
@@ -17,14 +15,9 @@ export default class AircraftManager {
     this.mesh = null;
     this.ready = false;
 
-    // Smoothed visual rotations (extra tilt on top of base orientation)
     this._visualRoll = 0;
     this._visualPitch = 0;
 
-    // Reusable objects
-    this._offset = new THREE.Vector3();
-    this._quat = new THREE.Quaternion();
-    this._euler = new THREE.Euler(0, 0, 0, 'YXZ');
     this._aircraftEuler = new THREE.Euler(0, 0, 0, 'YXZ');
   }
 
@@ -33,7 +26,6 @@ export default class AircraftManager {
     const gltf = await loader.loadAsync(url);
     this.mesh = gltf.scene;
 
-    // Normalize scale: real Rafale is ~15m long
     const box = new THREE.Box3().setFromObject(this.mesh);
     const size = new THREE.Vector3();
     box.getSize(size);
@@ -42,20 +34,16 @@ export default class AircraftManager {
     const scaleFactor = targetLength / maxDim;
     this.mesh.scale.setScalar(scaleFactor);
 
-    // Center the mesh on its bounding box
     const center = new THREE.Vector3();
     box.getCenter(center);
     center.multiplyScalar(scaleFactor);
     this.mesh.position.sub(center);
 
-    // Wrap in a group so we can position/rotate the group cleanly
     this.group = new THREE.Group();
     this.group.add(this.mesh);
 
-    // The GLTF model may face +Z; rotate 180° so nose points -Z (Three.js forward)
     this.mesh.rotation.y = Math.PI;
 
-    // Replace the embedded texture with the custom one
     const texture = await new THREE.TextureLoader().loadAsync('assets/models/rafale/Rafale_texture.png');
     texture.flipY = false;
     texture.colorSpace = THREE.SRGBColorSpace;
@@ -66,7 +54,6 @@ export default class AircraftManager {
       }
     });
 
-    // Hide landing gear parts (gear boxes, doors, wheels, struts, lights)
     const gearParts = new Set([
       'GearBoxRear', 'GearBoxFront',
       'DoorsRear1L', 'DoorsRear1R', 'DoorsRear2L', 'DoorsRear2R',
@@ -82,7 +69,6 @@ export default class AircraftManager {
       if (gearParts.has(child.name)) child.visible = false;
     });
 
-    // Disable frustum culling so the model never disappears
     this.group.traverse((child) => { child.frustumCulled = false; });
 
     this.scene.add(this.group);
@@ -90,41 +76,26 @@ export default class AircraftManager {
     Logger.info('Aircraft', `Rafale loaded — scaled ${scaleFactor.toFixed(2)}x (${size.x.toFixed(1)}×${size.y.toFixed(1)}×${size.z.toFixed(1)} → ${targetLength}m)`);
   }
 
-  update(aircraftPos, yaw, pitch, roll, yawRate, pitchRate, camera, dt) {
+  update(state, dt) {
     if (!this.ready) return;
 
-    // Smooth visual roll (bank into turns) and pitch (nose up/down)
+    const { position, yaw, pitch, roll, yawRate, pitchRate } = state;
+
+    // Smooth visual roll and pitch (cosmetic tilt on the mesh)
     const targetRoll = Math.max(-VISUAL_ROLL_MAX, Math.min(VISUAL_ROLL_MAX, yawRate * VISUAL_ROLL_FACTOR));
-    const targetPitch = Math.max(-VISUAL_PITCH_MAX, Math.min(VISUAL_PITCH_MAX, pitchRate * VISUAL_PITCH_FACTOR));
+    const ratePitch = pitchRate * VISUAL_PITCH_FACTOR;
+    const anglePitch = pitch * VISUAL_PITCH_ANGLE_FACTOR;
+    const targetPitch = Math.max(-VISUAL_PITCH_MAX, Math.min(VISUAL_PITCH_MAX, ratePitch + anglePitch));
     const t = Math.min(1, VISUAL_SMOOTH * dt);
     this._visualRoll += (targetRoll - this._visualRoll) * t;
     this._visualPitch += (targetPitch - this._visualPitch) * t;
 
-    if (CONFIG.cameraMode === 'cockpit') {
-      // First-person: hide aircraft, camera at aircraft position with full rotation (including roll)
-      this.group.visible = false;
-      camera.position.copy(aircraftPos);
-      camera.rotation.order = 'YXZ';
-      camera.rotation.set(pitch, yaw, roll);
-    } else {
-      // Chase: show aircraft with visual tilt, camera behind
-      this.group.visible = true;
+    this._aircraftEuler.set(pitch + this._visualPitch, yaw, roll + this._visualRoll, 'YXZ');
+    this.group.position.copy(position);
+    this.group.rotation.copy(this._aircraftEuler);
+  }
 
-      // Aircraft gets base orientation + extra visual tilt
-      this._aircraftEuler.set(pitch + this._visualPitch, yaw, roll + this._visualRoll, 'YXZ');
-      this.group.position.copy(aircraftPos);
-      this.group.rotation.copy(this._aircraftEuler);
-
-      // Chase cam offset uses base orientation (no visual tilt)
-      this._euler.set(pitch, yaw, 0, 'YXZ');
-      this._offset.set(0, CHASE_HEIGHT, CHASE_DISTANCE);
-      this._quat.setFromEuler(this._euler);
-      this._offset.applyQuaternion(this._quat);
-
-      // Camera: rigid position, level horizon (no roll)
-      camera.position.copy(aircraftPos).add(this._offset);
-      camera.rotation.order = 'YXZ';
-      camera.rotation.set(pitch, yaw, 0);
-    }
+  setVisible(visible) {
+    if (this.ready) this.group.visible = visible;
   }
 }

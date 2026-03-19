@@ -59,10 +59,10 @@ export default class HUD {
     this._forceRedraw = true;
   }
 
-  update(camera, groundElevation, benchmarkRunner, dt, flightPlanRecorder) {
-    const yaw = camera.rotation.y;
-    const pitch = camera.rotation.x;
-    const altY = camera.position.y;
+  update(camera, groundElevation, benchmarkRunner, dt, flightPlanRecorder, aircraftState) {
+    const yaw = aircraftState ? aircraftState.yaw : camera.rotation.y;
+    const pitch = aircraftState ? aircraftState.pitch : camera.rotation.x;
+    const altY = aircraftState ? aircraftState.position.y : camera.position.y;
 
     // Compute ground speed (horizontal distance / dt)
     const px = camera.position.x;
