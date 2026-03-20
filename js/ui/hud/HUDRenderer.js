@@ -218,7 +218,6 @@ export default class HUDRenderer {
 
     const alt = altY;
     const agl = altY - groundElevation;
-    const unit = 'm';
 
     ctx.save();
     this._applyHudShadow(ctx);
