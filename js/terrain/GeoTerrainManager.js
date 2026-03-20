@@ -49,7 +49,9 @@ export default class GeoTerrainManager {
   }
 
   init(lat, lon) {
-    this.dispose();
+    // Keep old mapView visible during transition (avoid black screen)
+    const oldMapView = this.mapView;
+    this.mapView = null;
 
     // Create providers
     this.textureProvider = this._debugMode
@@ -84,13 +86,49 @@ export default class GeoTerrainManager {
     this._wireframedMeshes = new WeakSet();
     if (this._wireframeMode) this._enforceWireframe();
 
+    // Store old mapView for deferred cleanup
+    if (this._oldMapView) {
+      this._disposeMapView(this._oldMapView);
+    }
+    this._oldMapView = oldMapView;
+
     // Set effective view distance for far plane
     this._effectiveViewDistance = 1e6;
   }
 
   update(_cameraPosition) {
     if (!this.mapView) return;
+
+    // Transition: remove old terrain once new one has visible tiles
+    if (this._oldMapView && this._hasVisibleTiles(this.mapView)) {
+      this._disposeMapView(this._oldMapView);
+      this._oldMapView = null;
+    }
+
     if (this._wireframeMode) this._enforceWireframe();
+  }
+
+  _hasVisibleTiles(mapView) {
+    let found = false;
+    mapView.traverse((child) => {
+      if (found) return;
+      if (child.isMesh && child.visible && child !== mapView) found = true;
+    });
+    return found;
+  }
+
+  _disposeMapView(target) {
+    this.scene.remove(target);
+    target.traverse((child) => {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        if (Array.isArray(child.material)) {
+          child.material.forEach((m) => m.dispose());
+        } else {
+          child.material.dispose();
+        }
+      }
+    });
   }
 
   _createRadarNode() {
@@ -245,21 +283,12 @@ export default class GeoTerrainManager {
   }
 
   dispose() {
+    if (this._oldMapView) {
+      this._disposeMapView(this._oldMapView);
+      this._oldMapView = null;
+    }
     if (this.mapView) {
-      this.scene.remove(this.mapView);
-      // Do NOT call mapView.clear() — it re-initializes child nodes which
-      // triggers async loads and causes "Loaded more children than expected" errors.
-      // Instead, dispose geometry and materials manually.
-      this.mapView.traverse((child) => {
-        if (child.geometry) child.geometry.dispose();
-        if (child.material) {
-          if (Array.isArray(child.material)) {
-            child.material.forEach((m) => m.dispose());
-          } else {
-            child.material.dispose();
-          }
-        }
-      });
+      this._disposeMapView(this.mapView);
       this.mapView = null;
     }
     this._centerCoords = null;
