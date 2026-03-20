@@ -1,3 +1,4 @@
+import { Fn, float, vec2, vec3, uv, positionWorld, fract, smoothstep, mix, min, sin } from 'three/tsl';
 import { MapView, LODRaycastPruning, UnitsUtils, DebugProvider } from 'geo-three';
 import { CONFIG, onChange } from '../utils/config.js';
 import LocalTileProvider from '../geo/LocalTileProvider.js';
@@ -5,6 +6,10 @@ import TerrariumProvider from '../geo/TerrariumProvider.js';
 import ElevationProvider from '../geo/ElevationProvider.js';
 
 export default class GeoTerrainManager {
+  static _isSynthetic(mode) {
+    return mode === 'sar' || mode === 'elevation';
+  }
+
   constructor(scene, renderer) {
     this.scene = scene;
     this.renderer = renderer;
@@ -14,16 +19,31 @@ export default class GeoTerrainManager {
     this.elevationProvider = new ElevationProvider();
     this._effectiveViewDistance = 0;
     this._centerCoords = null; // Mercator coords of center lat/lon
-    this._wireframeMode = !CONFIG.useOsmTexture;
+    this._wireframeMode = GeoTerrainManager._isSynthetic(CONFIG.textureMode);
     this._debugMode = false;
+    this._wireframedMeshes = new WeakSet();
+    this._syntheticNodes = {};
 
-    onChange((key) => {
-      if (key === 'useOsmTexture') {
-        this._wireframeMode = !CONFIG.useOsmTexture;
-        this._applyWireframeToggle();
-      }
-      if (key === 'textureSource') {
-        this._updateTextureSource();
+    onChange((key, value) => {
+      if (key === 'textureMode') {
+        const newWireframe = GeoTerrainManager._isSynthetic(value);
+        if (newWireframe !== this._wireframeMode) {
+          this._wireframeMode = newWireframe;
+          if (newWireframe) {
+            // texture → synthetic: apply colorNode overlay
+            this._applyWireframeToggle();
+          } else {
+            // synthetic → texture: must reinit to reload tile textures
+            this.reinit();
+          }
+        } else if (newWireframe) {
+          // sar ↔ elevation: same wireframe state, different synthetic style
+          this._wireframedMeshes = new WeakSet();
+          this._enforceWireframe();
+        } else {
+          // satellite ↔ osm: same non-wireframe state, different tile source
+          this.reinit();
+        }
       }
     });
   }
@@ -34,7 +54,7 @@ export default class GeoTerrainManager {
     // Create providers
     this.textureProvider = this._debugMode
       ? new DebugProvider()
-      : new LocalTileProvider(CONFIG.textureSource || 'satellite');
+      : new LocalTileProvider(CONFIG.textureMode === 'osm' ? 'osm' : 'satellite');
     this.heightProvider = new TerrariumProvider();
     const effectiveZoom = CONFIG.hiResMode ? 18 : 15;
     this.heightProvider.maxZoom = effectiveZoom;
@@ -61,6 +81,9 @@ export default class GeoTerrainManager {
 
     this.scene.add(this.mapView);
 
+    this._wireframedMeshes = new WeakSet();
+    if (this._wireframeMode) this._enforceWireframe();
+
     // Set effective view distance for far plane
     this._effectiveViewDistance = 1e6;
   }
@@ -70,15 +93,46 @@ export default class GeoTerrainManager {
     if (this._wireframeMode) this._enforceWireframe();
   }
 
+  _createRadarNode() {
+    return Fn(() => {
+      // Speckle noise (SAR-like grain) via classic GPU hash
+      const uvScaled = uv().mul(float(512.0));
+      const h = fract(sin(uvScaled.dot(vec2(12.9898, 78.233))).mul(43758.5453));
+      const speckle = mix(float(0.4), float(0.65), h);
+      return vec3(speckle, speckle, speckle);
+    })();
+  }
+
+  _createLinesNode() {
+    const interval = float(50.0);
+    const bg = vec3(0, 0.10, 0.10);
+    const fg = vec3(0, 0.90, 1.0);
+    return Fn(() => {
+      const t = fract(positionWorld.y.div(interval));
+      const dist = min(t, float(1.0).sub(t));
+      const line = smoothstep(float(0.04), float(0.015), dist);
+      return mix(bg, fg, line);
+    })();
+  }
+
+  _getSyntheticNode(mode) {
+    if (!this._syntheticNodes[mode]) {
+      this._syntheticNodes[mode] =
+        mode === 'elevation' ? this._createLinesNode() : this._createRadarNode();
+    }
+    return this._syntheticNodes[mode];
+  }
+
   _enforceWireframe() {
+    const node = this._getSyntheticNode(CONFIG.textureMode);
     this.mapView.traverse((child) => {
-      if (!child.isMesh || !child.material || !child.material.color) return;
-      child.material.wireframe = true;
-      child.material.color.set(0x00ff88);
-      if (child.material.emissive) {
-        child.material.emissive.set(0x004422);
-        child.material.emissiveIntensity = 0.3;
-      }
+      if (!child.isMesh || !child.material) return;
+      if (this._wireframedMeshes.has(child.material)) return;
+      child.material.colorNode = node;
+      child.material.map = null;
+      child.material.wireframe = false;
+      child.material.needsUpdate = true;
+      this._wireframedMeshes.add(child.material);
     });
   }
 
@@ -87,13 +141,20 @@ export default class GeoTerrainManager {
     if (this._wireframeMode) {
       this._enforceWireframe();
     } else {
-      this.reinit();
+      this._wireframedMeshes = new WeakSet();
+      this.mapView.traverse((child) => {
+        if (!child.isMesh || !child.material) return;
+        child.material.colorNode = null;
+        child.material.map = null;
+        child.material.wireframe = false;
+        if (child.material.color) child.material.color.set(0xffffff);
+        if (child.material.emissive) {
+          child.material.emissive.set(0x000000);
+          child.material.emissiveIntensity = 1.0;
+        }
+        child.material.needsUpdate = true;
+      });
     }
-  }
-
-  _updateTextureSource() {
-    if (!this.mapView || this._wireframeMode) return;
-    this.reinit();
   }
 
   getMeshes() {
