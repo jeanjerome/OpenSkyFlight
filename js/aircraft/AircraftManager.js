@@ -55,16 +55,9 @@ export default class AircraftManager {
       }
     });
 
-    const gearParts = new Set([
+    const hiddenGearParts = new Set([
       'GearBoxRear',
       'GearBoxFront',
-      'DoorsRear1L',
-      'DoorsRear1R',
-      'DoorsRear2L',
-      'DoorsRear2R',
-      'DoorsFront1',
-      'DoorsFront2R',
-      'DoorsFront2L',
       'WheelL',
       'WheelR',
       'NoseWheelL',
@@ -88,7 +81,7 @@ export default class AircraftManager {
       'FrontLights',
     ]);
     this.mesh.traverse((child) => {
-      if (gearParts.has(child.name)) child.visible = false;
+      if (hiddenGearParts.has(child.name)) child.visible = false;
     });
 
     this.group.traverse((child) => {
