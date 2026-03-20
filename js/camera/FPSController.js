@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { CONFIG } from '../utils/config.js';
 import Logger from '../utils/Logger.js';
 import {
-  PITCH_CLAMP,
   MAX_ROLL,
   ROLL_SENSITIVITY,
   ROLL_DAMP_SPEED,
@@ -55,7 +54,6 @@ export default class FPSController {
     this.pitchRate = -e.movementY * CONFIG.mouseSensitivity;
     this.yaw -= e.movementX * CONFIG.mouseSensitivity;
     this.pitch -= e.movementY * CONFIG.mouseSensitivity;
-    this.pitch = Math.max(-PITCH_CLAMP, Math.min(PITCH_CLAMP, this.pitch));
   }
 
   _onKeyDown(e) {
