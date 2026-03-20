@@ -11,11 +11,11 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 
 - **Real-world elevation** — decoded from [AWS Terrarium](https://registry.opendata.aws/terrain-tiles/) PNG tiles on the GPU via TSL `positionNode`
 - **4 texture modes** — Satellite imagery, Road map, SAR radar, and Elevation contour lines — cycle with `T` or pick from the control panel
-- **Hi-Res mode (zoom 18)** — press `H` to toggle upsampled elevation with zoom-18 satellite textures for sharper close-up detail
+- **Hi-Res mode (zoom 18)** — press `R` to toggle upsampled elevation with zoom-18 satellite textures for sharper close-up detail
 - **Adaptive LOD** — quadtree subdivision based on camera altitude, covering up to the geometric horizon
-- **Rafale aircraft** — 3D GLTF model with animated banking and pitch, chase camera (30 m behind)
+- **Rafale aircraft** — 3D GLTF model with retracted landing gear, animated banking and pitch, chase camera (30 m behind)
 - **Cockpit / chase toggle** — press `V` to switch between first-person cockpit (roll applied to horizon) and third-person chase view
-- **Flight simulator controls** — 6-DOF camera with pointer lock, banking, pitch/yaw
+- **Flight simulator controls** — 6-DOF camera with pointer lock, banking, pitch/yaw, full 360° looping
 - **Aircraft-style HUD** — compass, artificial horizon, altimeter (MSL + AGL), speed indicator
 - **MFD cockpit panel** — auto-hiding control panel with military flight display aesthetics
 - **OSM minimap** — real-time 2D map overlay with airplane marker and independent zoom
@@ -78,8 +78,9 @@ Available scripts:
 | `A` / `D` or `←` / `→` | Strafe left / right |
 | `T` | Cycle texture mode (Satellite / Road map / SAR / Elevation) |
 | `V` | Toggle cockpit / chase view |
+| `H` | Toggle HUD |
 | `I` | Toggle info & help overlay |
-| `H` | Toggle Hi-Res mode (zoom 18) |
+| `R` | Toggle Hi-Res mode (zoom 18) |
 | `X` | Toggle debug tile overlay |
 | `B` | Start / stop benchmark |
 | `Shift+B` | Store last benchmark as baseline |
