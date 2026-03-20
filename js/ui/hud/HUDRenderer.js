@@ -141,7 +141,10 @@ export default class HUDRenderer {
   _drawHorizon(ctx, w, h, pitch) {
     const cx = w / 2;
     const cy = h / 2;
-    const pitchDeg = (pitch * 180) / Math.PI;
+    // Normalize pitch to [-180, 180] for continuous 360° display
+    let pitchDeg = ((pitch * 180) / Math.PI) % 360;
+    if (pitchDeg > 180) pitchDeg -= 360;
+    if (pitchDeg < -180) pitchDeg += 360;
 
     ctx.save();
     this._applyHudShadow(ctx);
@@ -163,7 +166,7 @@ export default class HUDRenderer {
 
     ctx.font = '11px Courier New';
     ctx.textBaseline = 'middle';
-    for (let deg = -90; deg <= 90; deg += 10) {
+    for (let deg = -180; deg <= 180; deg += 10) {
       if (deg === 0) continue;
       const ladderY = horizonY - deg * HORIZON_PX_PER_DEG;
       if (ladderY < cy - HORIZON_VISIBLE_RANGE || ladderY > cy + HORIZON_VISIBLE_RANGE) continue;
