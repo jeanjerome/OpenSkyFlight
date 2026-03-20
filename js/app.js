@@ -1,4 +1,3 @@
-import * as THREE from 'three';
 import { CONFIG, onChange, update } from './utils/config.js';
 import {
   CLOUD_RENDER_ORDER,
