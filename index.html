@@ -27,7 +27,7 @@
     Click to capture mouse | Mouse : steer flight<br>
     W/↑ S/↓ : forward / backward | A/← D/→ : strafe<br>
     I : info &amp; help | B : benchmark | Shift+B : store baseline<br>
-    H : hi-res mode | X : debug tiles<br>
+    H : hi-res mode | X : debug tiles | T : cycle texture mode<br>
     V : toggle view (cockpit / chase)<br>
     N : start/stop recording waypoints | Shift+N : clear plan<br>
     P : add waypoint (while recording) | G : autopilot on/off<br>
@@ -110,15 +110,13 @@
           <label>LONGITUDE</label>
           <input type="number" id="lon" step="0.001" />
         </div>
-        <div class="ctrl-group checkbox-group">
-          <input type="checkbox" id="useOsmTexture" />
-          <label for="useOsmTexture">TEXTURE / WIREFRAME</label>
-        </div>
         <div class="ctrl-group">
-          <label>SOURCE TEXTURE</label>
-          <select id="textureSource">
+          <label>TEXTURE</label>
+          <select id="textureMode">
             <option value="satellite">Satellite</option>
-            <option value="osm">OpenStreetMap</option>
+            <option value="osm">Road map</option>
+            <option value="sar">SAR radar</option>
+            <option value="elevation">Elevation lines</option>
           </select>
         </div>
         <button id="loadTerrain" class="mfd-btn">LOAD TERRAIN</button>

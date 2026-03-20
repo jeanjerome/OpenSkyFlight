@@ -27,7 +27,7 @@ export default class AtmosphericSky {
 
     // React to config changes
     this._unsub = onChange((key) => {
-      if (['sunElevation', 'sunAzimuth', 'skyTurbidity', 'skyRayleigh', 'fogEnabled', 'fogDensity'].includes(key)) {
+      if (['sunElevation', 'sunAzimuth', 'skyTurbidity', 'skyRayleigh', 'fogEnabled', 'fogDensity', 'textureMode'].includes(key)) {
         this._updateSky();
       }
     });
@@ -35,7 +35,34 @@ export default class AtmosphericSky {
     Logger.info('AtmosphericSky', 'Sky initialized (SkyMesh/WebGPU)');
   }
 
+  _isSarMode() {
+    return CONFIG.textureMode === 'sar';
+  }
+
   _updateSky() {
+    // SAR radar mode: black sky, side-looking light, no fog
+    if (this._isSarMode()) {
+      this.sky.visible = false;
+      this.scene.background = new THREE.Color(0x000000);
+      this.scene.fog = null;
+
+      // Side-looking radar: low elevation, lateral azimuth
+      const phi = (90 - 15) * DEG2RAD;
+      const theta = 270 * DEG2RAD;
+      this.sunDirection.setFromSphericalCoords(1, phi, theta);
+      this.dirLight.position.copy(this.sunDirection).multiplyScalar(1e5);
+      this.dirLight.intensity = 1.8;
+      this.dirLight.color.set(0xffffff);
+      this.ambientLight.intensity = 0.05;
+
+      Logger.debug('AtmosphericSky', 'SAR mode — black sky, side-looking light');
+      return;
+    }
+
+    // Restore sky when leaving SAR mode
+    this.sky.visible = true;
+    this.scene.background = null;
+
     const { sunElevation, sunAzimuth, skyTurbidity, skyRayleigh } = CONFIG;
 
     // Compute sun direction from elevation & azimuth

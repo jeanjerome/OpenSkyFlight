@@ -1,6 +1,6 @@
 # OpenSkyFlight
 
-A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Earth using satellite imagery and elevation data from OpenStreetMap and AWS Terrarium — all rendered in real time with Three.js WebGPU. No install, no build step.
+A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Earth using elevation data from AWS Terrarium and multiple texture modes (satellite, road map, SAR radar, elevation contours) — all rendered in real time with Three.js WebGPU. No install, no build step, no API key.
 
 ![WebGPU](https://img.shields.io/badge/WebGPU-Three.js-green)
 
@@ -9,8 +9,8 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 
 ## Features
 
-- **Real-world elevation** — decoded from [AWS Terrarium](https://registry.opendata.aws/terrain-tiles/) PNG tiles on the GPU via TSL `positionNode`, with spherical Earth curvature
-- **Satellite & map textures** — ESRI World Imagery or OpenStreetMap raster overlay, switchable at runtime
+- **Real-world elevation** — decoded from [AWS Terrarium](https://registry.opendata.aws/terrain-tiles/) PNG tiles on the GPU via TSL `positionNode`
+- **4 texture modes** — Satellite imagery, Road map, SAR radar, and Elevation contour lines — cycle with `T` or pick from the control panel
 - **Hi-Res mode (zoom 18)** — press `H` to toggle upsampled elevation with zoom-18 satellite textures for sharper close-up detail
 - **Adaptive LOD** — quadtree subdivision based on camera altitude, covering up to the geometric horizon
 - **Rafale aircraft** — 3D GLTF model with animated banking and pitch, chase camera (30 m behind)
@@ -22,6 +22,7 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 - **Flight plan system** — record waypoints, save/load flight plans, and engage autopilot to follow a path automatically
 
 <!-- Screenshots: HUD close-up | MFD control panel | Minimap -->
+<!-- TODO: recapture mfd-panel.png — the control panel now shows a single TEXTURE select instead of 3 separate controls -->
 | HUD instruments | MFD control panel | OSM minimap |
 |---|---|---|
 | ![HUD with compass, horizon, altimeter and speed](docs/screenshots/hud.png) | ![MFD cockpit-style control panel](docs/screenshots/mfd-panel.png) | ![OSM minimap with airplane marker](docs/screenshots/minimap.png) |
@@ -75,6 +76,7 @@ Available scripts:
 | Mouse | Look around (yaw / pitch) |
 | `W` / `S` or `↑` / `↓` | Move forward / backward |
 | `A` / `D` or `←` / `→` | Strafe left / right |
+| `T` | Cycle texture mode (Satellite / Road map / SAR / Elevation) |
 | `V` | Toggle cockpit / chase view |
 | `I` | Toggle info & help overlay |
 | `H` | Toggle Hi-Res mode (zoom 18) |
@@ -89,7 +91,7 @@ Available scripts:
 | `1`–`9` | Select flight plan from menu |
 | `Esc` | Release pointer lock / close menu |
 
-Use the right-side control panel to search locations, load terrain, and toggle wireframe or textures.
+Use the right-side control panel to search locations, load terrain, and select texture mode.
 
 ## Building geo-three (dev only)
 
@@ -107,23 +109,25 @@ This produces `vendor/geo-three/geo-three.module.js`, which the app already impo
 
 ## Real-World Mode
 
-Enter coordinates (or search a place name) in the control panel, then click **Load Terrain**. The app fetches elevation data from AWS Terrarium and optionally overlays satellite or OSM textures.
+Enter coordinates (or search a place name) in the control panel, then click **Load Terrain**. The app fetches elevation data from AWS Terrarium and overlays one of four texture modes, switchable at runtime with `T` or the control panel.
 
 Default location: **Mont Blanc** (45.8326°N, 6.8652°E).
 
-| Satellite textures | OpenStreetMap textures | Wireframe mode |
-|---|---|---|
-| ![Satellite view over Mont Blanc](docs/screenshots/satellite.png) | ![OSM map draped over real elevation](docs/screenshots/osm-texture.png) | ![Wireframe rendering with green MFD aesthetics](docs/screenshots/wireframe.png) |
+<!-- Texture modes 2×2 grid — capture each mode at the same camera position over Mont Blanc -->
+| Satellite | Road map |
+|---|---|
+| ![Satellite imagery over Mont Blanc](docs/screenshots/satellite.png) | ![Road map tiles over Mont Blanc](docs/screenshots/roadmap.png) |
+| **SAR radar** | **Elevation lines** |
+| ![SAR radar rendering with speckle grain](docs/screenshots/sar.png) | ![Elevation contour lines on terrain](docs/screenshots/elevation.png) |
 
-*Left: ESRI satellite imagery. Center: OpenStreetMap cartography projected on relief. Right: wireframe mode with MFD-style green overlay.*
+*Top-left: ESRI satellite imagery. Top-right: OpenStreetMap road map. Bottom-left: SAR radar style (black sky, side-looking light, grey speckle grain). Bottom-right: elevation contour lines (cyan lines on dark background).*
 
 ## How It Works
 
 1. **Elevation** — Terrarium PNG tiles (AWS S3) are decoded into heightmaps on the GPU via a TSL `positionNode` shader (`R×256 + G + B/256 − 32768` meters)
-2. **LOD system** — `buildLodRings()` uses recursive quadtree subdivision: tiles near the camera are split into 4 children at higher zoom, distant tiles stay coarse
-4. **Earth curvature** — Vertex positions are projected onto a sphere (`_projectOnSphere`), so distant terrain curves away naturally
-5. **Textures** — Satellite (ESRI) or OSM tiles are fetched on demand and applied as `CanvasTexture` to terrain meshes
-6. **Caching** — A Node.js proxy intercepts all `/tiles/` requests: serves from disk on hit, fetches upstream on miss, caches for next time
+2. **LOD system** — geo-three's `LODRaycastPruning` drives recursive quadtree subdivision: tiles near the camera are split into 4 children at higher zoom, distant tiles stay coarse
+3. **Textures** — Four modes: Satellite (ESRI) and Road map (OSM) fetch raster tiles on demand; SAR radar and Elevation contours are GPU-generated via TSL shaders
+4. **Caching** — A Node.js proxy intercepts all `/tiles/` requests: serves from disk on hit, fetches upstream on miss, caches for next time
 
 ## Tile Cache
 
@@ -167,14 +171,18 @@ cache/
 │   ├── benchmark/
 │   │   ├── BenchmarkRunner.js     Automated benchmark with camera path
 │   │   ├── BenchmarkComparator.js Baseline comparison & reporting
-│   │   ├── CameraPath.js          Predefined flight path for benchmarks
 │   │   ├── GPUTimer.js            GPU-side frame timing
 │   │   └── MetricsCollector.js    Per-frame metrics recording
 │   ├── camera/
 │   │   ├── FPSController.js       Flight camera (pointer lock, 6-DOF, banking)
-│   │   └── ChaseCameraController.js Spring-based third-person camera
+│   │   ├── ChaseCameraController.js Spring-based third-person camera
+│   │   ├── SpringScalar.js        Critically-damped spring for scalar values
+│   │   └── SpringVector3.js       Critically-damped spring for Vector3 values
 │   ├── flightplan/
-│   │   └── FlightPlanRecorder.js  Waypoint recording, plan loading & autopilot
+│   │   ├── FlightPlanRecorder.js  Waypoint recording, plan loading & autopilot
+│   │   ├── FlightPlan.js          Interpolated flight path from waypoints
+│   │   ├── DefaultFlightPlan.js   Built-in demo flight plan
+│   │   └── Waypoint.js            Single waypoint data class
 │   ├── input/
 │   │   └── InputManager.js        Centralized keyboard dispatch
 │   ├── rendering/
@@ -205,6 +213,15 @@ cache/
 ├── scripts/
 │   ├── serve.js                   Dev server with caching tile proxy
 │   └── prefetch-tiles.js          Bulk tile downloader for offline use
+├── vendor/
+│   └── geo-three/                 Vendored geo-three with custom patches
+├── assets/
+│   ├── models/                    3D models (Rafale GLTF)
+│   ├── flightplans/               Saved flight plan JSON files
+│   └── favicon.png
+├── docs/
+│   └── screenshots/               README screenshots
+├── benchmarks/                    Benchmark result JSON files
 ├── package.json                   Dev dependencies (ESLint, Prettier)
 ├── eslint.config.js               ESLint 9 flat config (ES modules)
 ├── .prettierrc                    Prettier configuration
@@ -219,8 +236,8 @@ cache/
 - Canvas 2D — HUD instrument overlay, hi-res badge, and minimap
 - [three/examples — Sky](https://threejs.org/examples/?q=sky#webgl_shaders_sky) — procedural atmospheric sky and sun
 - [AWS Terrarium Tiles](https://registry.opendata.aws/terrain-tiles/) — elevation data (zoom 0–15, upsampled to 18 in hi-res mode)
-- [OpenStreetMap](https://www.openstreetmap.org/) — map textures
-- [ESRI World Imagery](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9) — satellite textures (up to zoom 18+)
+- [OpenStreetMap](https://www.openstreetmap.org/) — road map textures
+- [ESRI World Imagery](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9) — satellite imagery (up to zoom 18+)
 - Node.js — dev server with transparent caching tile proxy and offline prefetch script
 - ES modules + import maps — no bundler needed
 - [ESLint](https://eslint.org/) 9 + [Prettier](https://prettier.io/) — code quality and formatting (dev only)

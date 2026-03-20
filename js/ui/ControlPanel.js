@@ -1,4 +1,4 @@
-import { CONFIG, update } from '../utils/config.js';
+import { CONFIG, update, onChange } from '../utils/config.js';
 import Logger from '../utils/Logger.js';
 import { showNotification } from './Notification.js';
 import { MACH_1_MS } from '../constants/physics.js';
@@ -65,14 +65,12 @@ export default class ControlPanel {
     latInput.value = CONFIG.lat;
     lonInput.value = CONFIG.lon;
 
-    // --- Texture toggle ---
-    this._bindCheckbox('useOsmTexture', 'useOsmTexture');
-
-    // --- Texture source ---
-    const texSrcSelect = document.getElementById('textureSource');
-    texSrcSelect.value = CONFIG.textureSource;
-    texSrcSelect.addEventListener('change', () => {
-      update('textureSource', texSrcSelect.value);
+    // --- Texture mode ---
+    const texMode = document.getElementById('textureMode');
+    texMode.value = CONFIG.textureMode;
+    texMode.addEventListener('change', () => update('textureMode', texMode.value));
+    onChange((key, value) => {
+      if (key === 'textureMode') texMode.value = value;
     });
 
     // --- Place search ---

@@ -15,6 +15,7 @@ import ControlPanel from './ui/ControlPanel.js';
 import HUD from './ui/HUD.js';
 import Minimap from './ui/Minimap.js';
 import Logger from './utils/Logger.js';
+import { showNotification } from './ui/Notification.js';
 import AtmosphericSky from './atmosphere/AtmosphericSky.js';
 import CloudLayer from './atmosphere/CloudLayer.js';
 import BenchmarkRunner from './benchmark/BenchmarkRunner.js';
@@ -108,6 +109,13 @@ async function initApp() {
   input.on('KeyH', () => {
     const active = geoTerrainManager.toggleHiRes();
     Logger.info('App', `Hi-res mode (zoom 18) ${active ? 'enabled' : 'disabled'}`);
+  });
+
+  input.on('KeyT', () => {
+    const modes = ['satellite', 'osm', 'sar', 'elevation'];
+    const idx = modes.indexOf(CONFIG.textureMode);
+    update('textureMode', modes[(idx + 1) % modes.length]);
+    showNotification(`Texture: ${CONFIG.textureMode}`);
   });
 
   input.on('KeyV', () => {

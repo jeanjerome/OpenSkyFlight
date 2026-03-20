@@ -8,8 +8,7 @@
  * @property {number}  minZoom                - Minimum zoom for LOD rings (default: 3)
  * @property {number}  maxTotalTiles          - Maximum loaded tiles (default: 1000)
  * @property {number}  lodRingRadius          - LOD ring radius in tiles (default: 8)
- * @property {boolean} useOsmTexture          - Enable texture on terrain (default: true)
- * @property {string}  textureSource          - 'satellite' | 'osm' (default: 'satellite')
+ * @property {string}  textureMode             - 'satellite' | 'osm' | 'sar' | 'elevation' (default: 'satellite')
  * @property {boolean} hiResMode              - Hi-res zoom 18 mode (default: false)
  *
  * Camera & flight:
@@ -62,8 +61,7 @@ const CONFIG = {
   lat: 45.8326, // Mont Blanc default
   lon: 6.8652,
   zoom: 15,
-  useOsmTexture: true,
-  textureSource: 'satellite', // 'osm' | 'satellite'
+  textureMode: 'satellite', // 'satellite' | 'osm' | 'sar' | 'elevation'
   minZoom: 3,
   maxTotalTiles: 1000,
   lodRingRadius: 8,
