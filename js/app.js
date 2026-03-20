@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { CONFIG, onChange, update } from './utils/config.js';
 import {
   CLOUD_RENDER_ORDER,
@@ -45,6 +46,7 @@ async function initApp() {
   // --- Controllers ---
   const fpsController = new FPSController(camera, renderer.domElement);
   const chaseCameraController = new ChaseCameraController();
+  const _cockpitEuler = new THREE.Euler(0, 0, 0, 'YXZ');
   const aircraftManager = new AircraftManager(scene);
   aircraftManager.load('assets/models/rafale/Rafale.gltf').catch((err) => {
     Logger.warn('App', 'Failed to load Rafale model: ' + err.message);
@@ -107,6 +109,10 @@ async function initApp() {
   });
 
   input.on('KeyH', () => {
+    update('showHud', !CONFIG.showHud);
+  });
+
+  input.on('KeyR', () => {
     const active = geoTerrainManager.toggleHiRes();
     Logger.info('App', `Hi-res mode (zoom 18) ${active ? 'enabled' : 'disabled'}`);
   });
@@ -285,8 +291,8 @@ async function initApp() {
       if (CONFIG.cameraMode === 'cockpit') {
         aircraftManager.setVisible(false);
         camera.position.copy(aircraftState.position);
-        camera.rotation.order = 'YXZ';
-        camera.rotation.set(aircraftState.pitch, aircraftState.yaw, aircraftState.roll);
+        _cockpitEuler.set(aircraftState.pitch, aircraftState.yaw, aircraftState.roll, 'YXZ');
+        camera.quaternion.setFromEuler(_cockpitEuler);
         chaseCameraController.reset();
       } else {
         aircraftManager.setVisible(true);
