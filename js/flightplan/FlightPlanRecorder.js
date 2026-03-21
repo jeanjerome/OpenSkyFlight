@@ -65,8 +65,8 @@ export default class FlightPlanRecorder {
     return this._recording;
   }
 
-  addWaypoint(camera) {
-    const wp = new Waypoint(camera.position.x, camera.position.y, camera.position.z, camera.rotation.y);
+  addWaypoint(source) {
+    const wp = new Waypoint(source.position.x, source.position.y, source.position.z, source.yaw);
     this._waypoints.push(wp);
     this._plan = null; // invalidate existing plan
     Logger.info(

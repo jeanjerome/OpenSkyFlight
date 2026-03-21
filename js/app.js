@@ -186,22 +186,23 @@ async function initApp() {
   });
 
   input.on('KeyP', () => {
-    if (flightPlanRecorder.isRecording()) flightPlanRecorder.addWaypoint(camera);
+    if (flightPlanRecorder.isRecording()) flightPlanRecorder.addWaypoint(flightController);
   });
 
   input.on('KeyG', () => {
     if (flightPlanRecorder.autopilotActive) {
       flightPlanRecorder.autopilotActive = false;
       flightController.enabled = true;
-      flightController.position.copy(camera.position);
-      flightController.setOrientation(camera.rotation.y, camera.rotation.x);
+      const plan = flightPlanRecorder.getPlan();
+      flightController.position.copy(plan.position);
+      flightController.setOrientation(plan.yaw, plan.pitch);
       Logger.info('App', 'Autopilot disengaged');
     } else {
       if (!flightPlanRecorder.hasValidPlan()) {
         Logger.warn('App', 'Need at least 2 waypoints to engage autopilot');
         return;
       }
-      const plan = flightPlanRecorder.buildPlan(camera);
+      const plan = flightPlanRecorder.buildPlan(flightController);
       if (plan) {
         flightPlanRecorder.autopilotActive = true;
         flightController.enabled = false;
@@ -222,7 +223,7 @@ async function initApp() {
     if (benchmarkRunner.isRunning()) {
       benchmarkRunner.stop(flightController, renderer);
     } else {
-      const userPlan = flightPlanRecorder.hasValidPlan() ? flightPlanRecorder.buildPlan(camera) : null;
+      const userPlan = flightPlanRecorder.hasValidPlan() ? flightPlanRecorder.buildPlan(flightController) : null;
       benchmarkRunner.start(flightController, camera, gpuTimer, userPlan);
     }
   });
@@ -316,7 +317,7 @@ async function initApp() {
     }
 
     // --- Environment phase ---
-    cloudLayer.update(dt, camera.position, camera);
+    cloudLayer.update(dt, camera.position, aircraftState ? aircraftState.pitch : 0);
 
     const timer = benchmarkRunner.getSubsystemTimer();
 

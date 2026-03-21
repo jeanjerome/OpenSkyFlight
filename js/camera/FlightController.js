@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { CONFIG } from '../utils/config.js';
-import Logger from '../utils/Logger.js';
 import {
   RATE_DAMP_FACTOR,
   INITIAL_PITCH,
@@ -29,8 +28,6 @@ export default class FlightController {
     this._axisX = new THREE.Vector3(1, 0, 0);
     this._forward = new THREE.Vector3();
     this._right = new THREE.Vector3();
-    this._lastLogTime = 0;
-
     // Initialize quaternion from initial pitch
     this.setOrientation(0, INITIAL_PITCH);
 
@@ -84,6 +81,14 @@ export default class FlightController {
 
   update(dt) {
     if (!this.enabled) return;
+
+    // Discard minor-axis pitch during predominantly horizontal sweeps
+    // to prevent drift from mouse contamination (~7% typical)
+    const absYaw = Math.abs(this._pendingYaw);
+    const absPitch = Math.abs(this._pendingPitch);
+    if (absYaw > 0.0001 && absPitch / absYaw < 0.2) {
+      this._pendingPitch = 0;
+    }
 
     // Accumulate yaw/pitch as scalars (no gimbal lock)
     this.yaw += this._pendingYaw;
@@ -142,16 +147,6 @@ export default class FlightController {
 
     this.yawRate *= Math.max(0, 1 - RATE_DAMP_FACTOR * dt);
     this.pitchRate *= Math.max(0, 1 - RATE_DAMP_FACTOR * dt);
-
-    const now = performance.now();
-    if (now - this._lastLogTime > 2000) {
-      this._lastLogTime = now;
-      const p = this.position;
-      Logger.debug(
-        'Camera',
-        `pos=(${p.x.toFixed(0)}, ${p.y.toFixed(0)}, ${p.z.toFixed(0)}) pitch=${this.pitch.toFixed(2)} yaw=${this.yaw.toFixed(2)}`,
-      );
-    }
   }
 
   dispose() {
