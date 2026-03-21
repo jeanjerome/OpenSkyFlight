@@ -85,25 +85,15 @@ export default class FlightController {
   update(dt) {
     if (!this.enabled) return;
 
-    // Apply pending mouse deltas as quaternion rotations
-    if (this._pendingYaw !== 0) {
-      this._qYaw.setFromAxisAngle(this._axisY, this._pendingYaw);
-      this.quaternion.multiply(this._qYaw);
-    }
-    if (this._pendingPitch !== 0) {
-      this._qPitch.setFromAxisAngle(this._axisX, this._pendingPitch);
-      this.quaternion.multiply(this._qPitch);
-    }
-    if (this._pendingYaw !== 0 || this._pendingPitch !== 0) {
-      this.quaternion.normalize();
-    }
+    // Accumulate yaw/pitch as scalars (no gimbal lock)
+    this.yaw += this._pendingYaw;
+    this.pitch += this._pendingPitch;
     this._pendingYaw = 0;
     this._pendingPitch = 0;
 
-    // Extract Euler angles for consumers (HUD, chase cam, logging)
-    this._euler.setFromQuaternion(this.quaternion, 'YXZ');
-    this.yaw = this._euler.y;
-    this.pitch = this._euler.x;
+    // Rebuild quaternion from scalar angles
+    this._euler.set(this.pitch, this.yaw, 0, 'YXZ');
+    this.quaternion.setFromEuler(this._euler);
 
     // Derive forward and right vectors from quaternion
     this._forward.set(0, 0, -1).applyQuaternion(this.quaternion);
