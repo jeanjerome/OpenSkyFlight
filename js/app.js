@@ -5,13 +5,13 @@ import {
   REALWORLD_FAR_PLANE,
   CLIP_PLANE_EPSILON,
 } from './constants/rendering.js';
-import { REALWORLD_START_ALTITUDE, DEFAULT_NEAR } from './constants/camera.js';
+import { REALWORLD_START_ALTITUDE, DEFAULT_NEAR, MAX_ROLL, ROLL_SENSITIVITY, ROLL_DAMP_SPEED } from './constants/camera.js';
 import { MAX_DELTA_TIME } from './constants/physics.js';
 import { createRenderer, createScene, createCamera, setupResizeHandler } from './scene/SceneSetup.js';
 import AdaptiveQualityManager from './rendering/AdaptiveQualityManager.js';
 import InputManager from './input/InputManager.js';
 import GeoTerrainManager from './terrain/GeoTerrainManager.js';
-import FPSController from './camera/FPSController.js';
+import FlightController from './camera/FlightController.js';
 import ControlPanel from './ui/ControlPanel.js';
 import HUD from './ui/HUD.js';
 import Minimap from './ui/Minimap.js';
@@ -44,9 +44,12 @@ async function initApp() {
   geoTerrainManager.init(CONFIG.lat, CONFIG.lon);
 
   // --- Controllers ---
-  const fpsController = new FPSController(camera, renderer.domElement);
+  const flightController = new FlightController(camera, renderer.domElement);
   const chaseCameraController = new ChaseCameraController();
-  const _cockpitEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+  const _qRoll = new THREE.Quaternion();
+  const _axisZ = new THREE.Vector3(0, 0, 1);
+  const _autopilotEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+  const _autopilotQuat = new THREE.Quaternion();
   const aircraftManager = new AircraftManager(scene);
   aircraftManager.load('assets/models/rafale/Rafale.gltf').catch((err) => {
     Logger.warn('App', 'Failed to load Rafale model: ' + err.message);
@@ -82,7 +85,7 @@ async function initApp() {
   // --- Control Panel ---
   function regenerate() {
     geoTerrainManager.reinit();
-    fpsController.position.set(0, REALWORLD_START_ALTITUDE, 0);
+    flightController.position.set(0, REALWORLD_START_ALTITUDE, 0);
   }
   // Side-effect: binds DOM controls to CONFIG
   new ControlPanel(regenerate);
@@ -189,10 +192,9 @@ async function initApp() {
   input.on('KeyG', () => {
     if (flightPlanRecorder.autopilotActive) {
       flightPlanRecorder.autopilotActive = false;
-      fpsController.enabled = true;
-      fpsController.position.copy(camera.position);
-      fpsController.yaw = camera.rotation.y;
-      fpsController.pitch = camera.rotation.x;
+      flightController.enabled = true;
+      flightController.position.copy(camera.position);
+      flightController.setOrientation(camera.rotation.y, camera.rotation.x);
       Logger.info('App', 'Autopilot disengaged');
     } else {
       if (!flightPlanRecorder.hasValidPlan()) {
@@ -202,7 +204,7 @@ async function initApp() {
       const plan = flightPlanRecorder.buildPlan(camera);
       if (plan) {
         flightPlanRecorder.autopilotActive = true;
-        fpsController.enabled = false;
+        flightController.enabled = false;
         Logger.info('App', 'Autopilot engaged');
       }
     }
@@ -218,15 +220,16 @@ async function initApp() {
       return;
     }
     if (benchmarkRunner.isRunning()) {
-      benchmarkRunner.stop(fpsController, renderer);
+      benchmarkRunner.stop(flightController, renderer);
     } else {
       const userPlan = flightPlanRecorder.hasValidPlan() ? flightPlanRecorder.buildPlan(camera) : null;
-      benchmarkRunner.start(fpsController, camera, gpuTimer, userPlan);
+      benchmarkRunner.start(flightController, camera, gpuTimer, userPlan);
     }
   });
 
   // --- Render loop ---
   let prevTime = performance.now();
+  let _bankRoll = 0;
 
   function animate() {
     requestAnimationFrame(animate);
@@ -238,8 +241,8 @@ async function initApp() {
     prevTime = now;
 
     // --- Input phase ---
-    fpsController.update(dt);
-    benchmarkRunner.tickPath(dt, fpsController, renderer);
+    flightController.update(dt);
+    benchmarkRunner.tickPath(dt, flightController, renderer);
 
     // --- Aircraft state ---
     let aircraftState = null;
@@ -249,40 +252,51 @@ async function initApp() {
       const ok = plan.update(dt);
       if (!ok) {
         flightPlanRecorder.autopilotActive = false;
-        fpsController.enabled = true;
-        fpsController.position.copy(plan.position);
-        fpsController.yaw = plan.yaw;
-        fpsController.pitch = plan.pitch;
+        flightController.enabled = true;
+        flightController.position.copy(plan.position);
+        flightController.setOrientation(plan.yaw, plan.pitch);
         Logger.info('App', 'Autopilot: flight plan completed');
       } else {
+        _autopilotEuler.set(plan.pitch, plan.yaw, 0, 'YXZ');
+        _autopilotQuat.setFromEuler(_autopilotEuler);
         aircraftState = {
           position: plan.position,
           yaw: plan.yaw,
           pitch: plan.pitch,
-          roll: plan.roll,
           yawRate: plan.yawRate,
           pitchRate: plan.pitchRate,
+          quaternion: _autopilotQuat,
         };
       }
     } else if (benchmarkRunner.isRunning() && !benchmarkRunner.isWarmup() && benchmarkRunner.cameraPath) {
       const path = benchmarkRunner.cameraPath;
+      _autopilotEuler.set(path.pitch, path.yaw, 0, 'YXZ');
+      _autopilotQuat.setFromEuler(_autopilotEuler);
       aircraftState = {
         position: path.position,
         yaw: path.yaw,
         pitch: path.pitch,
-        roll: path.roll,
         yawRate: path.yawRate,
         pitchRate: path.pitchRate,
+        quaternion: _autopilotQuat,
       };
     } else if (!benchmarkRunner.isRunning()) {
       aircraftState = {
-        position: fpsController.position,
-        yaw: fpsController.yaw,
-        pitch: fpsController.pitch,
-        roll: fpsController.roll,
-        yawRate: fpsController.yawRate,
-        pitchRate: fpsController.pitchRate,
+        position: flightController.position,
+        yaw: flightController.yaw,
+        pitch: flightController.pitch,
+        yawRate: flightController.yawRate,
+        pitchRate: flightController.pitchRate,
+        quaternion: flightController.quaternion,
       };
+    }
+
+    // --- Bank roll (derived from yawRate, single source of truth) ---
+    if (aircraftState) {
+      const targetRoll = Math.max(-MAX_ROLL, Math.min(MAX_ROLL,
+        aircraftState.yawRate * ROLL_SENSITIVITY));
+      _bankRoll += (targetRoll - _bankRoll) * ROLL_DAMP_SPEED * dt;
+      aircraftState.roll = _bankRoll;
     }
 
     // --- Camera phase ---
@@ -291,8 +305,9 @@ async function initApp() {
       if (CONFIG.cameraMode === 'cockpit') {
         aircraftManager.setVisible(false);
         camera.position.copy(aircraftState.position);
-        _cockpitEuler.set(aircraftState.pitch, aircraftState.yaw, aircraftState.roll, 'YXZ');
-        camera.quaternion.setFromEuler(_cockpitEuler);
+        camera.quaternion.copy(aircraftState.quaternion);
+        _qRoll.setFromAxisAngle(_axisZ, aircraftState.roll);
+        camera.quaternion.multiply(_qRoll);
         chaseCameraController.reset();
       } else {
         aircraftManager.setVisible(true);
@@ -333,7 +348,7 @@ async function initApp() {
     if (timer) timer.end('hud');
 
     if (timer) timer.begin('minimap');
-    minimap.update(camera);
+    minimap.update(camera, aircraftState);
     if (timer) timer.end('minimap');
 
     // --- Post-render phase ---

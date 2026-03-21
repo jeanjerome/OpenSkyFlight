@@ -38,7 +38,7 @@ export default class BenchmarkRunner {
     return Math.max(0, WARMUP_DURATION - this.warmupElapsed);
   }
 
-  start(fpsController, camera, gpuTimer, flightPlan) {
+  start(flightController, camera, gpuTimer, flightPlan) {
     if (this.running) return;
     this.running = true;
     this.warmup = true;
@@ -47,19 +47,19 @@ export default class BenchmarkRunner {
     this.metrics = null;
     this.gpuTimer = gpuTimer || null;
     this._stopped = false;
-    fpsController.enabled = false;
+    flightController.enabled = false;
     Logger.info(
       'Benchmark',
       `Warmup ${WARMUP_DURATION}s — then ${this.cameraPath.totalDuration.toFixed(0)}s benchmark`,
     );
   }
 
-  stop(fpsController, renderer) {
+  stop(flightController, renderer) {
     if (!this.running) return;
     this.running = false;
     this.warmup = false;
     this._stopped = true;
-    fpsController.enabled = true;
+    flightController.enabled = true;
 
     if (this.metrics) {
       const report = this.metrics.buildReport(renderer);
@@ -90,7 +90,7 @@ export default class BenchmarkRunner {
    * Advance camera path and handle warmup timing.
    * Call BEFORE renderer.render() so the camera is positioned for this frame.
    */
-  tickPath(dt, fpsController, renderer) {
+  tickPath(dt, flightController, renderer) {
     if (!this.running) return;
 
     if (this.warmup) {
@@ -105,7 +105,7 @@ export default class BenchmarkRunner {
 
     const ok = this.cameraPath.update(dt);
     if (!ok) {
-      this.stop(fpsController, renderer);
+      this.stop(flightController, renderer);
     }
   }
 

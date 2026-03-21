@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { CONFIG } from '../utils/config.js';
-
 const PITCH_SMOOTH = 3.0;
 const YAW_SMOOTH = 3.0;
 const MAX_PITCH = 0.25;
@@ -31,7 +30,6 @@ export default class FlightPlan {
     // Current orientation (smoothed)
     this.yaw = camera.rotation.y;
     this.pitch = camera.rotation.x || 0;
-    this.roll = 0;
     this.yawRate = 0;
     this.pitchRate = 0;
 
@@ -108,7 +106,7 @@ export default class FlightPlan {
     this.pitch = lerp(this.pitch, targetPitch, PITCH_SMOOTH * dt);
     this.pitch = clamp(this.pitch, MIN_PITCH, MAX_PITCH);
 
-    // 6. Expose per-frame deltas (same scale as FPSController.yawRate/pitchRate)
+    // 6. Expose per-frame deltas (same scale as FlightController.yawRate/pitchRate)
     this.yawRate = angleDiff(this.yaw, prevYaw);
     this.pitchRate = this.pitch - prevPitch;
 

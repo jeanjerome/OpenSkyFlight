@@ -20,7 +20,11 @@ export default class AircraftManager {
     this._visualRoll = 0;
     this._visualPitch = 0;
 
-    this._aircraftEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+    this._qVisualRoll = new THREE.Quaternion();
+    this._qVisualPitch = new THREE.Quaternion();
+    this._qRoll = new THREE.Quaternion();
+    this._axisZ = new THREE.Vector3(0, 0, 1);
+    this._axisX = new THREE.Vector3(1, 0, 0);
   }
 
   async load(url) {
@@ -99,7 +103,7 @@ export default class AircraftManager {
   update(state, dt) {
     if (!this.ready) return;
 
-    const { position, yaw, pitch, roll, yawRate, pitchRate } = state;
+    const { position, pitch, roll, yawRate, pitchRate, quaternion } = state;
 
     // Smooth visual roll and pitch (cosmetic tilt on the mesh)
     const targetRoll = Math.max(-VISUAL_ROLL_MAX, Math.min(VISUAL_ROLL_MAX, yawRate * VISUAL_ROLL_FACTOR));
@@ -110,9 +114,17 @@ export default class AircraftManager {
     this._visualRoll += (targetRoll - this._visualRoll) * t;
     this._visualPitch += (targetPitch - this._visualPitch) * t;
 
-    this._aircraftEuler.set(pitch + this._visualPitch, yaw, roll + this._visualRoll, 'YXZ');
+    // Start from base quaternion orientation
     this.group.position.copy(position);
-    this.group.rotation.copy(this._aircraftEuler);
+    this.group.quaternion.copy(quaternion);
+
+    // Apply roll + visual roll around local Z axis
+    this._qRoll.setFromAxisAngle(this._axisZ, roll + this._visualRoll);
+    this.group.quaternion.multiply(this._qRoll);
+
+    // Apply visual pitch around local X axis
+    this._qVisualPitch.setFromAxisAngle(this._axisX, this._visualPitch);
+    this.group.quaternion.multiply(this._qVisualPitch);
   }
 
   setVisible(visible) {

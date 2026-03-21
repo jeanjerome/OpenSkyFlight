@@ -2,28 +2,37 @@ import * as THREE from 'three';
 import { CONFIG } from '../utils/config.js';
 import Logger from '../utils/Logger.js';
 import {
-  MAX_ROLL,
-  ROLL_SENSITIVITY,
-  ROLL_DAMP_SPEED,
   RATE_DAMP_FACTOR,
   INITIAL_PITCH,
 } from '../constants/camera.js';
 
-export default class FPSController {
+export default class FlightController {
   constructor(camera, domElement) {
     this.camera = camera;
     this.domElement = domElement;
     this.position = new THREE.Vector3().copy(camera.position);
+    this.quaternion = new THREE.Quaternion();
     this.yaw = 0;
     this.pitch = INITIAL_PITCH;
-    this.roll = 0;
     this.yawRate = 0;
     this.pitchRate = 0;
     this.keys = {};
     this.locked = false;
     this.enabled = true;
 
+    this._pendingYaw = 0;
+    this._pendingPitch = 0;
+    this._euler = new THREE.Euler(0, 0, 0, 'YXZ');
+    this._qYaw = new THREE.Quaternion();
+    this._qPitch = new THREE.Quaternion();
+    this._axisY = new THREE.Vector3(0, 1, 0);
+    this._axisX = new THREE.Vector3(1, 0, 0);
+    this._forward = new THREE.Vector3();
+    this._right = new THREE.Vector3();
     this._lastLogTime = 0;
+
+    // Initialize quaternion from initial pitch
+    this.setOrientation(0, INITIAL_PITCH);
 
     this._onMouseMove = this._onMouseMove.bind(this);
     this._onKeyDown = this._onKeyDown.bind(this);
@@ -52,8 +61,8 @@ export default class FPSController {
     if (!this.locked) return;
     this.yawRate = -e.movementX * CONFIG.mouseSensitivity;
     this.pitchRate = -e.movementY * CONFIG.mouseSensitivity;
-    this.yaw -= e.movementX * CONFIG.mouseSensitivity;
-    this.pitch -= e.movementY * CONFIG.mouseSensitivity;
+    this._pendingYaw += -e.movementX * CONFIG.mouseSensitivity;
+    this._pendingPitch += -e.movementY * CONFIG.mouseSensitivity;
   }
 
   _onKeyDown(e) {
@@ -64,22 +73,48 @@ export default class FPSController {
     this.keys[e.code] = false;
   }
 
+  setOrientation(yaw, pitch) {
+    this._euler.set(pitch, yaw, 0, 'YXZ');
+    this.quaternion.setFromEuler(this._euler);
+    this.yaw = yaw;
+    this.pitch = pitch;
+    this._pendingYaw = 0;
+    this._pendingPitch = 0;
+  }
+
   update(dt) {
     if (!this.enabled) return;
+
+    // Apply pending mouse deltas as quaternion rotations
+    if (this._pendingYaw !== 0) {
+      this._qYaw.setFromAxisAngle(this._axisY, this._pendingYaw);
+      this.quaternion.multiply(this._qYaw);
+    }
+    if (this._pendingPitch !== 0) {
+      this._qPitch.setFromAxisAngle(this._axisX, this._pendingPitch);
+      this.quaternion.multiply(this._qPitch);
+    }
+    if (this._pendingYaw !== 0 || this._pendingPitch !== 0) {
+      this.quaternion.normalize();
+    }
+    this._pendingYaw = 0;
+    this._pendingPitch = 0;
+
+    // Extract Euler angles for consumers (HUD, chase cam, logging)
+    this._euler.setFromQuaternion(this.quaternion, 'YXZ');
+    this.yaw = this._euler.y;
+    this.pitch = this._euler.x;
+
+    // Derive forward and right vectors from quaternion
+    this._forward.set(0, 0, -1).applyQuaternion(this.quaternion);
+    this._right.set(1, 0, 0).applyQuaternion(this.quaternion);
+
     const speed = CONFIG.cameraSpeed * dt;
-    const sinYaw = Math.sin(this.yaw);
-    const cosYaw = Math.cos(this.yaw);
-    const cosPitch = Math.cos(this.pitch);
-    const sinPitch = Math.sin(this.pitch);
-
-    // Forward vector: follows camera look direction (pitch + yaw)
-    const fx = -sinYaw * cosPitch;
-    const fy = sinPitch;
-    const fz = -cosYaw * cosPitch;
-
-    // Right vector: always horizontal, perpendicular to forward
-    const rx = cosYaw;
-    const rz = -sinYaw;
+    const fx = this._forward.x;
+    const fy = this._forward.y;
+    const fz = this._forward.z;
+    const rx = this._right.x;
+    const rz = this._right.z;
 
     let mx = 0,
       my = 0,
@@ -115,9 +150,6 @@ export default class FPSController {
     this.position.y += my * speed;
     this.position.z += mz * speed;
 
-    // Roll (bank) en virage
-    const targetRoll = Math.max(-MAX_ROLL, Math.min(MAX_ROLL, this.yawRate * ROLL_SENSITIVITY));
-    this.roll += (targetRoll - this.roll) * ROLL_DAMP_SPEED * dt;
     this.yawRate *= Math.max(0, 1 - RATE_DAMP_FACTOR * dt);
     this.pitchRate *= Math.max(0, 1 - RATE_DAMP_FACTOR * dt);
 
