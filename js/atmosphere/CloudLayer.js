@@ -107,13 +107,13 @@ export default class CloudLayer {
     this.scene.add(this.mesh);
   }
 
-  update(dt, cameraPosition, camera) {
+  update(dt, cameraPosition, pitch) {
     if (!this.mesh) return;
 
     // Sprint 3.3: hide cloud layer when camera is above clouds and looking down
-    if (CONFIG.showClouds && camera) {
+    if (CONFIG.showClouds) {
       const aboveClouds = cameraPosition.y > CONFIG.cloudAltitude;
-      const lookingDown = camera.rotation.x < -0.1; // pitch < -6°
+      const lookingDown = pitch < -0.1; // pitch < -6°
       this.mesh.visible = !(aboveClouds && lookingDown);
     }
 

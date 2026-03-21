@@ -22,20 +22,20 @@ function lerpAngle(a, b, t) {
 }
 
 export default class FlightPlan {
-  constructor(waypoints, camera) {
+  constructor(waypoints, source) {
     this.waypoints = waypoints;
     this.elapsed = 0;
     this.finished = false;
 
     // Current orientation (smoothed)
-    this.yaw = camera.rotation.y;
-    this.pitch = camera.rotation.x || 0;
+    this.yaw = source.yaw;
+    this.pitch = source.pitch || 0;
     this.yawRate = 0;
     this.pitchRate = 0;
 
-    // Exposed position (decoupled from camera)
+    // Exposed position (decoupled from source)
     this.position = new THREE.Vector3();
-    this.position.copy(camera.position);
+    this.position.copy(source.position);
 
     this._buildSpline();
   }

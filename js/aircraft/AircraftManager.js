@@ -6,7 +6,6 @@ import {
   VISUAL_ROLL_FACTOR,
   VISUAL_ROLL_MAX,
   VISUAL_PITCH_FACTOR,
-  VISUAL_PITCH_ANGLE_FACTOR,
   VISUAL_PITCH_MAX,
   VISUAL_SMOOTH,
 } from '../constants/aircraft.js';
@@ -103,13 +102,11 @@ export default class AircraftManager {
   update(state, dt) {
     if (!this.ready) return;
 
-    const { position, pitch, roll, yawRate, pitchRate, quaternion } = state;
+    const { position, roll, yawRate, pitchRate, quaternion } = state;
 
     // Smooth visual roll and pitch (cosmetic tilt on the mesh)
     const targetRoll = Math.max(-VISUAL_ROLL_MAX, Math.min(VISUAL_ROLL_MAX, yawRate * VISUAL_ROLL_FACTOR));
-    const ratePitch = pitchRate * VISUAL_PITCH_FACTOR;
-    const anglePitch = pitch * VISUAL_PITCH_ANGLE_FACTOR;
-    const targetPitch = Math.max(-VISUAL_PITCH_MAX, Math.min(VISUAL_PITCH_MAX, ratePitch + anglePitch));
+    const targetPitch = Math.max(-VISUAL_PITCH_MAX, Math.min(VISUAL_PITCH_MAX, pitchRate * VISUAL_PITCH_FACTOR));
     const t = Math.min(1, VISUAL_SMOOTH * dt);
     this._visualRoll += (targetRoll - this._visualRoll) * t;
     this._visualPitch += (targetPitch - this._visualPitch) * t;
