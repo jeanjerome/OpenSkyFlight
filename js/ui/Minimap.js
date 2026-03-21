@@ -69,7 +69,7 @@ export default class Minimap {
   }
 
   /** Called every frame from the animation loop. */
-  update(camera) {
+  update(camera, aircraftState) {
     if (!CONFIG.showMinimap) return;
     if (!this.geo.mapView) return;
 
@@ -93,8 +93,13 @@ export default class Minimap {
     const { latitude, longitude } = latLon;
     if (isNaN(latitude) || isNaN(longitude)) return;
 
-    const dir = camera.getWorldDirection(this._worldDir);
-    const yaw = Math.atan2(dir.x, dir.z);
+    let yaw;
+    if (aircraftState) {
+      yaw = aircraftState.yaw;
+    } else {
+      const dir = camera.getWorldDirection(this._worldDir);
+      yaw = Math.atan2(dir.x, dir.z);
+    }
     const zoom = CONFIG.minimapZoom;
 
     // Only redraw when something actually changed

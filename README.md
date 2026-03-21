@@ -175,7 +175,7 @@ cache/
 │   │   ├── GPUTimer.js            GPU-side frame timing
 │   │   └── MetricsCollector.js    Per-frame metrics recording
 │   ├── camera/
-│   │   ├── FPSController.js       Flight camera (pointer lock, 6-DOF, banking)
+│   │   ├── FlightController.js    Flight camera (pointer lock, 6-DOF, banking)
 │   │   ├── ChaseCameraController.js Spring-based third-person camera
 │   │   ├── SpringScalar.js        Critically-damped spring for scalar values
 │   │   └── SpringVector3.js       Critically-damped spring for Vector3 values
