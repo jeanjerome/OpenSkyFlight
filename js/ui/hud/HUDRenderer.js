@@ -43,10 +43,6 @@ export default class HUDRenderer {
     const ctx = this._ctx;
     let badgeY = BADGE_START_Y;
 
-    if (CONFIG.hiResMode) {
-      this._drawHiResBadge(ctx, w, badgeY);
-      badgeY += BADGE_SPACING;
-    }
     if (benchmarkRunner && benchmarkRunner.isRunning()) {
       if (benchmarkRunner.isWarmup()) {
         this._drawBenchmarkWarmup(ctx, w, benchmarkRunner.getWarmupRemaining(), badgeY);
