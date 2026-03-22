@@ -115,8 +115,10 @@ async function initApp() {
     update('showHud', !CONFIG.showHud);
   });
 
+  const hiresBadge = document.getElementById('hires-badge');
   input.on('KeyR', () => {
     const active = geoTerrainManager.toggleHiRes();
+    hiresBadge.style.display = active ? 'block' : 'none';
     Logger.info('App', `Hi-res mode (zoom 18) ${active ? 'enabled' : 'disabled'}`);
   });
 

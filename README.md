@@ -11,7 +11,7 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 
 - **Real-world elevation** — decoded from [AWS Terrarium](https://registry.opendata.aws/terrain-tiles/) PNG tiles on the GPU via TSL `positionNode`
 - **4 texture modes** — Satellite imagery, Road map, SAR radar, and Elevation contour lines — cycle with `T` or pick from the control panel
-- **Hi-Res mode (zoom 18)** — press `R` to toggle upsampled elevation with zoom-18 satellite textures for sharper close-up detail
+- **Hi-Res mode (zoom 18)** — press `R` to toggle upsampled elevation with zoom-18 satellite textures for sharper close-up detail. Best suited for static or slow-moving views; fast flight may cause temporary pixelation while high-zoom tiles load
 - **Adaptive LOD** — quadtree subdivision based on camera altitude, covering up to the geometric horizon
 - **Rafale aircraft** — 3D GLTF model with retracted landing gear, animated banking and pitch, chase camera (30 m behind)
 - **Cockpit / chase toggle** — press `V` to switch between first-person cockpit (roll applied to horizon) and third-person chase view
@@ -20,12 +20,6 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 - **MFD cockpit panel** — auto-hiding control panel with military flight display aesthetics
 - **OSM minimap** — real-time 2D map overlay with airplane marker and independent zoom
 - **Flight plan system** — record waypoints, save/load flight plans, and engage autopilot to follow a path automatically
-
-<!-- Screenshots: HUD close-up | MFD control panel | Minimap -->
-<!-- TODO: recapture mfd-panel.png — the control panel now shows a single TEXTURE select instead of 3 separate controls -->
-| HUD instruments | MFD control panel | OSM minimap |
-|---|---|---|
-| ![HUD with compass, horizon, altimeter and speed](docs/screenshots/hud.png) | ![MFD cockpit-style control panel](docs/screenshots/mfd-panel.png) | ![OSM minimap with airplane marker](docs/screenshots/minimap.png) |
 - **Local tile cache** — transparent caching proxy, pre-download tiles for offline flight
 - **Atmospheric sky, clouds & fog** — procedural sky with configurable sun position, animated cloud layer, and exponential distance fog
 - **Dynamic resolution scaling** — adaptive pixel ratio based on frame time to maintain smooth performance
@@ -80,7 +74,7 @@ Available scripts:
 | `V` | Toggle cockpit / chase view |
 | `H` | Toggle HUD |
 | `I` | Toggle info & help overlay |
-| `R` | Toggle Hi-Res mode (zoom 18) |
+| `R` | Toggle Hi-Res mode (zoom 18) — best for static views |
 | `X` | Toggle debug tile overlay |
 | `B` | Start / stop benchmark |
 | `Shift+B` | Store last benchmark as baseline |
