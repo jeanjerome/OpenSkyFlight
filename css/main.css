@@ -345,6 +345,50 @@ canvas {
   margin: 12px 0;
 }
 
+/* ── Flight Plan Menu ── */
+#flightplan-menu {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 400px;
+  background: rgba(0, 0, 0, 0.85);
+  border: 2px solid var(--color-primary);
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+  font-family: var(--font-mono);
+}
+.fp-title {
+  text-align: center;
+  font-size: 18px;
+  font-weight: bold;
+  color: var(--color-primary);
+  padding: 14px 0 10px;
+}
+#flightplan-list {
+  padding: 0 30px 10px;
+}
+.fp-item {
+  font-size: 14px;
+  color: var(--color-primary);
+  line-height: 28px;
+}
+.fp-empty {
+  font-size: 14px;
+  color: #667766;
+  text-align: center;
+  line-height: 28px;
+}
+.fp-footer {
+  text-align: center;
+  font-size: 12px;
+  color: #667766;
+  padding: 8px 0 12px;
+  border-top: 1px solid var(--color-border-dark);
+}
+
 /* ── Minimap Panel ── */
 #minimap-container {
   position: fixed;

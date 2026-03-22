@@ -27,12 +27,17 @@
   <div id="help">
     Click to capture mouse | Mouse : steer flight<br>
     W/↑ S/↓ : forward / backward | A/← D/→ : strafe<br>
-    I : info &amp; help | H : toggle HUD | V : toggle view<br>
-    R : hi-res mode (static views) | X : debug tiles | T : cycle texture mode<br>
-    B : benchmark | Shift+B : store baseline<br>
-    N : start/stop recording waypoints | Shift+N : clear plan<br>
-    P : add waypoint (while recording) | G : autopilot on/off<br>
-    L : load flight plan
+    V : toggle view | H : toggle HUD | M : toggle map | I : info &amp; help<br>
+    T : cycle texture mode | R : hi-res mode (static views) | X : debug tiles<br>
+    N : record waypoints | Shift+N : clear plan | P : add waypoint<br>
+    L : load flight plan | G : autopilot on/off<br>
+    B : benchmark | Shift+B : store baseline
+  </div>
+
+  <div id="flightplan-menu" style="display:none;">
+    <div class="fp-title">FLIGHT PLANS</div>
+    <div id="flightplan-list"></div>
+    <div class="fp-footer">L: close &nbsp;|&nbsp; 1-9: select &nbsp;|&nbsp; Esc: close</div>
   </div>
 
   <div id="minimap-container">
@@ -68,18 +73,8 @@
       </div>
 
       <div class="ctrl-group checkbox-group">
-        <input type="checkbox" id="showHud" checked />
-        <label for="showHud">HUD OVERLAY</label>
-      </div>
-
-      <div class="ctrl-group checkbox-group">
         <input type="checkbox" id="showLogs" />
         <label for="showLogs">LOGS</label>
-      </div>
-
-      <div class="ctrl-group checkbox-group">
-        <input type="checkbox" id="showMinimap" />
-        <label for="showMinimap">MAP</label>
       </div>
 
       <div class="ctrl-group" id="logLevel-group">

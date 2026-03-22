@@ -106,44 +106,48 @@ async function initApp() {
   // --- Input bindings ---
   const input = new InputManager();
 
-  input.on('KeyX', () => {
+  input.onKey('x', () => {
     const active = geoTerrainManager.toggleDebug();
     Logger.info('App', `Debug tiles ${active ? 'enabled' : 'disabled'}`);
   });
 
-  input.on('KeyH', () => {
+  input.onKey('h', () => {
     update('showHud', !CONFIG.showHud);
   });
 
+  input.onKey('m', () => {
+    update('showMinimap', !CONFIG.showMinimap);
+  });
+
   const hiresBadge = document.getElementById('hires-badge');
-  input.on('KeyR', () => {
+  input.onKey('r', () => {
     const active = geoTerrainManager.toggleHiRes();
     hiresBadge.style.display = active ? 'block' : 'none';
     Logger.info('App', `Hi-res mode (zoom 18) ${active ? 'enabled' : 'disabled'}`);
   });
 
-  input.on('KeyT', () => {
+  input.onKey('t', () => {
     const modes = ['satellite', 'osm', 'sar', 'elevation'];
     const idx = modes.indexOf(CONFIG.textureMode);
     update('textureMode', modes[(idx + 1) % modes.length]);
     showNotification(`Texture: ${CONFIG.textureMode}`);
   });
 
-  input.on('KeyV', () => {
+  input.onKey('v', () => {
     const next = CONFIG.cameraMode === 'chase' ? 'cockpit' : 'chase';
     update('cameraMode', next);
     chaseCameraController.reset();
     Logger.info('App', `Camera mode: ${next}`);
   });
 
-  input.on('KeyI', () => {
+  input.onKey('i', () => {
     const active = hud.toggleStats();
     document.getElementById('help').style.display = active ? 'block' : 'none';
     stats.dom.style.display = active ? 'block' : 'none';
     Logger.info('App', `Info ${active ? 'enabled' : 'disabled'}`);
   });
 
-  input.on('KeyL', async () => {
+  input.onKey('l', async () => {
     if (hud.isFlightPlanMenuOpen()) {
       hud.closeFlightPlanMenu();
     } else {
@@ -177,7 +181,7 @@ async function initApp() {
     if (hud.isFlightPlanMenuOpen()) hud.closeFlightPlanMenu();
   });
 
-  input.on('KeyN', (e) => {
+  input.onKey('n', (e) => {
     if (e.shiftKey) {
       flightPlanRecorder.clear();
     } else if (flightPlanRecorder.isRecording()) {
@@ -187,11 +191,11 @@ async function initApp() {
     }
   });
 
-  input.on('KeyP', () => {
+  input.onKey('p', () => {
     if (flightPlanRecorder.isRecording()) flightPlanRecorder.addWaypoint(flightController);
   });
 
-  input.on('KeyG', () => {
+  input.onKey('g', () => {
     if (flightPlanRecorder.autopilotActive) {
       flightPlanRecorder.autopilotActive = false;
       flightController.enabled = true;
@@ -213,7 +217,7 @@ async function initApp() {
     }
   });
 
-  input.on('KeyB', (e) => {
+  input.onKey('b', (e) => {
     if (e.shiftKey) {
       if (!benchmarkRunner._lastReport) {
         Logger.warn('App', 'No completed benchmark — run one first before storing baseline');

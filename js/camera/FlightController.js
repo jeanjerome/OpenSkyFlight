@@ -63,10 +63,14 @@ export default class FlightController {
   }
 
   _onKeyDown(e) {
+    const tag = e.target.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
     this.keys[e.code] = true;
   }
 
   _onKeyUp(e) {
+    const tag = e.target.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
     this.keys[e.code] = false;
   }
 
