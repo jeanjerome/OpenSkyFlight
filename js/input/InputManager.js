@@ -1,6 +1,7 @@
 /**
  * Centralized keyboard dispatch.
- * Registers handlers via `on(code, handler)` and `onWhen(code, predicate, handler)`.
+ * - `on(code, handler)` matches by physical key position (e.code) — for WASD/arrows.
+ * - `onKey(key, handler)` matches by character value (e.key) — for action shortcuts.
  */
 export default class InputManager {
   constructor() {
@@ -8,9 +9,14 @@ export default class InputManager {
     window.addEventListener('keydown', (e) => this._dispatch(e));
   }
 
-  /** Register handler for a specific key code. */
+  /** Register handler for a physical key code (e.code). */
   on(code, handler) {
     this._handlers.push({ code, predicate: null, handler });
+  }
+
+  /** Register handler for a character key (e.key), case-insensitive. */
+  onKey(key, handler) {
+    this._handlers.push({ key: key.toLowerCase(), predicate: null, handler });
   }
 
   /** Register handler that only fires when predicate returns true. */
@@ -24,8 +30,13 @@ export default class InputManager {
   }
 
   _dispatch(e) {
+    const tag = e.target.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
     for (const entry of this._handlers) {
-      if (entry.prefix) {
+      if (entry.key) {
+        if (e.key.toLowerCase() !== entry.key) continue;
+      } else if (entry.prefix) {
         if (!e.code.startsWith(entry.prefix)) continue;
       } else if (entry.code && e.code !== entry.code) {
         continue;

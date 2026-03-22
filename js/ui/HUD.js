@@ -34,7 +34,6 @@ export default class HUD {
     this._prevRecording = false;
     this._prevAutopilot = false;
     this._prevWpCount = 0;
-    this._prevMenuOpen = false;
     this._forceRedraw = true;
 
     this.resize();
@@ -90,8 +89,7 @@ export default class HUD {
       benchBadgeEpoch === this._prevBenchBadgeEpoch &&
       isRecording === this._prevRecording &&
       isAutopilot === this._prevAutopilot &&
-      wpCount === this._prevWpCount &&
-      this._menu.isOpen === this._prevMenuOpen
+      wpCount === this._prevWpCount
     ) {
       return;
     }
@@ -105,14 +103,12 @@ export default class HUD {
     this._prevRecording = isRecording;
     this._prevAutopilot = isAutopilot;
     this._prevWpCount = wpCount;
-    this._prevMenuOpen = this._menu.isOpen;
     this._forceRedraw = false;
 
     this.ctx.clearRect(0, 0, this.w, this.h);
 
     this._renderer.drawInstruments(this.w, this.h, yaw, pitch, altY, groundElevation, speed);
     this._renderer.drawBadges(this.w, benchmarkRunner, isRecording, wpCount, isAutopilot, fpRec);
-    this._menu.draw(this.ctx, this.w, this.h);
   }
 
   // --- Flight plan menu delegation ---

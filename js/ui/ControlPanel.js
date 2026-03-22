@@ -14,8 +14,6 @@ export default class ControlPanel {
     this._setupSpeedSlider();
     this._setupAtmosphere();
 
-    this._bindCheckbox('showHud', 'showHud');
-    this._bindCheckbox('showMinimap', 'showMinimap');
     this._bindCheckbox('showLogs', 'showLogs');
 
     this._setupLogLevel();
