@@ -234,7 +234,6 @@ class MapNode extends Mesh {
             const material = self.material;
             const map = material.map;
             material.dispose();
-            // Defer texture disposal to let the WebGPU command buffer finish
             if (map && map !== MapNode.defaultTexture) {
                 setTimeout(() => { map.dispose(); }, 0);
             }
@@ -242,7 +241,6 @@ class MapNode extends Mesh {
         catch (e) { }
         try {
             const geo = self.geometry;
-            // Defer geometry disposal to let WebGPU command buffer finish
             setTimeout(() => { geo.dispose(); }, 0);
         }
         catch (e) { }
@@ -930,7 +928,6 @@ class MapHeightNodeShader extends MapHeightNode {
         super.dispose();
         const hTex = this._heightTextureNode.value;
         if (hTex && hTex !== MapHeightNodeShader.defaultTerrariumTexture) {
-            // Defer to let WebGPU command buffer finish
             setTimeout(() => { hTex.dispose(); }, 0);
         }
     }
@@ -980,6 +977,10 @@ class LODRaycast {
                 const matrix = node.matrixWorld.elements;
                 const vector = new Vector3(matrix[0], matrix[1], matrix[2]);
                 distance = vector.length() / distance;
+                const refLevel = 13;
+                if (node.level > refLevel) {
+                    distance *= Math.pow(1.4, node.level - refLevel);
+                }
             }
             if (distance > this.thresholdUp) {
                 node.subdivide();

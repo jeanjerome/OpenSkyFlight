@@ -83,19 +83,28 @@ export class LODRaycast implements LODControl
 				distance = Math.pow(distance * 2, node.level);
 			}
 
-			if (this.scaleDistance) 
+			if (this.scaleDistance)
 			{
 				// Get scale from transformation matrix directly
 				const matrix = node.matrixWorld.elements;
 				const vector = new Vector3(matrix[0], matrix[1], matrix[2]);
 				distance = vector.length() / distance;
+
+				// tileWorldSize halves each level, so the ratio (size/dist) drops
+				// exponentially at high zoom. Apply a gentle compensation above
+				// a reference level so only nearby tiles reach the subdivision
+				// threshold at high zoom. Base 1.4 (not 2) avoids over-subdivision.
+				const refLevel = 13;
+				if (node.level > refLevel) {
+					distance *= Math.pow(1.4, node.level - refLevel);
+				}
 			}
 
-			if (distance > this.thresholdUp) 
+			if (distance > this.thresholdUp)
 			{
 				node.subdivide();
 			}
-			else if (distance < this.thresholdDown && node.parentNode) 
+			else if (distance < this.thresholdDown && node.parentNode)
 			{
 				node.parentNode.simplify();
 			}
