@@ -95,7 +95,8 @@ export default class Minimap {
 
     let yaw;
     if (aircraftState) {
-      yaw = aircraftState.yaw;
+      // FlightController convention: 0 = north; convert to atan2(dir.x, dir.z) convention: π = north
+      yaw = aircraftState.yaw + Math.PI;
     } else {
       const dir = camera.getWorldDirection(this._worldDir);
       yaw = Math.atan2(dir.x, dir.z);
