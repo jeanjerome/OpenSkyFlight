@@ -68,11 +68,12 @@ Available scripts:
 |---|---|
 | Click the viewport | Lock the mouse pointer |
 | Mouse | Look around (yaw / pitch) |
-| `W` / `S` or `↑` / `↓` | Move forward / backward |
-| `A` / `D` or `←` / `→` | Strafe left / right |
+| `W` / `S` or `↑` / `↓` | Move forward / backward (`Z` / `S` on AZERTY) |
+| `A` / `D` or `←` / `→` | Strafe left / right (`Q` / `D` on AZERTY) |
 | `T` | Cycle texture mode (Satellite / Road map / SAR / Elevation) |
 | `V` | Toggle cockpit / chase view |
 | `H` | Toggle HUD |
+| `M` | Toggle minimap |
 | `I` | Toggle info & help overlay |
 | `R` | Toggle Hi-Res mode (zoom 18) — best for static views |
 | `X` | Toggle debug tile overlay |
@@ -85,6 +86,8 @@ Available scripts:
 | `G` | Engage / disengage autopilot |
 | `1`–`9` | Select flight plan from menu |
 | `Esc` | Release pointer lock / close menu |
+
+> **Keyboard layouts:** Flight controls (WASD) use physical key positions, so they map to ZQSD on AZERTY keyboards. All other shortcuts use the character printed on the key and work identically on any layout.
 
 Use the right-side control panel to search locations, load terrain, and select texture mode.
 
@@ -146,82 +149,33 @@ cache/
 ## Project Structure
 
 ```
-├── index.html                     Main HTML page (MFD-styled UI)
-├── css/
-│   └── main.css                   External stylesheet with CSS custom properties
+├── index.html                 Entry point (UI structure, import map)
+├── css/main.css               Stylesheet (CSS custom properties)
 ├── js/
-│   ├── app.js                     Thin orchestrator: init, wiring & render loop
-│   ├── constants/
-│   │   ├── aircraft.js            Aircraft model dimensions & visual factors
-│   │   ├── camera.js              FOV, altitudes, chase/FPS controller params
-│   │   ├── hud.js                 HUD colors, instrument dimensions, compass data
-│   │   ├── physics.js             Speed of sound, max delta time
-│   │   ├── rendering.js           Clear color, clip planes, adaptive quality thresholds
-│   │   └── terrain.js             Tile sizes, zoom limits, minimap & benchmark params
-│   ├── atmosphere/
-│   │   ├── AtmosphericSky.js      Procedural sky, sun positioning & fog
-│   │   └── CloudLayer.js          Animated cloud layer
-│   ├── aircraft/
-│   │   └── AircraftManager.js     Rafale model loading & animation
-│   ├── benchmark/
-│   │   ├── BenchmarkRunner.js     Automated benchmark with camera path
-│   │   ├── BenchmarkComparator.js Baseline comparison & reporting
-│   │   ├── GPUTimer.js            GPU-side frame timing
-│   │   └── MetricsCollector.js    Per-frame metrics recording
-│   ├── camera/
-│   │   ├── FlightController.js    Flight camera (pointer lock, 6-DOF, banking)
-│   │   ├── ChaseCameraController.js Spring-based third-person camera
-│   │   ├── SpringScalar.js        Critically-damped spring for scalar values
-│   │   └── SpringVector3.js       Critically-damped spring for Vector3 values
-│   ├── flightplan/
-│   │   ├── FlightPlanRecorder.js  Waypoint recording, plan loading & autopilot
-│   │   ├── FlightPlan.js          Interpolated flight path from waypoints
-│   │   ├── DefaultFlightPlan.js   Built-in demo flight plan
-│   │   └── Waypoint.js            Single waypoint data class
-│   ├── input/
-│   │   └── InputManager.js        Centralized keyboard dispatch
-│   ├── rendering/
-│   │   └── AdaptiveQualityManager.js Dynamic resolution scaling
-│   ├── scene/
-│   │   └── SceneSetup.js          Renderer, scene, camera & lights factory
-│   ├── terrain/
-│   │   └── GeoTerrainManager.js   Real-world terrain via geo-three, hi-res toggle
-│   ├── geo/
-│   │   ├── TileMath.js            Slippy Map math, quadtree LOD, horizon calc
-│   │   ├── ElevationProvider.js   Terrarium tile fetch + decode
-│   │   ├── TerrariumProvider.js   geo-three height provider (zoom-15 upsampling to 18)
-│   │   ├── LocalTileProvider.js   geo-three texture provider (via proxy)
-│   │   ├── TextureProvider.js     OSM/satellite tile fetch with deferred disposal
-│   │   └── fetchSemaphore.js      Browser-side concurrency limiter
-│   ├── ui/
-│   │   ├── HUD.js                 HUD facade composing sub-modules
-│   │   ├── hud/
-│   │   │   ├── HUDRenderer.js     Canvas rendering of instruments & badges
-│   │   │   ├── FlightPlanMenu.js  Flight plan selection overlay
-│   │   │   └── SpeedTracker.js    Smoothed ground speed computation
-│   │   ├── Minimap.js             OSM minimap with airplane marker
-│   │   ├── ControlPanel.js        MFD settings panel
-│   │   └── Notification.js        Toast notification system
-│   └── utils/
-│       ├── config.js              Reactive config with validation & JSDoc
-│       └── Logger.js              Centralized logging with UI panel
-├── scripts/
-│   ├── serve.js                   Dev server with caching tile proxy
-│   └── prefetch-tiles.js          Bulk tile downloader for offline use
-├── vendor/
-│   └── geo-three/                 Vendored geo-three with custom patches
+│   ├── app.js                 Orchestrator: init, input bindings, render loop
+│   ├── aircraft/              Rafale GLTF model loading & animation
+│   ├── atmosphere/            Procedural sky, cloud layer, fog
+│   ├── benchmark/             Automated perf testing & baseline comparison
+│   ├── camera/                Flight controller (6-DOF), chase camera, springs
+│   ├── constants/             Shared constants (camera, HUD, physics, terrain…)
+│   ├── flightplan/            Waypoint recording, flight plan interpolation, autopilot
+│   ├── geo/                   Tile math, elevation/texture providers, fetch limiter
+│   ├── input/                 Keyboard dispatch (e.code for flight, e.key for actions)
+│   ├── rendering/             Adaptive resolution scaling
+│   ├── scene/                 Renderer, scene, camera & lights factory
+│   ├── terrain/               Real-world terrain manager (geo-three integration)
+│   ├── ui/                    HUD instruments, flight plan menu, minimap, MFD panel
+│   └── utils/                 Reactive config, logger
 ├── assets/
-│   ├── models/                    3D models (Rafale GLTF)
-│   ├── flightplans/               Saved flight plan JSON files
-│   └── favicon.png
-├── docs/
-│   └── screenshots/               README screenshots
-├── benchmarks/                    Benchmark result JSON files
-├── package.json                   Dev dependencies (ESLint, Prettier)
-├── eslint.config.js               ESLint 9 flat config (ES modules)
-├── .prettierrc                    Prettier configuration
-├── .editorconfig                  Editor settings (indent, encoding, EOL)
-└── cache/                         Local tile cache (git-ignored)
+│   ├── models/                3D models (Rafale GLTF)
+│   └── flightplans/           Saved flight plan JSON files
+├── scripts/
+│   ├── serve.js               Dev server with caching tile proxy
+│   └── prefetch-tiles.js      Bulk tile downloader for offline use
+├── vendor/geo-three/          Vendored geo-three with custom patches
+├── docs/screenshots/          README screenshots
+├── benchmarks/                Benchmark result JSON files
+└── cache/                     Local tile cache (git-ignored)
 ```
 
 ## Technologies
@@ -276,6 +230,13 @@ Satellite tiles are fetched from the [Esri World Imagery](https://www.arcgis.com
 - **License:** proprietary — governed by the [Esri Terms of Use](https://www.esri.com/en-us/legal/terms/full-master-agreement). Non-commercial use is permitted with attribution. Commercial use requires a paid Esri license.
 - **Attribution:** powered by Esri. Sources: Esri, Maxar, Earthstar Geographics, and the GIS User Community.
 - Users consuming this data are responsible for complying with Esri's terms.
+
+### 3D model — Dassault Rafale B
+
+The aircraft model was created by [pjedvaj](https://www.cgtrader.com/designers/pjedvaj) and downloaded from [CGTrader](https://www.cgtrader.com/free-3d-models/aircraft/military-aircraft/dassault-rafale-b-bdc1590e-5936-4912-ba44-79f5c2e09f07).
+
+- **License:** Royalty Free License
+- **Original format:** Cheetah3D (.jas), converted to GLTF
 
 ### Geocoding — Nominatim
 
