@@ -1,5 +1,6 @@
 import { MapProvider } from 'geo-three';
 import { SOURCE_MAX_ZOOM, TILE_SIZE } from '../constants/terrain.js';
+import { acquireFetch, releaseFetch } from './fetchSemaphore.js';
 
 /**
  * Fetches Terrarium-encoded elevation tiles from the local proxy.
@@ -56,20 +57,25 @@ export default class TerrariumProvider extends MapProvider {
   /**
    * Fetch a raw Terrarium PNG tile and return the HTMLImageElement directly.
    */
-  _fetchImage(zoom, x, y) {
-    return new Promise((resolve) => {
-      const path = `/tiles/terrarium/${zoom}/${x}/${y}.png`;
-      const image = new Image();
-      image.crossOrigin = 'anonymous';
+  async _fetchImage(zoom, x, y) {
+    await acquireFetch();
+    try {
+      return await new Promise((resolve) => {
+        const path = `/tiles/terrarium/${zoom}/${x}/${y}.png`;
+        const image = new Image();
+        image.crossOrigin = 'anonymous';
 
-      image.onload = () => {
-        resolve(image);
-      };
-      image.onerror = () => {
-        resolve(this._flatImage());
-      };
-      image.src = path;
-    });
+        image.onload = () => {
+          resolve(image);
+        };
+        image.onerror = () => {
+          resolve(this._flatImage());
+        };
+        image.src = path;
+      });
+    } finally {
+      releaseFetch();
+    }
   }
 
   _getParentImage(parentX, parentY) {
@@ -78,14 +84,21 @@ export default class TerrariumProvider extends MapProvider {
       return this._parentCache.get(key);
     }
 
-    const promise = new Promise((resolve) => {
-      const path = `/tiles/terrarium/${SOURCE_MAX_ZOOM}/${parentX}/${parentY}.png`;
-      const image = new Image();
-      image.crossOrigin = 'anonymous';
-      image.onload = () => resolve(image);
-      image.onerror = () => resolve(null);
-      image.src = path;
-    });
+    const promise = (async () => {
+      await acquireFetch();
+      try {
+        return await new Promise((resolve) => {
+          const path = `/tiles/terrarium/${SOURCE_MAX_ZOOM}/${parentX}/${parentY}.png`;
+          const image = new Image();
+          image.crossOrigin = 'anonymous';
+          image.onload = () => resolve(image);
+          image.onerror = () => resolve(null);
+          image.src = path;
+        });
+      } finally {
+        releaseFetch();
+      }
+    })();
 
     this._parentCache.set(key, promise);
     return promise;

@@ -1,4 +1,4 @@
-import {BufferGeometry, DataTexture, LinearFilter, Material, MeshStandardNodeMaterial, Raycaster, Intersection, RGBAFormat, UnsignedByteType, Texture, Vector3} from 'three';
+import {BufferGeometry, DataTexture, LinearFilter, Material, MeshStandardNodeMaterial, Raycaster, Intersection, REVISION, RGBAFormat, UnsignedByteType, Texture, Vector3} from 'three';
 import {texture as tslTexture, uv, positionLocal, Fn, varying, vec2, vec3, float, cross, transformNormalToView} from 'three/tsl';
 import {MapHeightNode} from './MapHeightNode';
 import {MapNodeGeometry} from '../geometries/MapNodeGeometry';
@@ -57,16 +57,23 @@ export class MapHeightNodeShader extends MapHeightNode
 
 	private _heightTextureNode: any;
 
+	private _colorTextureNode: any;
+
 	public constructor(parentNode: MapHeightNode = null, mapView: MapView = null, location: number = QuadTreePosition.root, level: number = 0, x: number = 0, y: number = 0)
 	{
 		const heightTextureNode = tslTexture(MapHeightNodeShader.defaultTerrariumTexture);
 
+		// TSL uniform for color texture — update .value to swap textures without pipeline recompilation
+		const colorTextureNode = tslTexture(MapNode.defaultTexture);
+
 		const material = new MeshStandardNodeMaterial({
-			map: MapNode.defaultTexture,
 			color: 0xFFFFFF,
 			roughness: 1.0,
 			metalness: 0.0,
 		});
+
+		// Assign color via TSL uniform (not material.map) to avoid shader recompilation on texture swap
+		material.colorNode = colorTextureNode;
 
 		// Varying to pass analytical normal from vertex to fragment shader
 		const vNormal = varying(vec3(0.0, 1.0, 0.0));
@@ -107,12 +114,63 @@ export class MapHeightNodeShader extends MapHeightNode
 
 		super(parentNode, mapView, location, level, x, y, MapHeightNodeShader.geometry, material);
 		this._heightTextureNode = heightTextureNode;
+		this._colorTextureNode = colorTextureNode;
 		this.frustumCulled = false;
 	}
 
+	/**
+	 * Override: update TSL color uniform instead of material.map — no pipeline recompilation.
+	 */
+	public async applyTexture(image: HTMLImageElement): Promise<void>
+	{
+		if (this.disposed)
+		{
+			return;
+		}
+
+		const texture = new Texture(image);
+		if (parseInt(REVISION) >= 152)
+		{
+			texture.colorSpace = 'srgb';
+		}
+		texture.generateMipmaps = false;
+		texture.format = RGBAFormat;
+		texture.magFilter = LinearFilter;
+		texture.minFilter = LinearFilter;
+		texture.needsUpdate = true;
+
+		// Update TSL uniform — NO pipeline recompilation
+		this._colorTextureNode.value = texture;
+	}
+
+	/**
+	 * Override: load color texture without triggering material.needsUpdate.
+	 */
 	public async loadData(): Promise<void>
 	{
-		await super.loadData();
+		if (this.level < this.mapView.provider.minZoom || this.level > this.mapView.provider.maxZoom)
+		{
+			console.warn('Geo-Three: Loading tile outside of provider range.', this);
+			this._colorTextureNode.value = MapNode.defaultTexture;
+			return;
+		}
+
+		try
+		{
+			const image = await this.mapView.provider.fetchTile(this.level, this.x, this.y);
+			await this.applyTexture(image);
+		}
+		catch (e)
+		{
+			if (this.disposed)
+			{
+				return;
+			}
+
+			console.warn('Geo-Three: Failed to load node tile data.', this);
+			this._colorTextureNode.value = MapNode.defaultTexture;
+		}
+
 		this.textureLoaded = true;
 	}
 
@@ -126,10 +184,6 @@ export class MapHeightNodeShader extends MapHeightNode
 		if (this.level < this.mapView.heightProvider.minZoom || this.level > this.mapView.heightProvider.maxZoom)
 		{
 			console.warn('Geo-Three: Loading tile outside of provider range.', this);
-			// @ts-ignore
-			this.material.map = MapHeightNodeShader.defaultTexture;
-			// @ts-ignore
-			this.material.needsUpdate = true;
 			return;
 		}
 
@@ -182,6 +236,13 @@ export class MapHeightNodeShader extends MapHeightNode
 
 	public dispose(): void
 	{
+		// Dispose color texture before super.dispose() (which disposes material.map)
+		const cTex = this._colorTextureNode?.value;
+		if (cTex && cTex !== MapNode.defaultTexture)
+		{
+			setTimeout(() => { cTex.dispose(); }, 0);
+		}
+
 		super.dispose();
 
 		const hTex = this._heightTextureNode.value;

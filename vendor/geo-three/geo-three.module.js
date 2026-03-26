@@ -86,7 +86,7 @@ class CanvasUtils {
 }
 
 class TextureUtils {
-    static createFillTexture(color = '#000000', width = 1, height = 1) {
+    static createFillTexture(color = '#888888', width = 1, height = 1) {
         const canvas = CanvasUtils.createOffscreenCanvas(width, height);
         const context = canvas.getContext('2d');
         context.fillStyle = color;
@@ -847,12 +847,13 @@ const decodeTerrariumTSL = Fn(([sample]) => {
 class MapHeightNodeShader extends MapHeightNode {
     constructor(parentNode = null, mapView = null, location = QuadTreePosition.root, level = 0, x = 0, y = 0) {
         const heightTextureNode = texture(MapHeightNodeShader.defaultTerrariumTexture);
+        const colorTextureNode = texture(MapNode.defaultTexture);
         const material = new MeshStandardNodeMaterial({
-            map: MapNode.defaultTexture,
             color: 0xFFFFFF,
             roughness: 1.0,
             metalness: 0.0,
         });
+        material.colorNode = colorTextureNode;
         const vNormal = varying(vec3(0.0, 1.0, 0.0));
         material.positionNode = Fn(() => {
             const pos = positionLocal.toVar();
@@ -872,14 +873,44 @@ class MapHeightNodeShader extends MapHeightNode {
         material.normalNode = transformNormalToView(vNormal);
         super(parentNode, mapView, location, level, x, y, MapHeightNodeShader.geometry, material);
         this._heightTextureNode = heightTextureNode;
+        this._colorTextureNode = colorTextureNode;
         this.frustumCulled = false;
     }
-    loadData() {
-        const _super = Object.create(null, {
-            loadData: { get: () => super.loadData }
-        });
+    applyTexture(image) {
         return __awaiter(this, void 0, void 0, function* () {
-            yield _super.loadData.call(this);
+            if (this.disposed) {
+                return;
+            }
+            const texture = new Texture(image);
+            if (parseInt(REVISION) >= 152) {
+                texture.colorSpace = 'srgb';
+            }
+            texture.generateMipmaps = false;
+            texture.format = RGBAFormat;
+            texture.magFilter = LinearFilter;
+            texture.minFilter = LinearFilter;
+            texture.needsUpdate = true;
+            this._colorTextureNode.value = texture;
+        });
+    }
+    loadData() {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (this.level < this.mapView.provider.minZoom || this.level > this.mapView.provider.maxZoom) {
+                console.warn('Geo-Three: Loading tile outside of provider range.', this);
+                this._colorTextureNode.value = MapNode.defaultTexture;
+                return;
+            }
+            try {
+                const image = yield this.mapView.provider.fetchTile(this.level, this.x, this.y);
+                yield this.applyTexture(image);
+            }
+            catch (e) {
+                if (this.disposed) {
+                    return;
+                }
+                console.warn('Geo-Three: Failed to load node tile data.', this);
+                this._colorTextureNode.value = MapNode.defaultTexture;
+            }
             this.textureLoaded = true;
         });
     }
@@ -890,8 +921,6 @@ class MapHeightNodeShader extends MapHeightNode {
             }
             if (this.level < this.mapView.heightProvider.minZoom || this.level > this.mapView.heightProvider.maxZoom) {
                 console.warn('Geo-Three: Loading tile outside of provider range.', this);
-                this.material.map = MapHeightNodeShader.defaultTexture;
-                this.material.needsUpdate = true;
                 return;
             }
             try {
@@ -925,6 +954,11 @@ class MapHeightNodeShader extends MapHeightNode {
         }
     }
     dispose() {
+        var _a;
+        const cTex = (_a = this._colorTextureNode) === null || _a === void 0 ? void 0 : _a.value;
+        if (cTex && cTex !== MapNode.defaultTexture) {
+            setTimeout(() => { cTex.dispose(); }, 0);
+        }
         super.dispose();
         const hTex = this._heightTextureNode.value;
         if (hTex && hTex !== MapHeightNodeShader.defaultTerrariumTexture) {
