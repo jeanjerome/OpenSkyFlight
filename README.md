@@ -11,8 +11,8 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 
 - **Real-world elevation** — decoded from [AWS Terrarium](https://registry.opendata.aws/terrain-tiles/) PNG tiles on the GPU via TSL `positionNode`
 - **4 texture modes** — Satellite imagery, Road map, SAR radar, and Elevation contour lines — cycle with `T` or pick from the control panel
-- **Hi-Res mode (zoom 18)** — press `R` to toggle upsampled elevation with zoom-18 satellite textures for sharper close-up detail. Best suited for static or slow-moving views; fast flight may cause temporary pixelation while high-zoom tiles load
-- **Adaptive LOD** — quadtree subdivision based on camera altitude, covering up to the geometric horizon
+- **Hi-Res mode (zoom 18)** — press `R` to toggle upsampled elevation with zoom-18 satellite textures for sharper close-up detail. Hi-res tiles are concentrated at the view center and fade concentrically toward the periphery. Best suited for static or slow-moving views; fast flight may cause temporary pixelation while high-zoom tiles load
+- **Adaptive LOD** — quadtree subdivision based on camera distance, with concentric view-center weighting for hi-res zoom levels
 - **Rafale aircraft** — 3D GLTF model with retracted landing gear, animated banking and pitch, chase camera (30 m behind)
 - **Cockpit / chase toggle** — press `V` to switch between first-person cockpit (roll applied to horizon) and third-person chase view
 - **Flight simulator controls** — 6-DOF camera with pointer lock, banking, pitch/yaw, full 360° looping
@@ -91,19 +91,18 @@ Available scripts:
 
 Use the right-side control panel to search locations, load terrain, and select texture mode.
 
-## Building geo-three (dev only)
+## Building three-tile (dev only)
 
-The terrain engine relies on [geo-three](https://github.com/tentone/geo-three), a Three.js geographic tile library. The upstream project no longer appears to be actively maintained, so we vendor its source code in `vendor/geo-three/source/` in order to apply our own patches and extensions (Three.js r152+ compatibility, custom providers, deferred WebGPU resource disposal, etc.).
+The terrain engine relies on [three-tile](https://github.com/sxguojf/three-tile), a lightweight Three.js tile map library. We vendor a patched fork (`0.11.8-osf`) in `vendor/three-tile/` with custom LOD enhancements (concentric view-center weighting, removal hysteresis).
 
 If you modify the sources, rebuild the bundle:
 
 ```bash
-cd vendor/geo-three
-npm install   # first time only
-npm run build
+cd vendor/three-tile
+npm run build:lib
 ```
 
-This produces `vendor/geo-three/geo-three.module.js`, which the app already imports via import map — no other change needed.
+This produces `vendor/three-tile/packages/lib/dist/three-tile-osf.js`, which the app imports via import map — no other change needed.
 
 ## Real-World Mode
 
@@ -123,7 +122,7 @@ Default location: **Mont Blanc** (45.8326°N, 6.8652°E).
 ## How It Works
 
 1. **Elevation** — Terrarium PNG tiles (AWS S3) are decoded into heightmaps on the GPU via a TSL `positionNode` shader (`R×256 + G + B/256 − 32768` meters)
-2. **LOD system** — geo-three's `LODRaycastPruning` drives recursive quadtree subdivision: tiles near the camera are split into 4 children at higher zoom, distant tiles stay coarse
+2. **LOD system** — three-tile's quadtree subdivision splits tiles near the camera into 4 children at higher zoom; a concentric weighting concentrates hi-res tiles (zoom 16–18) at the view center while distant and peripheral tiles stay coarse
 3. **Textures** — Four modes: Satellite (ESRI) and Road map (OSM) fetch raster tiles on demand; SAR radar and Elevation contours are GPU-generated via TSL shaders
 4. **Caching** — A Node.js proxy intercepts all `/tiles/` requests: serves from disk on hit, fetches upstream on miss, caches for next time
 
@@ -163,7 +162,7 @@ cache/
 │   ├── input/                 Keyboard dispatch (e.code for flight, e.key for actions)
 │   ├── rendering/             Adaptive resolution scaling
 │   ├── scene/                 Renderer, scene, camera & lights factory
-│   ├── terrain/               Real-world terrain manager (geo-three integration)
+│   ├── terrain/               Real-world terrain manager (three-tile integration)
 │   ├── ui/                    HUD instruments, flight plan menu, minimap, MFD panel
 │   └── utils/                 Reactive config, logger
 ├── assets/
@@ -172,7 +171,7 @@ cache/
 ├── scripts/
 │   ├── serve.js               Dev server with caching tile proxy
 │   └── prefetch-tiles.js      Bulk tile downloader for offline use
-├── vendor/geo-three/          Vendored geo-three with custom patches
+├── vendor/three-tile/         Vendored three-tile (0.11.8-osf) with concentric LOD
 ├── docs/screenshots/          README screenshots
 ├── benchmarks/                Benchmark result JSON files
 └── cache/                     Local tile cache (git-ignored)
@@ -181,7 +180,7 @@ cache/
 ## Technologies
 
 - [Three.js](https://threejs.org/) v0.183 (WebGPU build) — 3D rendering with TSL shaders (loaded via CDN, no install)
-- [geo-three](https://github.com/tentone/geo-three) — geographic tile management and Mercator projection
+- [three-tile](https://github.com/sxguojf/three-tile) (0.11.8-osf) — geographic tile management with patched concentric LOD
 - Canvas 2D — HUD instrument overlay, hi-res badge, and minimap
 - [three/examples — Sky](https://threejs.org/examples/?q=sky#webgl_shaders_sky) — procedural atmospheric sky and sun
 - [AWS Terrarium Tiles](https://registry.opendata.aws/terrain-tiles/) — elevation data (zoom 0–15, upsampled to 18 in hi-res mode)
