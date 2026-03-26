@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { CONFIG, update, onChange } from '../utils/config.js';
-import { UnitsUtils } from 'geo-three';
 import Logger from '../utils/Logger.js';
+
 import {
   TILE_SIZE,
   MINIMAP_GRID as GRID,
@@ -71,26 +71,22 @@ export default class Minimap {
   /** Called every frame from the animation loop. */
   update(camera, aircraftState) {
     if (!CONFIG.showMinimap) return;
-    if (!this.geo.mapView) return;
+    if (!this.geo.tileMap) return;
 
     // Sprint 3.2: only run every 3 frames (~20Hz at 60fps)
     this._frameCounter++;
     if (this._frameCounter % MINIMAP_UPDATE_INTERVAL !== 0) return;
 
-    const mapView = this.geo.mapView;
-
-    // Convert world → Mercator → lat/lon
-    const mercX = camera.position.x - mapView.position.x;
-    const mercY = mapView.position.z - camera.position.z;
-
-    let latLon;
+    // Convert world �� lat/lon via three-tile coordinate API
+    let geo;
     try {
-      latLon = UnitsUtils.sphericalToDatums(mercX, mercY);
+      geo = this.geo.tileMap.world2geo(new THREE.Vector3(camera.position.x, camera.position.y, camera.position.z));
     } catch {
       return;
     }
 
-    const { latitude, longitude } = latLon;
+    const latitude = geo.y;
+    const longitude = geo.x;
     if (isNaN(latitude) || isNaN(longitude)) return;
 
     let yaw;
@@ -203,20 +199,17 @@ export default class Minimap {
   }
 
   _worldToPixel(worldX, worldZ, offsetX, offsetY, centerTileX, centerTileY, zoom) {
-    if (!this.geo.mapView) return null;
-    const mapView = this.geo.mapView;
+    if (!this.geo.tileMap) return null;
 
-    // World → Mercator
-    const mercX = worldX - mapView.position.x;
-    const mercY = mapView.position.z - worldZ;
-
-    let latLon;
+    // World → lat/lon via three-tile
+    let geo;
     try {
-      latLon = UnitsUtils.sphericalToDatums(mercX, mercY);
+      geo = this.geo.tileMap.world2geo(new THREE.Vector3(worldX, 0, worldZ));
     } catch {
       return null;
     }
-    const { latitude, longitude } = latLon;
+    const latitude = geo.y;
+    const longitude = geo.x;
     if (isNaN(latitude) || isNaN(longitude)) return null;
 
     const n = 1 << zoom;

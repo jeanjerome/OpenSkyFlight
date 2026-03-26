@@ -35,7 +35,7 @@ export const ADAPTIVE_RATIO_EPSILON = 0.01;
 
 // --- Clip planes ---
 
-/** Far plane for realworld mode (geo-three handles LOD) */
+/** Far plane for realworld mode (three-tile handles LOD) */
 export const REALWORLD_FAR_PLANE = 1e7;
 
 /** Clip plane change threshold before updating projection */

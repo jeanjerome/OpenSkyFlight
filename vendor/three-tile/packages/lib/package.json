@@ -1,0 +1,49 @@
+{
+	"name": "@three-tile/lib",
+	"version": "0.11.8-osf",
+	"type": "module",
+	"files": [
+		"dist"
+	],
+	"main": "./dist/three-tile-osf.umd.cjs",
+	"module": "./dist/three-tile-osf.js",
+	"types": "./dist/three-tile-osf.d.ts",
+	"exports": {
+		".": {
+			"import": "./dist/three-tile-osf.js",
+			"require": "./dist/three-tile-osf.umd.cjs",
+			"types": "./dist/three-tile-osf.d.ts"
+		}
+	},
+	"description": "A lightweight tile map using threejs",
+	"license": "MIT",
+	"author": {
+		"name": "GuoJF",
+		"email": "hz_gjf@163.com"
+	},
+	"keywords": [
+		"three",
+		"gis",
+		"tile",
+		"map",
+		"3D",
+		"cesium",
+		"mapbox"
+	],
+	"scripts": {
+		"dev": "vite build --watch",
+		"build": "vite build"
+	},
+	"publishConfig": {
+		"registry": "https://registry.npmjs.org/",
+		"access": "public"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/sxguojf/three-tile.git"
+	},
+	"bugs": {
+		"url": "https://github.com/sxguojf/three-tile/issues"
+	},
+	"homepage": "https://github.com/sxguojf/three-tile#readme"
+}
