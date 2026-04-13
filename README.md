@@ -4,6 +4,10 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 
 ![WebGPU](https://img.shields.io/badge/WebGPU-Three.js-green)
 
+[![Voir la démo vidéo](https://img.youtube.com/vi/WBhs0ORsLuw/maxresdefault.jpg)](https://www.youtube.com/watch?v=WBhs0ORsLuw)
+
+[![YouTube](https://img.shields.io/badge/▶_Watch_Demo-YouTube-red?style=for-the-badge&logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=WBhs0ORsLuw)
+
 <!-- Hero screenshot: full-screen flight over mountains with HUD, satellite textures, and minimap visible -->
 ![Flying over the Alps with satellite imagery and HUD instruments](docs/screenshots/hero.png)
 
