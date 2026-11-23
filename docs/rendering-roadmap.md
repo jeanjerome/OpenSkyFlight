@@ -8,24 +8,26 @@ en fin de session.
 
 ## État courant (mis à jour le 2026-11-23)
 
-- **Lots terminés** : 0 et 1. **Lot en cours** : lot 2, L2.9 terminée.
+- **Lots terminés** : 0 et 1 (L1.4 achevée pendant le lot 2). **Lot en cours** : lot 2 ; L2.9 terminée,
+  L2.6 en grande partie (graphe d'élévation partagé, PMREM sur toute la scène).
 - **Git** : branche `feat/render-hdr-pipeline` (depuis `main`), non poussée.
 - **Environnement local** : bundle three-tile construit, `npm install` fait (racine et
   `vendor/three-tile`), cache `cache/` chaud pour les vues de référence et les deux vols. Lancer
   `npm run dev` en tâche de fond avant toute mesure. Mesurer **sur l'écran intégré 120 Hz** : sur un
   écran 60 Hz, Chrome plafonne à 60 FPS et la qualité adaptative dégrade la résolution pour de bon.
-- **Référence de comparaison** : `benchmarks/render/gpu-timer-a/` (captures avec le coût GPU par vue
-  et deux benchmarks de vol, non versionnés). Chiffres dans **Mesures**, lignes « L2.9 ».
+- **Référence de comparaison** : `benchmarks/render/env-terrain/` (captures avec coût GPU par vue et
+  deux benchmarks de vol, non versionnés). Chiffres dans **Mesures**, lignes « PMREM sur la scène ».
 - **Lire les temps GPU** (voir Outillage) : seul le « coût GPU » de `render:capture` (`gpuMedianMs`,
   mesuré GPU saturé) compare deux états du code ; la colonne GPU des vols indique la charge, pas le coût.
-- **Ordre conseillé pour la suite du lot 2** : L2.6 → L2.5 → L2.1 → L2.2 → L2.3 → L2.4 → L2.8 → L2.7.
-- **Prochaine tâche, L2.6 — points d'entrée** : les tuiles ont chacune un matériau cloné et un
-  `positionNode` propre (`applyTerrariumElevation` dans
-  `vendor/three-tile/packages/lib/src/material/TerrariumTSL.ts`, appelé depuis
-  `GeoTerrainManager._onTileLoaded`) : three reconstruit le graphe de nœuds à chaque tuile. Piste :
-  un matériau partagé par niveau de grille qui lit la texture d'altitude et l'image de la tuile par
-  objet. Une fois fait, mettre la PMREM du ciel en `scene.environment` et retirer la `HemisphereLight`
-  (voir Décisions), puis vérifier les saccades (p1, frames > 33 ms) avec les deux benchmarks de vol.
+- **Ordre conseillé pour la suite du lot 2** : L2.5 → L2.1 → L2.2 → L2.3 → L2.4 → L2.8 → L2.7 ; reste de
+  L2.6 (décodage d'altitude dans un worker, `compileAsync`) seulement si p5 ou p1 le justifient.
+- **Prochaine tâche, L2.5 — points d'entrée** : `GeoTerrainManager._onTileLoaded` met
+  `mesh.frustumCulled = false` parce que la boîte englobante CPU des tuiles est plate (Z = 0) alors que
+  le `positionNode` les déplace de milliers de mètres. Le chargeur `TerrariumShaderLoader.ts` connaît
+  les altitudes de la grille (`heights`) : y calculer min/max et fixer `geometry.boundingBox` /
+  `boundingSphere` (en tenant compte des jupes de 1 000 m), puis rétablir le culling. Mesurer draw calls
+  et triangles (attendu : forte baisse hors champ) et vérifier qu'aucune tuile ne disparaît en bord
+  d'écran ni en virage.
 
 ---
 
@@ -146,11 +148,11 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
 - [x] **L1.3** Tampon de profondeur inversé. `SkyMesh` force sa profondeur à 1 (= plan proche une fois
       inversé) : le ciel est dessiné en premier, sans test de profondeur. Le framebuffer par défaut est
       en `depth24plus` (stocké en float32 par Metal) ; viser `Depth32Float` avec la cible HDR de L2.1.
-- [~] **L1.4** Carte d'environnement du ciel (`SkyEnvironment.js` : PMREM 256, hémisphère de sol pour le
+- [x] **L1.4** Carte d'environnement du ciel (`SkyEnvironment.js` : PMREM 256, hémisphère de sol pour le
       rebond, disque solaire masqué car déjà apporté par la lumière directionnelle), régénérée à chaque
       changement de soleil. **Appliquée à l'avion seulement** : en `scene.environment`, elle faisait
       exploser les saccades (voir Décisions). Le terrain reçoit une `HemisphereLight` dérivée du même
-      modèle. Reste : l'appliquer au terrain après L2.6.
+      modèle. Fait avec L2.6 : PMREM en `scene.environment` pour toute la scène, `HemisphereLight` retirée.
 - [x] **L1.5** Élévation du soleil par défaut : 35°.
 - [x] **L1.6** Rendre le ciel visible : `NodeMaterial.fog` vaut `true` par défaut et `SkyMesh` ne le
       désactive pas ; avec le dôme à 4,5e6 m et `fogDensity` 1,5e-5, le brouillard recouvre 100 % du
@@ -182,11 +184,19 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       reconstruite par TRAA, au lieu du `pixelRatio`.
 - [ ] **L2.5** Rétablir le frustum culling des tuiles (`GeoTerrainManager.js:154`) avec des boîtes
       englobantes calculées depuis l'altitude min/max de chaque tuile.
-- [ ] **L2.6** Réduire les saccades (p1) : précompilation des pipelines (`compileAsync`), matériaux de
+- [~] **L2.6** Réduire les saccades (p1) : précompilation des pipelines (`compileAsync`), matériaux de
       tuiles partagés au lieu d'un `clone()` par tuile, décodage d'image dans un worker. Chaque tuile a
       son propre graphe de nœuds (clone + `positionNode` propre) reconstruit sur le CPU à son arrivée ;
       c'est ce qui interdit pour l'instant la carte d'environnement sur le terrain (L1.4). Une fois les
       matériaux partagés, passer la PMREM en `scene.environment` et retirer la `HemisphereLight`.
+      Fait : three indexe les graphes compilés par clé de matériau, et la clé d'un nœud est son `id` :
+      le `positionNode` propre à chaque tuile forçait une compilation (graphe + WGSL) par tuile. Un seul
+      graphe d'élévation est désormais partagé ; la texture d'altitude est liée par objet
+      (`onObjectUpdate` sur le nœud de texture de base, lu par ses clones `load()` / `size()`), la taille
+      de grille lue par `textureSize`. Toute la scène tient en 11 graphes compilés. Frames > 33 ms
+      46 → 3 et p1 33 → 62 (vol par défaut). PMREM ensuite passée en `scene.environment`, sans effet sur
+      les saccades. Reste, optionnel : décodage d'altitude dans un worker (≈ 1,1 ms par tuile sur le
+      thread principal), `compileAsync`.
 - [ ] **L2.7** Presets de qualité (Low / Medium / High / Ultra) dans `config.js` et le panneau MFD.
 - [ ] **L2.8** Exposition automatique : histogramme de luminance en compute shader, adaptation temporelle.
 - [x] **L2.9** Fiabiliser les mesures : `GPUTimer` avec une mesure par frame (horodatages de passe
@@ -287,6 +297,10 @@ Notes de lecture :
 | 2026-11-23 | Lot 1 + altitude décodée sur CPU | Plan 1 (basse alt.) | 94 s | 114,3 | 62,5 | 43,1 | 5,8 (8,9) | 5 / 0 | 2,67 M | 651 |
 | 2026-11-23 | L2.9 (mesure seule) | Vol par défaut | 128 s | 114,6 | 71,9 | 33,0 | 3,8 (6,1) | 46 / 0 | 2,12 M | 539 |
 | 2026-11-23 | L2.9 (mesure seule) | Plan 1 (basse alt.) | 94 s | 114,2 | 61,7 | 43,5 | 3,8 (6,1) | 4 / 0 | 2,67 M | 651 |
+| 2026-11-23 | Graphe d'élévation partagé | Vol par défaut | 128 s | 119,4 | 106,4 | 61,7 | 4,0 (6,2) | 3 / 1 | 2,13 M | 539 |
+| 2026-11-23 | Graphe d'élévation partagé | Plan 1 (basse alt.) | 94 s | 119,3 | 80,6 | 59,5 | 3,9 (6,1) | 2 / 0 | 2,67 M | 651 |
+| 2026-11-23 | PMREM sur la scène | Vol par défaut | 128 s | 119,4 | 106,4 | 61,3 | 4,0 (5,9) | 1 / 0 | 2,12 M | 539 |
+| 2026-11-23 | PMREM sur la scène | Plan 1 (basse alt.) | 94 s | 119,3 | 83,3 | 59,9 | 3,9 (6,0) | 1 / 0 | 2,67 M | 651 |
 
 Pour mémoire, la configuration n°4 de `BENCHMARKS.md` (même machine, Chrome 146, ancien moteur
 geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,7 / 76,3 / 35,2).
@@ -303,6 +317,8 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 | 2026-11-23 | L2.9 — coût GPU ms (12 rendus/frame), capture 1 | 1,28 | 1,45 | 1,49 | 1,37 | 1,43 |
 | 2026-11-23 | L2.9 — coût GPU ms (12 rendus/frame), capture 2 | 1,28 | 1,46 | 1,47 | 1,32 | 1,42 |
 | 2026-11-23 | L2.9 — FPS moy / p1 | 120 / 106 | 120 / 108 | 120 / 108 | 120 / 108 | 120 / 108 |
+| 2026-11-23 | PMREM sur la scène — coût GPU ms (12 rendus/frame) | 1,26 | 1,43 | 1,47 | 1,39 | 1,43 |
+| 2026-11-23 | PMREM sur la scène — FPS moy / p1 | 120 / 110 | 120 / 106 | 120 / 109 | 120 / 108 | 120 / 110 |
 
 Les lignes « GPU ms méd. » antérieures à L2.9 ne sont pas exploitables (somme des passes, fréquence
 du GPU fixée par le régulateur). Le coût GPU réel d'une frame est ≈ 1,3–1,5 ms à 4112×2580 sur M4 Max
@@ -334,7 +350,8 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 | 2026-11-23 | Bundle three-tile | Non versionné ; construction documentée comme obligatoire (README, Quick Start) | Un clone neuf ne démarre pas sans lui |
 | 2026-11-23 | Tone mapping | AgX, exposition fixe 0,35 | ACES, comparé sur les 5 vues, contraste davantage mais surexpose la vue 1 et décale les teintes (neige à l'ombre bleu vif) ; le peps viendra de l'étalonnage (L6.3) et de l'exposition automatique (L2.8) |
 | 2026-11-23 | Échelle d'éclairage | Soleil, ciel, ambiance et brouillard dérivés du modèle de `SkyMesh` (port CPU) | Une seule échelle de radiance ; auparavant le terrain était 50 fois moins lumineux que le ciel. Provisoire jusqu'au lot 3 |
-| 2026-11-23 | Lumière du ciel sur le terrain | `HemisphereLight` (ciel / rebond du sol) au lieu de la PMREM | La PMREM en `scene.environment` alourdit le graphe de nœuds reconstruit pour chaque tuile : frames > 33 ms 57 → 396 sur le plan 1. À revoir après L2.6 |
+| 2026-11-23 | Lumière du ciel sur le terrain | `HemisphereLight` (ciel / rebond du sol) au lieu de la PMREM | La PMREM en `scene.environment` alourdit le graphe de nœuds reconstruit pour chaque tuile : frames > 33 ms 57 → 396 sur le plan 1. Remplacée après L2.6 (ligne suivante) |
+| 2026-11-23 | Lumière du ciel sur la scène | PMREM du ciel en `scene.environment`, `HemisphereLight` retirée | Graphe d'élévation partagé entre tuiles : plus de compilation par tuile, la PMREM ne coûte plus de saccades (1 frame > 33 ms sur chaque vol) ni de temps GPU mesurable |
 | 2026-11-23 | Unités du monde | Carte réduite horizontalement de cos(lat) : 1 unité = 1 m (option préférée par l'utilisateur à la multiplication de l'altitude) | Altitudes, HUD, vues de référence, nuages et y des plans inchangés ; vitesse en vrais m/s ; seuls x/z des plans de vol changent (champ `units`) |
 | 2026-11-23 | Mesure du temps GPU | Durée couverte par les passes de la frame ; coût mesuré GPU saturé (12 rendus par frame) dans `render:capture` | À vsync le régulateur de fréquence du GPU fixe la durée mesurée (≈ 75 % de l'intervalle) ; les passes se chevauchent. Mesure saturée reproductible à ±4 % |
 | 2026-11-23 | Vitesse par défaut | 560 m/s | Vitesse réelle de l'ancien défaut (800 unités Mercator/s) : benchmarks comparables à la baseline |
@@ -342,6 +359,18 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 ## Journal des sessions
 
 <!-- Entrée la plus récente en haut. -->
+
+### 2026-11-23 (7)
+- Fait : L2.6 en grande partie et fin de L1.4. Deux commits : graphe d'élévation partagé entre tuiles
+  (three-tile, bundle reconstruit), PMREM du ciel en `scene.environment` (`HemisphereLight` et
+  conversion des matériaux de l'avion retirées).
+- Découvert : la clé de cache d'un graphe de nœuds three contient l'`id` de chaque nœud ; un graphe
+  construit par tuile se compile donc par tuile. Les clones de `TextureNode` (`load`, `size`) lisent la
+  texture du nœud de base mais n'héritent pas de son callback de mise à jour : le nœud de base doit
+  être dans le graphe (ici via `size()`).
+- Vérifié : relief identique à la référence (vue 2), modes `sar`, `elevation` et retour en satellite ;
+  vols : p1 61,3 / 59,9 (contre 33,0 / 43,5), frames > 33 ms 46 → 1 et 4 → 1 ; coût GPU inchangé.
+- Prochaine étape : L2.5 (voir État courant).
 
 ### 2026-11-23 (6)
 - Fait : branche `feat/render-hdr-pipeline` ; L2.9. Deux commits : temps GPU par frame et coût GPU
