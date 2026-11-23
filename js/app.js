@@ -9,6 +9,7 @@ import { REALWORLD_START_ALTITUDE, DEFAULT_NEAR, MAX_ROLL, ROLL_SENSITIVITY, ROL
 import { MAX_DELTA_TIME } from './constants/physics.js';
 import { createRenderer, createScene, createCamera, setupResizeHandler } from './scene/SceneSetup.js';
 import AdaptiveQualityManager from './rendering/AdaptiveQualityManager.js';
+import ScenePipeline from './rendering/ScenePipeline.js';
 import InputManager from './input/InputManager.js';
 import GeoTerrainManager from './terrain/GeoTerrainManager.js';
 import FlightController from './camera/FlightController.js';
@@ -38,6 +39,7 @@ async function initApp() {
   // Drives the sky dome, fog, tone mapping and the scene lights
   // Drives the sky, the sun and the sky light from the configuration
   new AtmosphericSky(scene, renderer, { dirLight, ambientLight });
+  const scenePipeline = new ScenePipeline(renderer, scene, camera);
   const cloudLayer = new CloudLayer(scene);
   cloudLayer.mesh.renderOrder = CLOUD_RENDER_ORDER;
 
@@ -398,7 +400,7 @@ async function initApp() {
     if (timer) timer.begin('render');
     gpuTimer.beginFrame();
     renderer.info.reset();
-    for (let i = 0; i < gpuTimer.rendersPerFrame; i++) renderer.render(scene, camera);
+    scenePipeline.render(gpuTimer.rendersPerFrame);
     gpuTimer.endFrame();
     if (timer) timer.end('render');
 
