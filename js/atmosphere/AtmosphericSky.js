@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { SkyMesh } from 'three/addons/objects/SkyMesh.js';
 import { CONFIG, onChange } from '../utils/config.js';
 import Logger from '../utils/Logger.js';
+import { preethamHorizonRadiance } from './preethamSky.js';
 
 const DEG2RAD = Math.PI / 180;
 
@@ -21,14 +22,16 @@ export default class AtmosphericSky {
     this.ambientLight = ambientLight;
     this.sunDirection = new THREE.Vector3();
 
-    // Sprint 2.6: pre-allocate Color objects to avoid GC pressure
-    this._warmColor = new THREE.Color(0.8, 0.5, 0.3);
-    this._coolColor = new THREE.Color(0.5, 0.7, 1.0);
     this._fogColor = new THREE.Color();
 
     // SkyMesh: TSL/NodeMaterial-based sky (WebGPU compatible)
     this.sky = new SkyMesh();
     this.sky.scale.setScalar(4.5e6);
+    // NodeMaterial applies scene fog by default; at the dome's distance the fog
+    // would replace the whole sky with its flat color.
+    this.sky.material.fog = false;
+    // SkyMesh draws its own procedural cloud noise; clouds come from CloudLayer.
+    this.sky.cloudCoverage.value = 0;
     scene.add(this.sky);
 
     // Initial update
@@ -95,10 +98,15 @@ export default class AtmosphericSky {
     this.dirLight.intensity = 0.2 + sunFactor * 1.2;
     this.ambientLight.intensity = 0.1 + sunFactor * 0.3;
 
-    // Fog
+    // Fog: tinted with the sky radiance at the horizon so distant terrain fades into the sky
     if (CONFIG.fogEnabled) {
-      // Interpolate fog color: warm (low sun) to cool blue (high sun)
-      this._fogColor.copy(this._warmColor).lerp(this._coolColor, sunFactor);
+      const [r, g, b] = preethamHorizonRadiance(this.sunDirection, {
+        turbidity: skyTurbidity,
+        rayleigh: skyRayleigh,
+        mieCoefficient: this.sky.mieCoefficient.value,
+        mieDirectionalG: this.sky.mieDirectionalG.value,
+      });
+      this._fogColor.setRGB(r, g, b);
 
       if (this.scene.fog instanceof THREE.FogExp2) {
         this.scene.fog.color.copy(this._fogColor);
