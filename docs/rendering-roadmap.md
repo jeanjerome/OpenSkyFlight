@@ -10,15 +10,18 @@ en fin de session.
 
 - **Lot terminé** : lot 1 (gains rapides). **Prochain lot** : lot 2, aucune tâche commencée.
 - **Git** : `feat/render-baseline` fusionnée dans `main` (fast-forward local, non poussée). Le lot 1 est
-  sur `feat/render-quick-wins` (10 commits au-dessus de `main`, ni fusionnée ni poussée). Demander à
+  sur `feat/render-quick-wins` (12 commits au-dessus de `main`, ni fusionnée ni poussée). Demander à
   l'utilisateur s'il faut la fusionner avant de créer la branche du lot 2 (`feat/render-hdr-pipeline`).
 - **Environnement local déjà prêt** : bundle three-tile reconstruit (anisotropie), `npm install` fait,
   cache `cache/` chaud. Lancer `npm run dev` (en tâche de fond) avant les mesures.
 - **Ordre conseillé pour le lot 2** : L2.9 (mesures fiables, le temps GPU des vues statiques est
   inexploitable) → L2.6 (matériaux de tuiles partagés : débloque la carte d'environnement sur le
   terrain, voir Décisions) → L2.5 → L2.1 → L2.2 → L2.3 → L2.4 → L2.8 → L2.7.
-- **À envisager** : avancer L5.1 (marches d'altitude, nettement plus visibles depuis que le relief a
-  sa vraie pente).
+- **Fait hors lot** : terrasses et stries du relief corrigées (décodage de l'altitude sur le CPU, voir
+  L5.1 et le journal).
+- **Mesures** : un écran externe 60 Hz est apparu ; Chrome s'y ouvre et `AdaptiveQualityManager` y
+  dégrade la résolution sans jamais la rétablir (seuil de remontée 12 ms jamais atteint à 60 Hz).
+  Capturer sur l'écran 120 Hz, ou neutraliser la qualité adaptive pendant les mesures (L2.4).
 - **Validation de chaque tâche** : `npm run render:capture -- --out benchmarks/render/<label>`, captures
   comparées à `benchmarks/render/lot1/` ; benchmarks de vol (défaut et `--plan 1`) à la clôture du lot.
 
@@ -202,9 +205,13 @@ npm run render:benchmark -- --out benchmarks/render/<label> [--plan 1]
 
 ## Lot 5 — Terrain, ombres et eau
 
-- [ ] **L5.1** (prioritaire : marches d'altitude bien visibles depuis L1.8, vue 2) Carte d'altitude : réduction bilinéaire au lieu du plus proche voisin
+- [~] **L5.1** Carte d'altitude : réduction bilinéaire au lieu du plus proche voisin
       (`TerrariumShaderLoader.ts:40`), pas de texel cohérent avec la grille (`TerrariumTSL.ts:70`),
       normales par pixel depuis la carte d'altitude 256 px complète.
+      Fait : décodage Terrarium sur le CPU en texture float (une altitude par sommet, lue par
+      `textureLoad`), réduction bilinéaire aux positions exactes des sommets, normales sur les sommets
+      voisins. Reste : normales par pixel depuis la carte 256 px complète, raccord exact des bords entre
+      tuiles voisines (l'échantillonnage est borné au pixel de bord, les jupes masquent l'écart).
 - [ ] **L5.2** Geomorphing entre niveaux de LOD (suppression du « pop »).
 - [ ] **L5.3** Ombres du relief (cartes d'horizon ou ray marching sur la carte d'altitude) +
       `CSMShadowNode` pour l'avion et le terrain proche.
@@ -276,7 +283,7 @@ Constats visuels après le lot 1 (`docs/screenshots/render/lot1/`) :
   fondent à l'horizon (brouillard à la couleur du ciel).
 - Relief à sa vraie pente : massif du Mont-Blanc et vallée de Chamonix nettement plus raides.
 - Faces au soleil chaudes et faces à l'ombre bleutées au coucher du soleil (vue 4).
-- Restent : marches d'altitude sur les pentes raides (L5.1), premier plan flou en vue rasante (résolution
+- Restent : premier plan flou en vue rasante (résolution
   de l'imagerie), lac plat (L5.7), nappe nuageuse plane à peine visible avec un bord net à l'horizon
   (plan de 80 km, lot 4), image un peu terne (AgX, à compenser par l'étalonnage L6.3).
 
@@ -304,6 +311,18 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 ## Journal des sessions
 
 <!-- Entrée la plus récente en haut. -->
+
+### 2026-11-23 (4)
+- Signalé par l'utilisateur : stries sur certaines tuiles (vues 2 et 4 du lot 1). Deux motifs : terrasses
+  à bords en dents de scie le long des courbes de niveau, traînées claires en travers des pentes.
+- Cause : le shader décodait l'encodage Terrarium RGBA8 en échantillonnant la texture. Le canal R vaut
+  256 m par unité ; filtré en demi-précision par le GPU, il dérive jusqu'à ±16 m, d'une valeur constante
+  par tranche de 256 m d'altitude, d'où une marche à chaque changement de R. Les données source sont
+  lisses (vérifié : 1 à 3 m entre pixels voisins).
+- Corrigé (three-tile) : décodage sur le CPU en float, réduction bilinéaire, normales sur la grille
+  (L5.1 en partie). Coût ≈ 1,1 ms CPU par tuile (médiane, max 4 ms). Captures `benchmarks/render/dem-float`
+  faites sur un écran 60 Hz, à résolution dégradée : à refaire sur l'écran 120 Hz avec un benchmark de
+  vol avant la fusion.
 
 ### 2026-11-23 (3)
 - Fait : lot 1 complet (L1.4 partiel : PMREM sur l'avion seulement). `feat/render-baseline` fusionnée dans
