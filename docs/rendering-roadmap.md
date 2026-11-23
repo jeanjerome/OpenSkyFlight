@@ -6,6 +6,24 @@ contrainte : l'application doit continuer à fonctionner dans un navigateur (Web
 Ce document est la **source de vérité de l'avancement**. Il est lu en début de session et mis à jour
 en fin de session.
 
+## État courant (mis à jour le 2026-11-23)
+
+- **Lot terminé** : lot 0. **Lot en cours** : lot 1, aucune tâche commencée.
+- **Git** : branche `feat/render-baseline` (5 commits au-dessus de `main`, ni fusionnée ni poussée).
+  Demander à l'utilisateur s'il faut la fusionner dans `main` avant de créer la branche du lot 1
+  (`feat/render-quick-wins`) ; à défaut, partir de `feat/render-baseline`.
+- **Environnement local déjà prêt** : bundle three-tile construit, `npm install` fait (racine et
+  `vendor/three-tile`), cache de tuiles `cache/` chaud pour les vues de référence et les deux vols.
+  Il suffit de lancer `npm run dev` (en tâche de fond) avant les mesures.
+- **Ordre conseillé pour le lot 1** : L1.6 (ciel visible) → L1.7 (azimut du soleil) → L1.1
+  (anisotrope) → L1.3 (profondeur inversée) → L1.2 (tone mapping, à recaler après L1.6) → L1.4
+  (carte d'environnement) → L1.5 (soleil par défaut) → L1.8 (échelle verticale, en dernier : elle
+  change l'unité d'altitude du monde, donc HUD, altitude sol, vues de référence et plans de vol).
+- **Validation de chaque tâche** : tester dans Chrome via `npm run render:capture -- --out
+  benchmarks/render/<label>`, examiner les captures à côté de `benchmarks/render/baseline/`,
+  reporter le temps GPU dans **Mesures**. Benchmarks de vol (`render:benchmark`, défaut et
+  `--plan 1`) à la clôture du lot, puis captures allégées dans `docs/screenshots/render/<lot>/`.
+
 ---
 
 ## Comment reprendre le travail (début de session)
@@ -261,7 +279,11 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 - Découvert : ciel masqué par le brouillard (L1.6), soleil au nord par défaut (L1.7), relief à 70 %
   de sa hauteur (L1.8), mesures GPU/FPS moyennes biaisées (L2.9), minicarte OSM bloquée (hors rendu).
 - Commité sur la branche `feat/render-baseline` ; README : construction de three-tile obligatoire.
-- Prochaine étape : lot 1, en commençant par L1.6 (ciel) et L1.1 (anisotrope), puis L1.2 (tone mapping).
+- Prochaine étape : décider avec l'utilisateur de la fusion de `feat/render-baseline`, créer
+  `feat/render-quick-wins`, puis L1.6 : `sky.material.fog = false` dans `AtmosphericSky.js`, capturer
+  les 5 vues et vérifier que le ciel de Preetham apparaît (dégradé zénith/horizon, disque solaire).
+  Attention : sans tone mapping (L1.2), le ciel de Preetham risque d'être surexposé ; c'est attendu
+  et sera recalé à L1.2.
 
 ### 2026-11-23
 - Fait : analyse du rendu existant, création de cette feuille de route.
