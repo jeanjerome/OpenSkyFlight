@@ -173,7 +173,7 @@ async function initApp() {
       try {
         const r = await fetch(`/assets/flightplans/${file}`);
         const data = await r.json();
-        flightPlanRecorder.loadFromJSON(data);
+        flightPlanRecorder.loadFromJSON(data, geoTerrainManager.horizontalScale);
         hud.closeFlightPlanMenu();
       } catch {
         Logger.warn('App', `Failed to load ${file}`);

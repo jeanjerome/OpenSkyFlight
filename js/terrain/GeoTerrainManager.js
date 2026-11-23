@@ -32,6 +32,8 @@ export default class GeoTerrainManager {
     /** @deprecated Alias for backwards compat — use tileMap */
     this.mapView = null;
     this.elevationProvider = new ElevationProvider();
+    /** Web Mercator units to world metres (cos of the map centre latitude) */
+    this.horizontalScale = 1;
     this._effectiveViewDistance = 0;
     this._centerMercator = null; // {x, y} Mercator coords of center lat/lon
     this._wireframeMode = GeoTerrainManager._isSynthetic(CONFIG.textureMode);
@@ -106,6 +108,14 @@ export default class GeoTerrainManager {
 
     // Z-up → Y-up (matches Three.js convention)
     this.tileMap.rotateX(-Math.PI / 2);
+
+    // three-tile lays the map out in Web Mercator units, which stretch real
+    // distances by 1/cos(latitude) (×1.43 at 45.8°), while elevations are in
+    // metres. Shrinking the map horizontally by cos(latitude) makes one world
+    // unit one real metre around the centre in all three axes, so slopes keep
+    // their true steepness.
+    this.horizontalScale = Math.cos((lat * Math.PI) / 180);
+    this.tileMap.scale.set(this.horizontalScale, this.horizontalScale, 1);
 
     // LOD tuning
     this.tileMap.LODThreshold = 1.2;
@@ -324,7 +334,7 @@ export default class GeoTerrainManager {
 
   /**
    * Convert a geographic position to world coordinates.
-   * World Y is the altitude in metres, the unit used by the GPU elevation decode.
+   * World units are metres (exact at the map centre latitude); world Y is the altitude.
    * @returns {THREE.Vector3|null} null until the tile map exists
    */
   geoToWorld(lat, lon, altitude) {

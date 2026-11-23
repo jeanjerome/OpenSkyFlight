@@ -28,6 +28,7 @@ export default class FlightPlanRecorder {
     return {
       name: `flightplan-${now.toISOString().slice(0, 19).replace(/[:.]/g, '-')}`,
       date: now.toISOString(),
+      units: 'metres',
       waypoints: this._waypoints.map((wp) => ({
         x: Math.round(wp.position.x * 10) / 10,
         y: Math.round(wp.position.y * 10) / 10,
@@ -50,11 +51,17 @@ export default class FlightPlanRecorder {
     Logger.info('FlightPlan', `Downloaded ${data.name}.json`);
   }
 
-  loadFromJSON(data) {
+  /**
+   * @param {Object} data - parsed flight plan file
+   * @param {number} mercatorToMetres - horizontal scale of the world (GeoTerrainManager.horizontalScale),
+   *   applied to plans without `units: 'metres'`, recorded when x and z were Web Mercator units
+   */
+  loadFromJSON(data, mercatorToMetres = 1) {
     this.clear();
+    const k = data.units === 'metres' ? 1 : mercatorToMetres;
     if (data.waypoints) {
       for (const wp of data.waypoints) {
-        this._waypoints.push(new Waypoint(wp.x, wp.y, wp.z, wp.yaw));
+        this._waypoints.push(new Waypoint(wp.x * k, wp.y, wp.z * k, wp.yaw));
       }
     }
     this._loadedName = data.name || null;

@@ -12,7 +12,7 @@
  * @property {boolean} hiResMode              - Hi-res zoom 18 mode (default: false)
  *
  * Camera & flight:
- * @property {number}  cameraSpeed            - Flight speed in units/sec, range [1..4000] (default: 800)
+ * @property {number}  cameraSpeed            - Flight speed in m/s, range [1..4000] (default: 560)
  * @property {string}  cameraMode             - 'chase' | 'cockpit' (default: 'chase')
  * @property {number}  mouseSensitivity       - Mouse look sensitivity (default: 0.002)
  *
@@ -28,7 +28,7 @@
  * @property {number}  cloudAltitude          - Cloud layer altitude in meters, range [500..12000] (default: 3500)
  * @property {number}  cloudOpacity           - Cloud opacity (default: 0.7)
  * @property {boolean} fogEnabled             - Enable atmospheric fog (default: true)
- * @property {number}  fogDensity             - Fog density (default: 0.000015)
+ * @property {number}  fogDensity             - Fog density per metre (default: 0.000021)
  *
  * UI:
  * @property {boolean} showHud                - Show HUD overlay (default: true)
@@ -54,7 +54,7 @@ const CONFIG_VALIDATION = {
 
 /** @type {AppConfig} */
 const CONFIG = {
-  cameraSpeed: 800,
+  cameraSpeed: 560,
   cameraMode: 'chase',
   mouseSensitivity: 0.002,
   maxPixelRatio: 2,
@@ -78,7 +78,7 @@ const CONFIG = {
   cloudAltitude: 3500,
   cloudOpacity: 0.7,
   fogEnabled: true,
-  fogDensity: 0.000015,
+  fogDensity: 0.000021,
   hiResMode: false,
 };
 
