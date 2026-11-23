@@ -172,7 +172,9 @@ export default class MetricsCollector {
     return {
       totalFrames: this.frames.length,
       fps: {
-        avg: round1(avg(fpsValues)),
+        // Frames per second of wall time; the mean of per-frame FPS would weight
+        // the short catch-up frames that follow a long one too heavily.
+        avg: round1(1000 / avg(ftValues)),
         min: round1(Math.min(...fpsValues)),
         max: round1(Math.max(...fpsValues)),
         p1: round1(percentile(fpsValues, 1)),
