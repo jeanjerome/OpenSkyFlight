@@ -32,6 +32,10 @@ export default class AtmosphericSky {
     this.sky.material.fog = false;
     // SkyMesh draws its own procedural cloud noise; clouds come from CloudLayer.
     this.sky.cloudCoverage.value = 0;
+    // SkyMesh pins its depth to 1, which is the near plane with a reversed depth
+    // buffer: draw it first, without depth testing, so the scene covers it.
+    this.sky.renderOrder = -1;
+    this.sky.material.depthTest = false;
     scene.add(this.sky);
 
     // Initial update

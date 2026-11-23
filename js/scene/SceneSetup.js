@@ -8,6 +8,9 @@ export async function createRenderer() {
     antialias: true,
     powerPreference: 'high-performance',
     trackTimestamp: true,
+    // Near = 1 m and far = 10 000 km: a standard depth buffer runs out of
+    // precision on distant ridges, reversed depth spreads it evenly.
+    reversedDepthBuffer: true,
   });
   await renderer.init();
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, CONFIG.maxPixelRatio));
