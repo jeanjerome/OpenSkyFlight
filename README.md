@@ -200,7 +200,7 @@ cache/
 
 ## Technologies
 
-- [Three.js](https://threejs.org/) v0.183 (WebGPU build) — 3D rendering with TSL shaders (loaded via CDN, no install)
+- [Three.js](https://threejs.org/) v0.187 (WebGPU build) — 3D rendering with TSL shaders (loaded via CDN, no install)
 - [three-tile](https://github.com/sxguojf/three-tile) (0.11.8-osf) — geographic tile management with patched concentric LOD
 - Canvas 2D — HUD instrument overlay, hi-res badge, and minimap
 - [three/examples — Sky](https://threejs.org/examples/?q=sky#webgl_shaders_sky) — procedural atmospheric sky and sun
