@@ -8,21 +8,19 @@ en fin de session.
 
 ## État courant (mis à jour le 2026-11-23)
 
-- **Lot terminé** : lot 0. **Lot en cours** : lot 1, aucune tâche commencée.
-- **Git** : branche `feat/render-baseline` (5 commits au-dessus de `main`, ni fusionnée ni poussée).
-  Demander à l'utilisateur s'il faut la fusionner dans `main` avant de créer la branche du lot 1
-  (`feat/render-quick-wins`) ; à défaut, partir de `feat/render-baseline`.
-- **Environnement local déjà prêt** : bundle three-tile construit, `npm install` fait (racine et
-  `vendor/three-tile`), cache de tuiles `cache/` chaud pour les vues de référence et les deux vols.
-  Il suffit de lancer `npm run dev` (en tâche de fond) avant les mesures.
-- **Ordre conseillé pour le lot 1** : L1.6 (ciel visible) → L1.7 (azimut du soleil) → L1.1
-  (anisotrope) → L1.3 (profondeur inversée) → L1.2 (tone mapping, à recaler après L1.6) → L1.4
-  (carte d'environnement) → L1.5 (soleil par défaut) → L1.8 (échelle verticale, en dernier : elle
-  change l'unité d'altitude du monde, donc HUD, altitude sol, vues de référence et plans de vol).
-- **Validation de chaque tâche** : tester dans Chrome via `npm run render:capture -- --out
-  benchmarks/render/<label>`, examiner les captures à côté de `benchmarks/render/baseline/`,
-  reporter le temps GPU dans **Mesures**. Benchmarks de vol (`render:benchmark`, défaut et
-  `--plan 1`) à la clôture du lot, puis captures allégées dans `docs/screenshots/render/<lot>/`.
+- **Lot terminé** : lot 1 (gains rapides). **Prochain lot** : lot 2, aucune tâche commencée.
+- **Git** : `feat/render-baseline` fusionnée dans `main` (fast-forward local, non poussée). Le lot 1 est
+  sur `feat/render-quick-wins` (10 commits au-dessus de `main`, ni fusionnée ni poussée). Demander à
+  l'utilisateur s'il faut la fusionner avant de créer la branche du lot 2 (`feat/render-hdr-pipeline`).
+- **Environnement local déjà prêt** : bundle three-tile reconstruit (anisotropie), `npm install` fait,
+  cache `cache/` chaud. Lancer `npm run dev` (en tâche de fond) avant les mesures.
+- **Ordre conseillé pour le lot 2** : L2.9 (mesures fiables, le temps GPU des vues statiques est
+  inexploitable) → L2.6 (matériaux de tuiles partagés : débloque la carte d'environnement sur le
+  terrain, voir Décisions) → L2.5 → L2.1 → L2.2 → L2.3 → L2.4 → L2.8 → L2.7.
+- **À envisager** : avancer L5.1 (marches d'altitude, nettement plus visibles depuis que le relief a
+  sa vraie pente).
+- **Validation de chaque tâche** : `npm run render:capture -- --out benchmarks/render/<label>`, captures
+  comparées à `benchmarks/render/lot1/` ; benchmarks de vol (défaut et `--plan 1`) à la clôture du lot.
 
 ---
 
@@ -119,30 +117,42 @@ npm run render:benchmark -- --out benchmarks/render/<label> [--plan 1]
 
 ## Lot 1 — Gains rapides
 
-- [ ] **L1.1** Filtrage anisotrope ×16 sur les textures de tuiles
-      (`vendor/three-tile/.../tileImageLoader/TileImageLoader.ts:43`, valeur issue de
-      `renderer.getMaxAnisotropy()`).
-- [ ] **L1.2** Tone mapping (AgX ou ACES) + `toneMappingExposure` ; recalibrer les intensités des lumières
-      (`constants/rendering.js`, `AtmosphericSky.js`) et le rendu de `SkyMesh`.
-- [ ] **L1.3** Tampon de profondeur inversé (`reversedDepthBuffer: true` dans `SceneSetup.js`) ;
-      vérifier le z-fighting au loin et la couche de nuages.
-- [ ] **L1.4** Carte d'environnement générée depuis le ciel (`PMREMGenerator`), régénérée à chaque
-      changement de soleil, assignée à `scene.environment` ; l'ambiante plate est réduite d'autant.
-- [ ] **L1.5** Élévation du soleil par défaut plus basse (≈ 35°) pour révéler le relief.
-- [ ] **L1.6** Rendre le ciel visible : `NodeMaterial.fog` vaut `true` par défaut et `SkyMesh` ne le
+- [x] **L1.1** Filtrage anisotrope ×16 sur les textures de tuiles (`LoaderFactory.textureAnisotropy`
+      dans three-tile, fixé depuis `renderer.getMaxAnisotropy()`). Gain visible au loin seulement : le
+      flou du premier plan est un agrandissement de texture (imagerie z15), pas une minification.
+- [x] **L1.2** Tone mapping AgX, exposition 0,35. Soleil, ciel et ambiance partagent l'échelle de radiance
+      du ciel de Preetham (`js/atmosphere/preethamSky.js`, port CPU de `SkyMesh`) : couleur du soleil =
+      transmittance du modèle, intensité calée sur un rapport soleil/ciel de 5:1 à 55° ; nappe nuageuse
+      éclairée ; palette du mode `elevation` convertie de sRGB en albédo linéaire. SAR sans tone mapping.
+- [x] **L1.3** Tampon de profondeur inversé. `SkyMesh` force sa profondeur à 1 (= plan proche une fois
+      inversé) : le ciel est dessiné en premier, sans test de profondeur. Le framebuffer par défaut est
+      en `depth24plus` (stocké en float32 par Metal) ; viser `Depth32Float` avec la cible HDR de L2.1.
+- [~] **L1.4** Carte d'environnement du ciel (`SkyEnvironment.js` : PMREM 256, hémisphère de sol pour le
+      rebond, disque solaire masqué car déjà apporté par la lumière directionnelle), régénérée à chaque
+      changement de soleil. **Appliquée à l'avion seulement** : en `scene.environment`, elle faisait
+      exploser les saccades (voir Décisions). Le terrain reçoit une `HemisphereLight` dérivée du même
+      modèle. Reste : l'appliquer au terrain après L2.6.
+- [x] **L1.5** Élévation du soleil par défaut : 35°.
+- [x] **L1.6** Rendre le ciel visible : `NodeMaterial.fog` vaut `true` par défaut et `SkyMesh` ne le
       désactive pas ; avec le dôme à 4,5e6 m et `fogDensity` 1,5e-5, le brouillard recouvre 100 % du
       ciel. Le ciel affiché est la couleur unie du brouillard (visible sur toutes les captures
       baseline). Correctif : `sky.material.fog = false`, puis caler la couleur du brouillard sur le
-      ciel à l'horizon en attendant le lot 3.
-- [ ] **L1.7** Convention d'azimut du soleil : `CONFIG.sunAzimuth` est le θ sphérique (0 = sud, 90 = est),
+      ciel à l'horizon en attendant le lot 3. Fait : couleur du brouillard = radiance du modèle moyennée
+      sur l'horizon ; nuages procéduraux intégrés à `SkyMesh` (r183, couverture 0,4 par défaut)
+      désactivés, ils doublonnaient `CloudLayer` et coûtaient ≈ 4 ms GPU.
+- [x] **L1.7** Convention d'azimut du soleil : `CONFIG.sunAzimuth` est le θ sphérique (0 = sud, 90 = est),
       donc la valeur par défaut 180 place le soleil **au nord**, à l'opposé des ombres incrustées dans
       l'imagerie satellite. Passer à un azimut boussole (défaut ≈ 160°), et simplifier
-      `compassToSunAzimuth` (`AtmosphericSky.js`) en conséquence.
-- [ ] **L1.8** Exagération verticale : three-tile travaille en unités Web Mercator (`mapDepth = 1`).
+      `compassToSunAzimuth` (`AtmosphericSky.js`) en conséquence. Fait : `sunAzimuth` est un cap boussole,
+      défaut 160°.
+- [x] **L1.8** Exagération verticale : three-tile travaille en unités Web Mercator (`mapDepth = 1`).
       À 45,8° de latitude, une unité horizontale vaut 1/cos(lat) ≈ 1,43 m réel, alors que l'altitude est
       en mètres : le relief est affiché à ≈ 70 % de sa hauteur. Multiplier l'élévation par 1/cos(lat)
       dans `TerrariumTSL.ts`, et convertir en conséquence l'altitude affichée (HUD), l'altitude sol
       (`getGroundElevation`), les vues de référence et les plans de vol (y en unités monde).
+      Fait autrement (voir Décisions) : la carte est réduite horizontalement de cos(lat du centre),
+      1 unité monde = 1 m sur les trois axes. Vitesse par défaut 560 m/s (= l'ancienne vitesse réelle),
+      brouillard 2,1e-5 /m, plans de vol `units: 'metres'` (conversion à la lecture des anciens).
 
 ## Lot 2 — Socle : pipeline HDR et performance
 
@@ -154,7 +164,10 @@ npm run render:benchmark -- --out benchmarks/render/<label> [--plan 1]
 - [ ] **L2.5** Rétablir le frustum culling des tuiles (`GeoTerrainManager.js:154`) avec des boîtes
       englobantes calculées depuis l'altitude min/max de chaque tuile.
 - [ ] **L2.6** Réduire les saccades (p1) : précompilation des pipelines (`compileAsync`), matériaux de
-      tuiles partagés au lieu d'un `clone()` par tuile, décodage d'image dans un worker.
+      tuiles partagés au lieu d'un `clone()` par tuile, décodage d'image dans un worker. Chaque tuile a
+      son propre graphe de nœuds (clone + `positionNode` propre) reconstruit sur le CPU à son arrivée ;
+      c'est ce qui interdit pour l'instant la carte d'environnement sur le terrain (L1.4). Une fois les
+      matériaux partagés, passer la PMREM en `scene.environment` et retirer la `HemisphereLight`.
 - [ ] **L2.7** Presets de qualité (Low / Medium / High / Ultra) dans `config.js` et le panneau MFD.
 - [ ] **L2.8** Exposition automatique : histogramme de luminance en compute shader, adaptation temporelle.
 - [ ] **L2.9** Fiabiliser les mesures : `GPUTimer` avec une mesure par frame (horodatages de passe
@@ -189,7 +202,7 @@ npm run render:benchmark -- --out benchmarks/render/<label> [--plan 1]
 
 ## Lot 5 — Terrain, ombres et eau
 
-- [ ] **L5.1** Carte d'altitude : réduction bilinéaire au lieu du plus proche voisin
+- [ ] **L5.1** (prioritaire : marches d'altitude bien visibles depuis L1.8, vue 2) Carte d'altitude : réduction bilinéaire au lieu du plus proche voisin
       (`TerrariumShaderLoader.ts:40`), pas de texel cohérent avec la grille (`TerrariumTSL.ts:70`),
       normales par pixel depuis la carte d'altitude 256 px complète.
 - [ ] **L5.2** Geomorphing entre niveaux de LOD (suppression du « pop »).
@@ -237,6 +250,10 @@ Notes de lecture :
 |---|---|---|---|---|---|---|---|---|---|---|
 | 2026-11-23 | Baseline | Vol par défaut | 128 s | 113,8 | 76,3 | 35,2 | 7,0 (10,6) | 124 / 28 | 2,28 M | 557 |
 | 2026-11-23 | Baseline | Plan 1 (basse alt.) | 93 s | 113,4 | 67,1 | 39,4 | 7,4 (11,1) | 57 / 4 | 2,73 M | 651 |
+| 2026-11-23 | Lot 1, PMREM en `scene.environment` (abandonné) | Vol par défaut | 128 s | 106,5 | 80,6 | 22,3 | 6,3 (10,1) | 352 / 121 | 2,11 M | 539 |
+| 2026-11-23 | Lot 1, PMREM en `scene.environment` (abandonné) | Plan 1 (basse alt.) | 94 s | 104,2 | 64,9 | 24,4 | 5,9 (9,3) | 396 / 44 | 2,67 M | 651 |
+| 2026-11-23 | Lot 1 | Vol par défaut | 128 s | 113,9 | 78,7 | 34,7 | 6,2 (10,3) | 122 / 28 | 2,12 M | 539 |
+| 2026-11-23 | Lot 1 | Plan 1 (basse alt.) | 94 s | 113,6 | 65,8 | 39,7 | 5,3 (8,6) | 49 / 4 | 2,67 M | 651 |
 
 Pour mémoire, la configuration n°4 de `BENCHMARKS.md` (même machine, Chrome 146, ancien moteur
 geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,7 / 76,3 / 35,2).
@@ -247,6 +264,21 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 |---|---|---|---|---|---|---|
 | 2026-11-23 | Baseline — GPU ms méd. | 7,7 | 6,8 | 6,4 | 6,6 | 10,3 |
 | 2026-11-23 | Baseline — FPS moy / p1 | 120 / 109 | 120 / 108 | 120 / 111 | 120 / 106 | 120 / 109 |
+| 2026-11-23 | Lot 1 — GPU ms méd. | 9,8 | 9,7 | 9,7 | 9,6 | 10,3 |
+| 2026-11-23 | Lot 1 — FPS moy / p1 | 120 / 108 | 120 / 106 | 120 / 108 | 120 / 108 | 120 / 108 |
+
+Le temps GPU médian des vues statiques n'est pas exploitable : d'une capture à l'autre sans changement
+de code, une même vue donne ≈ 5–6 ms ou ≈ 10 ms (une valeur de `GPUTimer` couvre une ou deux frames).
+Comparer le temps GPU des benchmarks de vol jusqu'à L2.9.
+
+Constats visuels après le lot 1 (`docs/screenshots/render/lot1/`) :
+- Ciel de Preetham visible, dégradé zénith/horizon, lueur solaire au couchant ; terrain et ciel se
+  fondent à l'horizon (brouillard à la couleur du ciel).
+- Relief à sa vraie pente : massif du Mont-Blanc et vallée de Chamonix nettement plus raides.
+- Faces au soleil chaudes et faces à l'ombre bleutées au coucher du soleil (vue 4).
+- Restent : marches d'altitude sur les pentes raides (L5.1), premier plan flou en vue rasante (résolution
+  de l'imagerie), lac plat (L5.7), nappe nuageuse plane à peine visible avec un bord net à l'horizon
+  (plan de 80 km, lot 4), image un peu terne (AgX, à compenser par l'étalonnage L6.3).
 
 Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 - Ciel uni sur toutes les vues (couleur du brouillard, voir L1.6), saumon uniforme au coucher du soleil.
@@ -263,10 +295,28 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 | 2026-11-23 | Mesures | Chrome en fenêtre visible avec vsync, piloté par Playwright (`playwright-core` + Chrome installé) | Le headless/sans vsync ne présente pas toutes les frames (482 FPS affichés pour 3,8 ms GPU) et a planté |
 | 2026-11-23 | Scénarios | Vol par défaut + plan de vol 1 | Le premier est comparable à l'historique, le second stresse le streaming à basse altitude |
 | 2026-11-23 | Bundle three-tile | Non versionné ; construction documentée comme obligatoire (README, Quick Start) | Un clone neuf ne démarre pas sans lui |
+| 2026-11-23 | Tone mapping | AgX, exposition fixe 0,35 | ACES, comparé sur les 5 vues, contraste davantage mais surexpose la vue 1 et décale les teintes (neige à l'ombre bleu vif) ; le peps viendra de l'étalonnage (L6.3) et de l'exposition automatique (L2.8) |
+| 2026-11-23 | Échelle d'éclairage | Soleil, ciel, ambiance et brouillard dérivés du modèle de `SkyMesh` (port CPU) | Une seule échelle de radiance ; auparavant le terrain était 50 fois moins lumineux que le ciel. Provisoire jusqu'au lot 3 |
+| 2026-11-23 | Lumière du ciel sur le terrain | `HemisphereLight` (ciel / rebond du sol) au lieu de la PMREM | La PMREM en `scene.environment` alourdit le graphe de nœuds reconstruit pour chaque tuile : frames > 33 ms 57 → 396 sur le plan 1. À revoir après L2.6 |
+| 2026-11-23 | Unités du monde | Carte réduite horizontalement de cos(lat) : 1 unité = 1 m (option préférée par l'utilisateur à la multiplication de l'altitude) | Altitudes, HUD, vues de référence, nuages et y des plans inchangés ; vitesse en vrais m/s ; seuls x/z des plans de vol changent (champ `units`) |
+| 2026-11-23 | Vitesse par défaut | 560 m/s | Vitesse réelle de l'ancien défaut (800 unités Mercator/s) : benchmarks comparables à la baseline |
 
 ## Journal des sessions
 
 <!-- Entrée la plus récente en haut. -->
+
+### 2026-11-23 (3)
+- Fait : lot 1 complet (L1.4 partiel : PMREM sur l'avion seulement). `feat/render-baseline` fusionnée dans
+  `main` ; branche `feat/render-quick-wins`. Benchmarks de clôture dans les tolérances (p1 34,7 / 39,7
+  contre 35,2 / 39,4), temps GPU de vol en baisse.
+- Découvert : `SkyMesh` r183 dessine des nuages procéduraux et un disque solaire (ce dernier double la
+  lumière du soleil s'il entre dans la PMREM) ; `WebGPURenderer` rend déjà la scène dans une cible
+  HalfFloat puis applique la conversion de sortie (le tone mapping ne recompile aucun matériau) ; la
+  construction des nœuds par tuile est le goulot des saccades (L2.6).
+- Problèmes ouverts : marches d'altitude (L5.1) ; temps GPU des vues statiques bimodal (L2.9) ; bord net
+  de la nappe nuageuse à l'horizon (lot 4).
+- Prochaine étape : décider avec l'utilisateur de la fusion de `feat/render-quick-wins`, créer
+  `feat/render-hdr-pipeline`, puis L2.9 (`GPUTimer` par frame) et L2.6.
 
 ### 2026-11-23 (2)
 - Fait : lot 0 complet. Bundle three-tile construit, vues de référence + `window.osf`, scripts
