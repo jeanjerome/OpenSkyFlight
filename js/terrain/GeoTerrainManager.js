@@ -148,14 +148,14 @@ export default class GeoTerrainManager {
   }
 
   /**
-   * Called when a tile finishes loading. Apply TSL positionNode for GPU elevation.
+   * Called when a tile finishes loading. Apply the shared TSL elevation nodes, which read
+   * the height texture of the mesh being drawn.
    */
   _onTileLoaded(tile) {
     if (!tile || !tile.model) return;
     const mesh = tile.model;
     if (!mesh.geometry || !mesh.geometry.userData.heightTexture) return;
 
-    const heightTex = mesh.geometry.userData.heightTexture;
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
 
     // Disable frustum culling — the CPU bounding box is flat (Z=0) but the GPU
@@ -169,7 +169,7 @@ export default class GeoTerrainManager {
       if (mat._terrariumApplied) continue;
       // Only apply to MeshStandardNodeMaterial (TileMaterial clones), not MeshBasicNodeMaterial
       if (!mat.isMeshStandardNodeMaterial) continue;
-      applyTerrariumElevation(mat, heightTex);
+      applyTerrariumElevation(mat);
       mat._terrariumApplied = true;
       mat.needsUpdate = true;
     }
