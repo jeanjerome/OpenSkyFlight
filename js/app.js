@@ -17,7 +17,7 @@ import HUD from './ui/HUD.js';
 import Minimap from './ui/Minimap.js';
 import Logger from './utils/Logger.js';
 import { showNotification } from './ui/Notification.js';
-import AtmosphericSky, { compassToSunAzimuth } from './atmosphere/AtmosphericSky.js';
+import AtmosphericSky from './atmosphere/AtmosphericSky.js';
 import { REFERENCE_VIEWS } from './constants/referenceViews.js';
 import CloudLayer from './atmosphere/CloudLayer.js';
 import BenchmarkRunner from './benchmark/BenchmarkRunner.js';
@@ -247,7 +247,7 @@ async function initApp() {
     if (flightPlanRecorder.autopilotActive) flightPlanRecorder.autopilotActive = false;
     flightController.enabled = true;
     update('sunElevation', view.sunElevation);
-    update('sunAzimuth', compassToSunAzimuth(view.sunCompassAzimuth));
+    update('sunAzimuth', view.sunCompassAzimuth);
     update('showClouds', view.showClouds);
     if (view.cloudAltitude !== undefined) update('cloudAltitude', view.cloudAltitude);
     update('cameraMode', view.cameraMode);

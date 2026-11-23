@@ -21,7 +21,7 @@
  *
  * Atmosphere:
  * @property {number}  sunElevation           - Sun elevation angle in degrees, range [0..90] (default: 80)
- * @property {number}  sunAzimuth             - Sun azimuth angle in degrees, range [0..360] (default: 180)
+ * @property {number}  sunAzimuth             - Sun compass bearing in degrees, clockwise from north, range [0..360] (default: 160)
  * @property {number}  skyTurbidity           - Atmospheric turbidity, range [1..10] (default: 2.0)
  * @property {number}  skyRayleigh            - Rayleigh scattering coefficient (default: 1.0)
  * @property {boolean} showClouds             - Show cloud layer (default: false)
@@ -71,7 +71,7 @@ const CONFIG = {
   showMinimap: true,
   minimapZoom: 13,
   sunElevation: 80,
-  sunAzimuth: 180,
+  sunAzimuth: 160,
   skyTurbidity: 2.0,
   skyRayleigh: 1.0,
   showClouds: false,

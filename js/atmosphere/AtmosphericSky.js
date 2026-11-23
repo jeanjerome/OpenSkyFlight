@@ -7,12 +7,12 @@ import { preethamHorizonRadiance } from './preethamSky.js';
 const DEG2RAD = Math.PI / 180;
 
 /**
- * Convert a compass azimuth (clockwise from north) to the CONFIG.sunAzimuth value.
- * CONFIG.sunAzimuth is the spherical theta used below: theta = 0 points the sun
- * toward +Z (south, since north is -Z in world space) and theta = 90 toward +X (east).
+ * Spherical theta (as used by Vector3.setFromSphericalCoords) of a compass bearing.
+ * Theta = 0 points toward +Z, which is south since north is -Z in world space,
+ * and theta = 90 points toward +X (east).
  */
-export function compassToSunAzimuth(compassDeg) {
-  return (((180 - compassDeg) % 360) + 360) % 360;
+function compassToTheta(compassDeg) {
+  return (180 - compassDeg) * DEG2RAD;
 }
 
 export default class AtmosphericSky {
@@ -79,7 +79,7 @@ export default class AtmosphericSky {
 
     // Compute sun direction from elevation & azimuth
     const phi = (90 - sunElevation) * DEG2RAD;
-    const theta = sunAzimuth * DEG2RAD;
+    const theta = compassToTheta(sunAzimuth);
     this.sunDirection.setFromSphericalCoords(1, phi, theta);
 
     // SkyMesh uniforms (direct property access)
