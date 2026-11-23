@@ -3,6 +3,7 @@ import { SkyMesh } from 'three/addons/objects/SkyMesh.js';
 import { CONFIG, onChange } from '../utils/config.js';
 import Logger from '../utils/Logger.js';
 import { TONE_MAPPING_EXPOSURE, SUN_ILLUMINANCE_SCALE } from '../constants/rendering.js';
+import SkyEnvironment from './SkyEnvironment.js';
 import { preethamHorizonRadiance, preethamSkyIrradiance, preethamSunTransmittance } from './preethamSky.js';
 
 const DEG2RAD = Math.PI / 180;
@@ -25,6 +26,7 @@ export default class AtmosphericSky {
     this.sunDirection = new THREE.Vector3();
 
     this._fogColor = new THREE.Color();
+    this._sunIlluminance = new THREE.Color();
 
     // SkyMesh: TSL/NodeMaterial-based sky (WebGPU compatible)
     this.sky = new SkyMesh();
@@ -39,6 +41,8 @@ export default class AtmosphericSky {
     this.sky.renderOrder = -1;
     this.sky.material.depthTest = false;
     scene.add(this.sky);
+
+    this.environment = new SkyEnvironment(renderer);
 
     // Initial update
     this._updateSky();
@@ -63,6 +67,7 @@ export default class AtmosphericSky {
       this.sky.visible = false;
       this.scene.background = new THREE.Color(0x000000);
       this.scene.fog = null;
+      this.scene.environment = null;
       // Radar imagery is display-referred: no tone mapping
       this.renderer.toneMapping = THREE.NoToneMapping;
       this.renderer.toneMappingExposure = 1;
@@ -113,10 +118,12 @@ export default class AtmosphericSky {
     this.dirLight.color.setRGB(sr, sg, sb);
     this.dirLight.intensity = SUN_ILLUMINANCE_SCALE;
 
-    // Ambient: irradiance of the sky dome on flat ground
-    const [ar, ag, ab] = preethamSkyIrradiance(this.sunDirection, skyParams);
-    this.ambientLight.color.setRGB(ar, ag, ab);
-    this.ambientLight.intensity = 1;
+    // Sky light: prefiltered environment map of the sky and the ground bounce,
+    // replacing the flat ambient light
+    const skyIrradiance = preethamSkyIrradiance(this.sunDirection, skyParams);
+    this._sunIlluminance.copy(this.dirLight.color).multiplyScalar(this.dirLight.intensity);
+    this.scene.environment = this.environment.update(this.sunDirection, skyParams, this._sunIlluminance, skyIrradiance);
+    this.ambientLight.intensity = 0;
 
     // Fog: tinted with the sky radiance at the horizon so distant terrain fades into the sky
     if (CONFIG.fogEnabled) {
@@ -137,7 +144,6 @@ export default class AtmosphericSky {
       elevation: sunElevation,
       azimuth: sunAzimuth,
       sun: this.dirLight.color.getHexString(),
-      ambient: this.ambientLight.color.getHexString(),
     });
   }
 }
