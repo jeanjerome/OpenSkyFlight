@@ -149,11 +149,12 @@ for (let n = 1; n <= views.length; n++) {
   await page.waitForTimeout(2500); // chase camera settles, notification fades out
   const pacing = await measurePacing(Number(values.measureMs));
   await page.screenshot({ path: `${values.out}/view-${n}.png` });
+  const renderInfo = await page.evaluate(() => window.osf.renderInfo());
   const gpu = await measureGpu(Number(values.renders), 3000);
   if (gpu.gpuBusy !== null && gpu.gpuBusy < 0.9) {
     console.warn(`View ${n}: GPU busy ${gpu.gpuBusy}, not GPU-bound — raise --renders`);
   }
-  results.push({ view: n, name: views[n - 1], tilesSettledMs, ...pacing, ...gpu });
+  results.push({ view: n, name: views[n - 1], tilesSettledMs, ...pacing, ...renderInfo, ...gpu });
   console.log(JSON.stringify(results.at(-1)));
 }
 

@@ -276,6 +276,8 @@ async function initApp() {
     setReferenceView: (n) => applyReferenceView(n - 1),
     pendingTileDownloads: () => geoTerrainManager.pendingDownloads,
     lastGpuTimeMs: () => gpuTimer.getLastGPUTimeMs(),
+    // Draw calls and triangles of the last frame
+    renderInfo: () => ({ drawCalls: renderer.info.render.drawCalls, triangles: renderer.info.render.triangles }),
     // Render each frame n times so the GPU keeps a steady clock while its time is measured
     setRendersPerFrame: (n) => {
       gpuTimer.rendersPerFrame = Math.max(1, Math.round(n));
