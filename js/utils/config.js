@@ -20,7 +20,7 @@
  * @property {number}  maxPixelRatio          - Maximum device pixel ratio (default: 2)
  *
  * Atmosphere:
- * @property {number}  sunElevation           - Sun elevation angle in degrees, range [0..90] (default: 80)
+ * @property {number}  sunElevation           - Sun elevation angle in degrees, range [0..90] (default: 35)
  * @property {number}  sunAzimuth             - Sun compass bearing in degrees, clockwise from north, range [0..360] (default: 160)
  * @property {number}  skyTurbidity           - Atmospheric turbidity, range [1..10] (default: 2.0)
  * @property {number}  skyRayleigh            - Rayleigh scattering coefficient (default: 1.0)
@@ -70,7 +70,7 @@ const CONFIG = {
   showLogs: false,
   showMinimap: true,
   minimapZoom: 13,
-  sunElevation: 80,
+  sunElevation: 35,
   sunAzimuth: 160,
   skyTurbidity: 2.0,
   skyRayleigh: 1.0,
