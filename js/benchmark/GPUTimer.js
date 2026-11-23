@@ -1,10 +1,25 @@
 import Logger from '../utils/Logger.js';
 
+const FRAME_UID = /:f(\d+)$/;
+const MAX_TRACKED_FRAMES = 64;
+
 /**
  * GPU timing with backend detection.
- * - WebGPU with timestamp-query: uses renderer.resolveTimestampsAsync() for real GPU timing.
+ * - WebGPU with timestamp-query: reads the render pass timestamps of each frame.
  * - WebGPU without timestamp-query: falls back to performance.now() around render calls.
  * - WebGL2: uses EXT_disjoint_timer_query_webgl2 (reads results with 2-frame delay).
+ *
+ * On WebGPU the reported value is the GPU span of one frame: from the start of its
+ * first render pass to the end of its last one. Summing pass durations, as
+ * `renderer.resolveTimestampsAsync()` does, overcounts on tile-based GPUs (Apple
+ * silicon), where a pass starts its vertex work while the previous pass is still
+ * shading: on the reference views, the two passes of a frame overlap and their
+ * summed durations exceed the span by about 60 %.
+ *
+ * At vsync a light frame leaves the GPU idle, and the GPU then lowers its clock: the
+ * same frame measures 2–3 ms or 6 ms depending on the clock state the driver picked.
+ * Set `rendersPerFrame` above 1 while rendering the frame that many times to keep the
+ * GPU busy; the reported value is then the span divided by the number of renders.
  */
 export default class GPUTimer {
   constructor(renderer) {
@@ -16,6 +31,12 @@ export default class GPUTimer {
     this._frameId = 0;
     this._lastGPUTimeMs = 0;
     this._cpuRenderStart = 0;
+
+    /** Number of times the scene is rendered in each frame (see class comment). */
+    this.rendersPerFrame = 1;
+    this._rendersByFrame = new Map();
+    this._hookedPool = null;
+    this._spanTiming = false;
 
     // Detect backend: WebGPURenderer exposes a .backend property
     this._isWebGPU = !!renderer.backend;
@@ -72,20 +93,19 @@ export default class GPUTimer {
   endFrame() {
     if (this._isWebGPU) {
       if (this._hasTimestampQuery) {
-        // Intentional fire-and-forget: GPU timestamp resolves asynchronously
-        // and result is consumed on next frame via getLastGPUTimeMs()
+        this._trackFrame();
+        // Intentional fire-and-forget: the pool resolves at most one batch at a time
+        // and the spans are recorded by the hook installed in _hookTimestampPool().
         this._renderer
           .resolveTimestampsAsync('render')
           .then((durationMs) => {
-            if (durationMs !== undefined && durationMs !== null) {
-              this._lastGPUTimeMs = durationMs;
-            }
+            if (!this._spanTiming && durationMs > 0) this._lastGPUTimeMs = durationMs;
           })
           .catch(() => {
             // Silently ignore — timestamp may not be available on every frame
           });
       } else {
-        this._lastGPUTimeMs = performance.now() - this._cpuRenderStart;
+        this._lastGPUTimeMs = (performance.now() - this._cpuRenderStart) / this.rendersPerFrame;
       }
       return;
     }
@@ -122,6 +142,76 @@ export default class GPUTimer {
       const old = this._pendingQueries.shift();
       this._gl.deleteQuery(old.query);
     }
+  }
+
+  /** Remembers how many renders the current frame holds, keyed by the renderer's frame id. */
+  _trackFrame() {
+    this._rendersByFrame.set(this._renderer.info.frame, this.rendersPerFrame);
+    if (this._rendersByFrame.size > MAX_TRACKED_FRAMES) {
+      this._rendersByFrame.delete(this._rendersByFrame.keys().next().value);
+    }
+    this._hookTimestampPool();
+  }
+
+  /**
+   * three (r183) resolves the render timestamps into a mapped buffer and keeps only
+   * per-pass durations. Read the raw begin/end timestamps when three maps that buffer,
+   * so that the span of each frame can be computed. The pool is created with the first
+   * timed render pass; if its layout differs (other three release), fall back to the
+   * summed durations returned by resolveTimestampsAsync().
+   */
+  _hookTimestampPool() {
+    const pool = this._renderer.backend.timestampQueryPool?.render;
+    if (!pool || pool === this._hookedPool) return;
+    this._hookedPool = pool;
+
+    const buffer = pool.resultBuffer;
+    if (typeof pool._resolveQueries !== 'function' || !(pool.queryOffsets instanceof Map) || !buffer?.getMappedRange) {
+      Logger.warn('GPUTimer', 'Unknown timestamp pool layout — reporting summed pass durations');
+      return;
+    }
+    this._spanTiming = true;
+
+    let offsets = null;
+    const resolveQueries = pool._resolveQueries.bind(pool);
+    pool._resolveQueries = () => {
+      offsets = new Map(pool.queryOffsets);
+      return resolveQueries();
+    };
+
+    const getMappedRange = buffer.getMappedRange.bind(buffer);
+    buffer.getMappedRange = (offset, size) => {
+      const range = getMappedRange(offset, size);
+      if (offsets) this._recordSpans(new BigUint64Array(range), offsets);
+      offsets = null;
+      return range;
+    };
+  }
+
+  /** Stores the GPU span of the most recent frame found in a resolved batch. */
+  _recordSpans(times, offsets) {
+    const frames = new Map();
+    for (const [uid, base] of offsets) {
+      const match = FRAME_UID.exec(uid);
+      if (!match) continue;
+      const start = times[base];
+      const end = times[base + 1];
+      if (end <= start) continue;
+      const frame = Number(match[1]);
+      const span = frames.get(frame);
+      if (!span) {
+        frames.set(frame, { start, end });
+      } else {
+        if (start < span.start) span.start = start;
+        if (end > span.end) span.end = end;
+      }
+    }
+    if (frames.size === 0) return;
+
+    const lastFrame = Math.max(...frames.keys());
+    const { start, end } = frames.get(lastFrame);
+    const renders = this._rendersByFrame.get(lastFrame) ?? 1;
+    this._lastGPUTimeMs = Number(end - start) / 1e6 / renders;
   }
 
   /** Returns the last measured GPU render time in milliseconds. */

@@ -9,6 +9,14 @@
 // Output: view-<n>.png screenshots (HUD and minimap hidden) and views.json.
 // Chrome runs headed with vsync by default: headless or uncapped frame pacing
 // does not present every frame, so its FPS figures are not representative.
+//
+// GPU time is measured separately from frame pacing. At vsync a light frame leaves
+// the GPU idle and its clock governor slows it down until the frame fills about
+// three quarters of the refresh interval, whatever the frame costs. Each view is
+// therefore also rendered --renders times per frame, which makes the GPU the
+// bottleneck at a steady clock: the GPU span divided by that count is the cost of
+// one frame. gpuBusy (GPU time x frame rate) close to 1 confirms the GPU was the
+// limit; keep the same --renders value for runs that are compared.
 
 import { chromium } from 'playwright-core';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -22,6 +30,7 @@ const { values } = parseArgs({
     width: { type: 'string', default: '2056' },
     height: { type: 'string', default: '1290' },
     measureMs: { type: 'string', default: '5000' },
+    renders: { type: 'string', default: '12' },
   },
 });
 if (!values.out) {
@@ -63,20 +72,17 @@ async function waitTilesSettled(maxMs = 90000) {
   return -1;
 }
 
-/** Sample requestAnimationFrame intervals and GPU time for `ms` milliseconds. */
-function measure(ms) {
+/** Sample requestAnimationFrame intervals for `ms` milliseconds. */
+function measurePacing(ms) {
   return page.evaluate(
     (ms) =>
       new Promise((resolve) => {
         const frameTimes = [];
-        const gpuTimes = [];
         let prev = performance.now();
         const end = prev + ms;
         function tick(now) {
           frameTimes.push(now - prev);
           prev = now;
-          const gpu = window.osf.lastGpuTimeMs();
-          if (gpu > 0) gpuTimes.push(gpu);
           if (now < end) {
             requestAnimationFrame(tick);
             return;
@@ -84,20 +90,54 @@ function measure(ms) {
           const sorted = frameTimes.slice(1).sort((a, b) => a - b);
           const pct = (p) => sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))];
           const avg = sorted.reduce((a, b) => a + b, 0) / sorted.length;
-          gpuTimes.sort((a, b) => a - b);
           resolve({
             frames: sorted.length,
             fpsAvg: +(1000 / avg).toFixed(1),
             fpsP5: +(1000 / pct(0.95)).toFixed(1),
             fpsP1: +(1000 / pct(0.99)).toFixed(1),
             frameTimeAvgMs: +avg.toFixed(2),
-            gpuMedianMs: gpuTimes.length ? +gpuTimes[Math.floor(gpuTimes.length / 2)].toFixed(2) : null,
           });
         }
         requestAnimationFrame(tick);
       }),
     ms,
   );
+}
+
+/** Render each frame `renders` times and sample the GPU time of one render for `ms` milliseconds. */
+async function measureGpu(renders, ms) {
+  await page.evaluate((n) => window.osf.setRendersPerFrame(n), renders);
+  await page.waitForTimeout(1000); // clock ramps up, older frames drain from the timer
+  const result = await page.evaluate(
+    ({ renders, ms }) =>
+      new Promise((resolve) => {
+        const gpuTimes = [];
+        const start = performance.now();
+        const end = start + ms;
+        function tick(now) {
+          const gpu = window.osf.lastGpuTimeMs();
+          if (gpu > 0) gpuTimes.push(gpu);
+          if (now < end) {
+            requestAnimationFrame(tick);
+            return;
+          }
+          gpuTimes.sort((a, b) => a - b);
+          const pct = (p) => gpuTimes[Math.min(gpuTimes.length - 1, Math.floor(p * gpuTimes.length))];
+          const fps = gpuTimes.length / ((now - start) / 1000);
+          const median = pct(0.5);
+          resolve({
+            gpuRenders: renders,
+            gpuMedianMs: gpuTimes.length ? +median.toFixed(2) : null,
+            gpuP90Ms: gpuTimes.length ? +pct(0.9).toFixed(2) : null,
+            gpuBusy: gpuTimes.length ? +((median * renders * fps) / 1000).toFixed(2) : null,
+          });
+        }
+        requestAnimationFrame(tick);
+      }),
+    { renders, ms },
+  );
+  await page.evaluate(() => window.osf.setRendersPerFrame(1));
+  return result;
 }
 
 const views = await page.evaluate(() => window.osf.referenceViews);
@@ -107,9 +147,13 @@ for (let n = 1; n <= views.length; n++) {
   await page.waitForTimeout(1500);
   const tilesSettledMs = await waitTilesSettled();
   await page.waitForTimeout(2500); // chase camera settles, notification fades out
-  const metrics = await measure(Number(values.measureMs));
+  const pacing = await measurePacing(Number(values.measureMs));
   await page.screenshot({ path: `${values.out}/view-${n}.png` });
-  results.push({ view: n, name: views[n - 1], tilesSettledMs, ...metrics });
+  const gpu = await measureGpu(Number(values.renders), 3000);
+  if (gpu.gpuBusy !== null && gpu.gpuBusy < 0.9) {
+    console.warn(`View ${n}: GPU busy ${gpu.gpuBusy}, not GPU-bound — raise --renders`);
+  }
+  results.push({ view: n, name: views[n - 1], tilesSettledMs, ...pacing, ...gpu });
   console.log(JSON.stringify(results.at(-1)));
 }
 

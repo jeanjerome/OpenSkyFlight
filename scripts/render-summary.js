@@ -5,11 +5,12 @@
 // Usage: node scripts/render-summary.js <report.json> [<report.json> ...]
 //
 // Figures, one line per report:
-// - fps: frames / duration. The report's summary.fps.avg averages instantaneous
-//   FPS values instead, which catch-up frames bias upward.
+// - fps: frames / duration. Reports saved before summary.fps.avg was computed the
+//   same way averaged instantaneous FPS values, which catch-up frames bias upward.
 // - p5 / p1: FPS percentiles from the report summary.
-// - gpu: median GPU time in ms (p95 in parentheses). A value may cover more than
-//   one frame, so it is a relative indicator only.
+// - gpu: median GPU time in ms (p95 in parentheses). At vsync the GPU clock governor
+//   stretches light frames to about three quarters of the refresh interval, so this
+//   shows GPU load, not frame cost; render-capture.js measures the cost.
 // - slow: number of frames over 33.3 ms / over 50 ms.
 // - tri: average triangle count; dc: median draw calls per frame.
 

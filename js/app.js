@@ -276,6 +276,10 @@ async function initApp() {
     setReferenceView: (n) => applyReferenceView(n - 1),
     pendingTileDownloads: () => geoTerrainManager.pendingDownloads,
     lastGpuTimeMs: () => gpuTimer.getLastGPUTimeMs(),
+    // Render each frame n times so the GPU keeps a steady clock while its time is measured
+    setRendersPerFrame: (n) => {
+      gpuTimer.rendersPerFrame = Math.max(1, Math.round(n));
+    },
   };
 
   // --- Render loop ---
@@ -392,7 +396,7 @@ async function initApp() {
     if (timer) timer.begin('render');
     gpuTimer.beginFrame();
     renderer.info.reset();
-    renderer.render(scene, camera);
+    for (let i = 0; i < gpuTimer.rendersPerFrame; i++) renderer.render(scene, camera);
     gpuTimer.endFrame();
     if (timer) timer.end('render');
 
