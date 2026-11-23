@@ -46,3 +46,17 @@ export const CLIP_PLANE_EPSILON = 100;
 export const AMBIENT_INTENSITY = 0.3;
 export const DIR_LIGHT_INTENSITY = 1.2;
 export const DIR_LIGHT_POSITION = [1, 0.5, 0.8];
+
+// --- Tone mapping and sky-consistent lighting ---
+// Sky, sun and ambient light share the radiance scale of the Preetham sky
+// (three.js SkyMesh), whose horizon reaches about 10 in daylight.
+
+/** Exposure applied before AgX tone mapping */
+export const TONE_MAPPING_EXPOSURE = 0.35;
+
+/**
+ * Sun illuminance at normal incidence for a fully transmitted Preetham sun.
+ * Gives a direct-sun to sky-dome irradiance ratio of about 5:1 on flat ground
+ * with the sun 55° high, as measured under a clear sky.
+ */
+export const SUN_ILLUMINANCE_SCALE = 57;

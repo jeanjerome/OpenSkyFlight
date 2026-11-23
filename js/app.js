@@ -36,7 +36,7 @@ async function initApp() {
 
   // --- Atmosphere ---
   // Side-effect: registers itself with scene, dirLight, and ambientLight
-  new AtmosphericSky(scene, dirLight, ambientLight);
+  new AtmosphericSky(scene, renderer, dirLight, ambientLight);
   const cloudLayer = new CloudLayer(scene);
   cloudLayer.mesh.renderOrder = CLOUD_RENDER_ORDER;
 

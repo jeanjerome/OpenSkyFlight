@@ -1,6 +1,5 @@
 import * as THREE from 'three';
-import { NodeMaterial } from 'three';
-import { uniform, texture, uv, smoothstep, float, vec2, vec4 } from 'three/tsl';
+import { uniform, texture, uv, smoothstep, float, vec2 } from 'three/tsl';
 import { CONFIG, onChange } from '../utils/config.js';
 import Logger from '../utils/Logger.js';
 
@@ -92,11 +91,11 @@ export default class CloudLayer {
     const n = texture(this._noiseTexture, uvOffset).r;
     const cloud = smoothstep(float(0.4), float(0.7), n);
 
-    const mat = new NodeMaterial();
+    // Lit by the sun and sky like the terrain, with the albedo of a thick cloud
+    const mat = new THREE.MeshStandardNodeMaterial({ color: 0xe6e6e6, roughness: 1, metalness: 0 });
     mat.transparent = true;
     mat.depthWrite = false;
     mat.side = THREE.DoubleSide;
-    mat.colorNode = vec4(1, 1, 1, 1);
     mat.opacityNode = cloud.mul(this._uOpacity);
 
     this.mesh = new THREE.Mesh(geo, mat);

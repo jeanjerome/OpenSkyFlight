@@ -85,3 +85,59 @@ export function preethamHorizonRadiance(sunPosition, params, samples = 16, eleva
   }
   return sum.map((v) => v / samples);
 }
+
+/**
+ * Relative sun intensity reaching the ground through the Preetham atmosphere:
+ * the model's sun intensity (normalized to 1 at its 1000 peak) times the
+ * extinction along the sun direction.
+ * @returns {number[]} [r, g, b] linear
+ */
+export function preethamSunTransmittance(sunPosition, params, out = [0, 0, 0]) {
+  const { turbidity, rayleigh, mieCoefficient } = params;
+  const len = Math.hypot(sunPosition.x, sunPosition.y, sunPosition.z) || 1;
+  const sy = sunPosition.y / len;
+
+  const sunE = Math.max(0, 1 - Math.exp(-(CUTOFF_ANGLE - Math.acos(clamp(sy, -1, 1))) / STEEPNESS));
+  const sunfade = 1 - clamp(1 - Math.exp(sunPosition.y / 450000), 0, 1);
+  const rayleighCoefficient = rayleigh - (1 - sunfade);
+  const mieScale = 0.434 * 0.2 * turbidity * 10e-18 * mieCoefficient;
+
+  const zenithAngle = Math.acos(Math.max(0, sy));
+  const inverse = 1 / (Math.cos(zenithAngle) + 0.15 * Math.pow(93.885 - (zenithAngle * 180) / Math.PI, -1.253));
+  for (let i = 0; i < 3; i++) {
+    const betaR = TOTAL_RAYLEIGH[i] * rayleighCoefficient;
+    const betaM = mieScale * MIE_CONST[i];
+    out[i] = sunE * Math.exp(-(betaR * RAYLEIGH_ZENITH_LENGTH + betaM * MIE_ZENITH_LENGTH) * inverse);
+  }
+  return out;
+}
+
+/**
+ * Irradiance from the sky dome on a horizontal surface (cosine-weighted
+ * integral of the sky radiance over the upper hemisphere), sun disc excluded.
+ * @returns {number[]} [r, g, b] linear
+ */
+export function preethamSkyIrradiance(sunPosition, params, thetaSteps = 16, phiSteps = 32) {
+  const sum = [0, 0, 0];
+  const tmp = [0, 0, 0];
+  const dir = { x: 0, y: 0, z: 0 };
+  const dTheta = Math.PI / 2 / thetaSteps;
+  const dPhi = (2 * Math.PI) / phiSteps;
+  for (let i = 0; i < thetaSteps; i++) {
+    const theta = (i + 0.5) * dTheta;
+    const sinT = Math.sin(theta);
+    const cosT = Math.cos(theta);
+    const weight = cosT * sinT * dTheta * dPhi;
+    for (let j = 0; j < phiSteps; j++) {
+      const phi = (j + 0.5) * dPhi;
+      dir.x = sinT * Math.cos(phi);
+      dir.y = cosT;
+      dir.z = sinT * Math.sin(phi);
+      preethamSkyRadiance(dir, sunPosition, params, tmp);
+      sum[0] += tmp[0] * weight;
+      sum[1] += tmp[1] * weight;
+      sum[2] += tmp[2] * weight;
+    }
+  }
+  return sum;
+}

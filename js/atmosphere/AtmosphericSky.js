@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { SkyMesh } from 'three/addons/objects/SkyMesh.js';
 import { CONFIG, onChange } from '../utils/config.js';
 import Logger from '../utils/Logger.js';
-import { preethamHorizonRadiance } from './preethamSky.js';
+import { TONE_MAPPING_EXPOSURE, SUN_ILLUMINANCE_SCALE } from '../constants/rendering.js';
+import { preethamHorizonRadiance, preethamSkyIrradiance, preethamSunTransmittance } from './preethamSky.js';
 
 const DEG2RAD = Math.PI / 180;
 
@@ -16,8 +17,9 @@ function compassToTheta(compassDeg) {
 }
 
 export default class AtmosphericSky {
-  constructor(scene, dirLight, ambientLight) {
+  constructor(scene, renderer, dirLight, ambientLight) {
     this.scene = scene;
+    this.renderer = renderer;
     this.dirLight = dirLight;
     this.ambientLight = ambientLight;
     this.sunDirection = new THREE.Vector3();
@@ -61,6 +63,9 @@ export default class AtmosphericSky {
       this.sky.visible = false;
       this.scene.background = new THREE.Color(0x000000);
       this.scene.fog = null;
+      // Radar imagery is display-referred: no tone mapping
+      this.renderer.toneMapping = THREE.NoToneMapping;
+      this.renderer.toneMappingExposure = 1;
 
       // Side-looking radar: low elevation, lateral azimuth
       const phi = (90 - 15) * DEG2RAD;
@@ -70,6 +75,7 @@ export default class AtmosphericSky {
       this.dirLight.intensity = 1.8;
       this.dirLight.color.set(0xffffff);
       this.ambientLight.intensity = 0.05;
+      this.ambientLight.color.set(0xffffff);
 
       Logger.debug('AtmosphericSky', 'SAR mode — black sky, side-looking light');
       return;
@@ -78,6 +84,8 @@ export default class AtmosphericSky {
     // Restore sky when leaving SAR mode
     this.sky.visible = true;
     this.scene.background = null;
+    this.renderer.toneMapping = THREE.AgXToneMapping;
+    this.renderer.toneMappingExposure = TONE_MAPPING_EXPOSURE;
 
     const { sunElevation, sunAzimuth, skyTurbidity, skyRayleigh } = CONFIG;
 
@@ -92,24 +100,27 @@ export default class AtmosphericSky {
     this.sky.rayleigh.value = skyRayleigh;
     this.sky.mieCoefficient.value = 0.005;
     this.sky.mieDirectionalG.value = 0.75;
+    const skyParams = {
+      turbidity: skyTurbidity,
+      rayleigh: skyRayleigh,
+      mieCoefficient: this.sky.mieCoefficient.value,
+      mieDirectionalG: this.sky.mieDirectionalG.value,
+    };
 
-    // Sync directional light to sun
+    // Sun: direction, and color and intensity after extinction through the atmosphere
     this.dirLight.position.copy(this.sunDirection).multiplyScalar(1e5);
+    const [sr, sg, sb] = preethamSunTransmittance(this.sunDirection, skyParams);
+    this.dirLight.color.setRGB(sr, sg, sb);
+    this.dirLight.intensity = SUN_ILLUMINANCE_SCALE;
 
-    // Modulate light intensity based on sun elevation
-    const elevNorm = Math.max(0, sunElevation) / 90; // 0 at horizon, 1 at zenith
-    const sunFactor = Math.sin((elevNorm * Math.PI) / 2); // smooth ramp
-    this.dirLight.intensity = 0.2 + sunFactor * 1.2;
-    this.ambientLight.intensity = 0.1 + sunFactor * 0.3;
+    // Ambient: irradiance of the sky dome on flat ground
+    const [ar, ag, ab] = preethamSkyIrradiance(this.sunDirection, skyParams);
+    this.ambientLight.color.setRGB(ar, ag, ab);
+    this.ambientLight.intensity = 1;
 
     // Fog: tinted with the sky radiance at the horizon so distant terrain fades into the sky
     if (CONFIG.fogEnabled) {
-      const [r, g, b] = preethamHorizonRadiance(this.sunDirection, {
-        turbidity: skyTurbidity,
-        rayleigh: skyRayleigh,
-        mieCoefficient: this.sky.mieCoefficient.value,
-        mieDirectionalG: this.sky.mieDirectionalG.value,
-      });
+      const [r, g, b] = preethamHorizonRadiance(this.sunDirection, skyParams);
       this._fogColor.setRGB(r, g, b);
 
       if (this.scene.fog instanceof THREE.FogExp2) {
@@ -125,7 +136,8 @@ export default class AtmosphericSky {
     Logger.debug('AtmosphericSky', 'Sky updated', {
       elevation: sunElevation,
       azimuth: sunAzimuth,
-      dirIntensity: this.dirLight.intensity.toFixed(2),
+      sun: this.dirLight.color.getHexString(),
+      ambient: this.ambientLight.color.getHexString(),
     });
   }
 }

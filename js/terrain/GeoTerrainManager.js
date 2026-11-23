@@ -1,4 +1,4 @@
-import { Fn, float, vec2, vec3, uv, positionWorld, fract, smoothstep, mix, min, max, sin, step, clamp, fwidth } from 'three/tsl';
+import { Fn, float, vec2, vec3, uv, positionWorld, fract, smoothstep, mix, min, max, sin, step, clamp, fwidth, sRGBTransferEOTF } from 'three/tsl';
 import * as THREE from 'three';
 import { LoaderFactory, TileMap, TileSource, applyTerrariumElevation } from 'three-tile';
 import { CONFIG, onChange } from '../utils/config.js';
@@ -254,7 +254,8 @@ export default class GeoTerrainManager {
         step(float(0.5), lineMaj)
       );
 
-      return mix(baseColor, lineColor, lineAlpha);
+      // The palette is authored in sRGB; the lit material expects linear albedo
+      return sRGBTransferEOTF(mix(baseColor, lineColor, lineAlpha));
     })();
   }
 
