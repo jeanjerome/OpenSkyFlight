@@ -1,6 +1,6 @@
 import { Fn, float, vec2, vec3, uv, positionWorld, fract, smoothstep, mix, min, max, sin, step, clamp, fwidth } from 'three/tsl';
 import * as THREE from 'three';
-import { TileMap, TileSource, applyTerrariumElevation } from 'three-tile';
+import { LoaderFactory, TileMap, TileSource, applyTerrariumElevation } from 'three-tile';
 import { CONFIG, onChange } from '../utils/config.js';
 import ElevationProvider from '../geo/ElevationProvider.js';
 
@@ -27,6 +27,7 @@ export default class GeoTerrainManager {
   constructor(scene, renderer) {
     this.scene = scene;
     this.renderer = renderer;
+    LoaderFactory.textureAnisotropy = renderer.getMaxAnisotropy();
     this.tileMap = null;
     /** @deprecated Alias for backwards compat — use tileMap */
     this.mapView = null;

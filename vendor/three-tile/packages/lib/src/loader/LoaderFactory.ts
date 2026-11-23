@@ -19,6 +19,9 @@ export const LoaderFactory = {
 	demLoaderMap: new Map<string, ITileGeometryLoader>(),
 	// Dict of img loader
 	imgLoaderMap: new Map<string, ITileMaterialLoader>(),
+	// Anisotropic filtering level applied to tile image textures (1 = disabled).
+	// Set it from renderer.getMaxAnisotropy() before tiles load.
+	textureAnisotropy: 1,
 
 	/**
 	 * Register material loader

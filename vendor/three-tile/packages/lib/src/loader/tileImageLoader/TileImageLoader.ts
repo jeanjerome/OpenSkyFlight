@@ -38,9 +38,9 @@ export class TileImageLoader extends TileMaterialLoader {
 		if (clipBounds[2] - clipBounds[0] < 1) {
 			texture.image = getSubImage(img, clipBounds);
 		}
-		// texture.generateMipmaps = false;
-		// texture.minFilter = LinearFilter;
-		// texture.anisotropy = 1;
+		// Tiles are mostly seen at grazing angles: without anisotropic filtering
+		// the mipmap chain blurs the imagery a short distance ahead of the camera.
+		texture.anisotropy = LoaderFactory.textureAnisotropy;
 		return texture;
 	}
 }
