@@ -1,25 +1,28 @@
 /**
- * @description: TSL (Three.js Shading Language) helpers for Terrarium GPU elevation decode.
- * Ported from geo-three's MapHeightNodeShader TSL pipeline.
+ * @description: TSL (Three.js Shading Language) helpers for GPU terrain displacement.
  *
- * Terrarium encoding: h = R*256 + G + B/256 - 32768  (metres)
- *
- * The positionNode displaces the tile geometry's Z axis in local space
- * (three-tile convention: X=easting, Y=northing, Z=elevation).
- * After TileMap.rotateX(-PI/2), Y becomes world-up.
+ * TerrariumShaderLoader decodes each Terrarium tile on the CPU into a float
+ * texture holding one elevation (metres) per grid vertex. The positionNode
+ * displaces the tile geometry's Z axis in local space (three-tile convention:
+ * X=easting, Y=northing, Z=elevation). After TileMap.rotateX(-PI/2), Y becomes
+ * world-up.
  */
 
 import {
 	Fn,
 	float,
-	vec2,
 	vec3,
+	int,
+	ivec2,
 	cross,
 	transformNormalToView,
 	varying,
 	positionLocal,
 	uv,
-	texture as tslTexture,
+	textureLoad,
+	min,
+	max,
+	round,
 } from "three/tsl";
 import type { Texture } from "three";
 
@@ -27,20 +30,7 @@ import type { Texture } from "three";
 type NodeMaterial = any;
 
 /**
- * Decode a Terrarium RGBA sample into elevation (metres).
- * Formula: h = R * 65280 + G * 255 + B * (255/256) - 32768
- * (65280 = 255 * 256, accounting for 8-bit → float normalisation by Three.js)
- */
-export const decodeTerrariumTSL = /* @__PURE__ */ Fn(([sample]: [any]) => {
-	return sample.r
-		.mul(65280.0)
-		.add(sample.g.mul(255.0))
-		.add(sample.b.mul(float(255.0).div(256.0)))
-		.sub(32768.0);
-});
-
-/**
- * Apply Terrarium GPU elevation to a NodeMaterial.
+ * Apply GPU elevation to a NodeMaterial.
  *
  * Tile local space: vertices in [0,1] x [0,1], scaled via quadtree hierarchy.
  * rootTile.scale = (mapWidth, mapHeight, mapDepth=1).
@@ -48,33 +38,34 @@ export const decodeTerrariumTSL = /* @__PURE__ */ Fn(([sample]: [any]) => {
  * So elevation in metres maps directly to local Z offset.
  *
  * @param material  The tile material to augment (MeshStandardNodeMaterial)
- * @param heightTex The raw Terrarium PNG texture (RGBA8, linear)
- * @returns Object with the heightTextureNode for later reference
+ * @param heightTex Float texture with one elevation per grid vertex (n x n, row 0 = south)
  */
-export function applyTerrariumElevation(
-	material: NodeMaterial,
-	heightTex: Texture,
-) {
-	const heightTextureNode = tslTexture(heightTex);
+export function applyTerrariumElevation(material: NodeMaterial, heightTex: Texture): void {
+	const n = heightTex.image.width as number;
+	const last = n - 1;
 	const vNormal = varying(vec3(0.0, 0.0, 1.0)); // Z-up in tile local space
+
+	// Exact texel of a grid vertex: no filtering, the value is the elevation at the vertex
+	const heightAt = (i: any, j: any) => textureLoad(heightTex, ivec2(i, j)).r;
 
 	material.positionNode = Fn(() => {
 		const pos = positionLocal.toVar();
-		const currentUv = uv();
 
-		// Sample height texture at current UV
-		const heightSample = tslTexture(heightTex, currentUv);
-		const elevation = decodeTerrariumTSL(heightSample);
+		// Grid indices of this vertex (skirt vertices share the UVs of the edge)
+		const cell = round(uv().mul(last)).toVar();
+		const i = cell.x.toInt();
+		const j = cell.y.toInt();
+		const elevation = heightAt(i, j);
 
-		// Analytical normals via finite differences
-		const texelSize = float(1.0).div(128.0);
-		const hRight = decodeTerrariumTSL(tslTexture(heightTex, currentUv.add(vec2(texelSize, 0.0))));
-		const hUp = decodeTerrariumTSL(tslTexture(heightTex, currentUv.add(vec2(0.0, texelSize))));
-
-		// Normal computation in tile local space (X=east, Y=north, Z=up)
-		const worldStep = texelSize;
-		const tangent = vec3(worldStep, float(0.0), hRight.sub(elevation));
-		const bitangent = vec3(float(0.0), worldStep, hUp.sub(elevation));
+		// Normal from central differences over the neighbouring vertices
+		// (one-sided on the tile edges), in tile local space (X=east, Y=north, Z=up)
+		const iL = max(i.sub(int(1)), int(0));
+		const iR = min(i.add(int(1)), int(last));
+		const jD = max(j.sub(int(1)), int(0));
+		const jU = min(j.add(int(1)), int(last));
+		const step = float(1 / last);
+		const tangent = vec3(iR.sub(iL).toFloat().mul(step), float(0.0), heightAt(iR, j).sub(heightAt(iL, j)));
+		const bitangent = vec3(float(0.0), jU.sub(jD).toFloat().mul(step), heightAt(i, jU).sub(heightAt(i, jD)));
 		vNormal.assign(cross(tangent, bitangent).normalize());
 
 		// Displace along Z (tile local elevation axis)
@@ -83,6 +74,4 @@ export function applyTerrariumElevation(
 	})();
 
 	material.normalNode = transformNormalToView(vNormal);
-
-	return { heightTextureNode };
 }

@@ -7,7 +7,7 @@
  * The actual displacement happens on GPU via TSL positionNode.
  */
 
-import { ImageLoader, LinearFilter, Texture } from "three";
+import { DataTexture, FloatType, ImageLoader, NearestFilter, RedFormat } from "three";
 import { getBoundsCoord, LoaderFactory, TileGeometryLoader, TileLoadClipParamsType } from "..";
 import { version } from "../..";
 import { TileGeometry } from "../../geometry/TileGeometry";
@@ -33,19 +33,19 @@ export class TerrariumShaderLoader extends TileGeometryLoader {
 		// Determine grid resolution based on zoom level (higher zoom = more detail)
 		const gridSize = Math.min(Math.max((z + 2) * 4, 16), 128);
 
-		// Extract the sub-region matching clipBounds (for upsampled tiles beyond zoom 15)
-		const cropRect = getBoundsCoord(clipBounds, img.width);
-		const canvas = new OffscreenCanvas(gridSize, gridSize);
-		const ctx = canvas.getContext("2d")!;
-		ctx.imageSmoothingEnabled = false;
-		ctx.drawImage(img, cropRect.sx, cropRect.sy, cropRect.sw, cropRect.sh, 0, 0, gridSize, gridSize);
+		// Elevations are decoded on the CPU into a float texture. Sampling the
+		// RGBA8 encoding on the GPU is not exact: the red channel weighs 256 m,
+		// and GPUs that filter 8-bit textures at half precision shift it by up
+		// to ±16 m, a shift that jumps every 256 m of altitude and carves
+		// terraces along the contour lines.
+		const source = decodeTerrarium(img);
+		const cropRect = getBoundsCoord(clipBounds, source.size);
+		const heights = resampleHeights(source, cropRect, gridSize);
 
-		// Create a raw RGBA8 texture — NO decode, NO sRGB
-		const texture = new Texture(canvas as unknown as HTMLCanvasElement);
-		texture.colorSpace = "";  // linear, not sRGB
+		const texture = new DataTexture(heights, gridSize, gridSize, RedFormat, FloatType);
 		texture.generateMipmaps = false;
-		texture.magFilter = LinearFilter;
-		texture.minFilter = LinearFilter;
+		texture.magFilter = NearestFilter;
+		texture.minFilter = NearestFilter;
 		texture.needsUpdate = true;
 
 		// Create a flat grid geometry at the matching resolution
@@ -56,6 +56,60 @@ export class TerrariumShaderLoader extends TileGeometryLoader {
 
 		return geometry;
 	}
+}
+
+/** Decoded Terrarium tile: elevations in metres, row 0 = north edge */
+interface HeightGrid {
+	size: number;
+	data: Float32Array;
+}
+
+/** Decode a Terrarium PNG (h = R*256 + G + B/256 - 32768) into metres. */
+function decodeTerrarium(img: HTMLImageElement | ImageBitmap): HeightGrid {
+	const size = img.width;
+	const canvas = new OffscreenCanvas(size, size);
+	const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
+	ctx.drawImage(img, 0, 0);
+	const rgba = ctx.getImageData(0, 0, size, size).data;
+	const data = new Float32Array(size * size);
+	for (let i = 0; i < data.length; i++) {
+		const k = i * 4;
+		data[i] = rgba[k] * 256 + rgba[k + 1] + rgba[k + 2] / 256 - 32768;
+	}
+	return { size, data };
+}
+
+/**
+ * Bilinearly sample the source elevations at the grid vertices.
+ * Vertex (i, j) sits at u = i / (n - 1), v = j / (n - 1) of the cropped area, v
+ * measured from the south edge (three-tile UV convention). Output row j is the
+ * vertex row j, matching the DataTexture layout (row 0 at v = 0).
+ */
+function resampleHeights(
+	source: HeightGrid,
+	crop: { sx: number; sy: number; sw: number; sh: number },
+	n: number,
+): Float32Array {
+	const { size, data } = source;
+	const out = new Float32Array(n * n);
+	const max = size - 1;
+	for (let j = 0; j < n; j++) {
+		// Source pixel centres are at integer + 0.5; row 0 of the source is north
+		const py = Math.min(max, Math.max(0, crop.sy + (1 - j / (n - 1)) * crop.sh - 0.5));
+		const y0 = Math.floor(py);
+		const y1 = Math.min(max, y0 + 1);
+		const fy = py - y0;
+		for (let i = 0; i < n; i++) {
+			const px = Math.min(max, Math.max(0, crop.sx + (i / (n - 1)) * crop.sw - 0.5));
+			const x0 = Math.floor(px);
+			const x1 = Math.min(max, x0 + 1);
+			const fx = px - x0;
+			const top = data[y0 * size + x0] * (1 - fx) + data[y0 * size + x1] * fx;
+			const bottom = data[y1 * size + x0] * (1 - fx) + data[y1 * size + x1] * fx;
+			out[j * n + i] = top * (1 - fy) + bottom * fy;
+		}
+	}
+	return out;
 }
 
 /**
