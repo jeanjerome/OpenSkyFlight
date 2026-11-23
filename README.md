@@ -65,6 +65,8 @@ Available scripts:
 | `npm run lint:fix` | Run ESLint with auto-fix |
 | `npm run format` | Format all files with Prettier |
 | `npm run format:check` | Check formatting without modifying files |
+| `npm run render:capture -- --out <dir>` | Screenshot and measure every reference view in Chrome (dev server must be running) |
+| `npm run render:benchmark -- --out <dir> [--plan <n>]` | Run the in-app benchmark in Chrome and save its JSON report |
 
 ### Controls
 
@@ -83,6 +85,7 @@ Available scripts:
 | `X` | Toggle debug tile overlay |
 | `B` | Start / stop benchmark |
 | `Shift+B` | Store last benchmark as baseline |
+| `K` | Cycle reference views (also `?view=<n>` in the URL) |
 | `N` | Start / stop flight plan recording |
 | `Shift+N` | Clear current flight plan |
 | `P` | Add waypoint (while recording) |

@@ -17,7 +17,8 @@ import HUD from './ui/HUD.js';
 import Minimap from './ui/Minimap.js';
 import Logger from './utils/Logger.js';
 import { showNotification } from './ui/Notification.js';
-import AtmosphericSky from './atmosphere/AtmosphericSky.js';
+import AtmosphericSky, { compassToSunAzimuth } from './atmosphere/AtmosphericSky.js';
+import { REFERENCE_VIEWS } from './constants/referenceViews.js';
 import CloudLayer from './atmosphere/CloudLayer.js';
 import BenchmarkRunner from './benchmark/BenchmarkRunner.js';
 import BenchmarkComparator from './benchmark/BenchmarkComparator.js';
@@ -234,9 +235,52 @@ async function initApp() {
     }
   });
 
+  // --- Reference views (reproducible viewpoints for rendering comparisons) ---
+  const DEG2RAD = Math.PI / 180;
+  let referenceViewIndex = -1;
+
+  function applyReferenceView(index) {
+    const view = REFERENCE_VIEWS[index];
+    const position = view && geoTerrainManager.geoToWorld(view.lat, view.lon, view.altitude);
+    if (!position) return false;
+
+    if (flightPlanRecorder.autopilotActive) flightPlanRecorder.autopilotActive = false;
+    flightController.enabled = true;
+    update('sunElevation', view.sunElevation);
+    update('sunAzimuth', compassToSunAzimuth(view.sunCompassAzimuth));
+    update('showClouds', view.showClouds);
+    if (view.cloudAltitude !== undefined) update('cloudAltitude', view.cloudAltitude);
+    update('cameraMode', view.cameraMode);
+
+    flightController.position.copy(position);
+    flightController.setOrientation(-view.heading * DEG2RAD, view.pitch * DEG2RAD);
+    flightController.yawRate = 0;
+    flightController.pitchRate = 0;
+    chaseCameraController.reset();
+    _bankRoll = 0;
+    referenceViewIndex = index;
+    showNotification(`View ${index + 1}/${REFERENCE_VIEWS.length}: ${view.name}`);
+    return true;
+  }
+
+  input.onKey('k', () => {
+    applyReferenceView((referenceViewIndex + 1) % REFERENCE_VIEWS.length);
+  });
+
+  // Read-only state and view selection for automated captures and measurements
+  window.osf = {
+    referenceViews: REFERENCE_VIEWS.map((v) => v.name),
+    setReferenceView: (n) => applyReferenceView(n - 1),
+    pendingTileDownloads: () => geoTerrainManager.pendingDownloads,
+    lastGpuTimeMs: () => gpuTimer.getLastGPUTimeMs(),
+  };
+
   // --- Render loop ---
   let prevTime = performance.now();
   let _bankRoll = 0;
+
+  const viewParam = parseInt(new URLSearchParams(window.location.search).get('view'), 10);
+  if (viewParam >= 1) applyReferenceView(viewParam - 1);
 
   function animate() {
     requestAnimationFrame(animate);

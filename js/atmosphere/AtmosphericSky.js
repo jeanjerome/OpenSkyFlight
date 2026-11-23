@@ -5,6 +5,15 @@ import Logger from '../utils/Logger.js';
 
 const DEG2RAD = Math.PI / 180;
 
+/**
+ * Convert a compass azimuth (clockwise from north) to the CONFIG.sunAzimuth value.
+ * CONFIG.sunAzimuth is the spherical theta used below: theta = 0 points the sun
+ * toward +Z (south, since north is -Z in world space) and theta = 90 toward +X (east).
+ */
+export function compassToSunAzimuth(compassDeg) {
+  return (((180 - compassDeg) % 360) + 360) % 360;
+}
+
 export default class AtmosphericSky {
   constructor(scene, dirLight, ambientLight) {
     this.scene = scene;

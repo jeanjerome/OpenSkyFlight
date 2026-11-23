@@ -320,6 +320,23 @@ export default class GeoTerrainManager {
     }
   }
 
+  /**
+   * Convert a geographic position to world coordinates.
+   * World Y is the altitude in metres, the unit used by the GPU elevation decode.
+   * @returns {THREE.Vector3|null} null until the tile map exists
+   */
+  geoToWorld(lat, lon, altitude) {
+    if (!this.tileMap) return null;
+    const world = this.tileMap.geo2world(new THREE.Vector3(lon, lat, 0));
+    world.y = altitude;
+    return world;
+  }
+
+  /** Number of tile downloads in flight (0 once the visible terrain has loaded). */
+  get pendingDownloads() {
+    return this.tileMap ? this.tileMap.downloading : 0;
+  }
+
   getMeshes() {
     return this.tileMap ? [this.tileMap] : [];
   }
