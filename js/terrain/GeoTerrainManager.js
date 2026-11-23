@@ -158,12 +158,6 @@ export default class GeoTerrainManager {
 
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
 
-    // Disable frustum culling — the CPU bounding box is flat (Z=0) but the GPU
-    // positionNode displaces vertices by up to thousands of metres. Without this,
-    // Three.js culls tiles whose flat bbox is outside the frustum even though their
-    // displaced geometry is visible on screen.
-    mesh.frustumCulled = false;
-
     for (const mat of materials) {
       // Skip background material (shared singleton) and already-processed materials
       if (mat._terrariumApplied) continue;

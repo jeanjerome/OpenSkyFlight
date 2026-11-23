@@ -7,7 +7,7 @@
  * The actual displacement happens on GPU via TSL positionNode.
  */
 
-import { DataTexture, FloatType, ImageLoader, NearestFilter, RedFormat } from "three";
+import { Box3, DataTexture, FloatType, ImageLoader, NearestFilter, RedFormat, Sphere } from "three";
 import { getBoundsCoord, LoaderFactory, TileGeometryLoader, TileLoadClipParamsType } from "..";
 import { version } from "../..";
 import { TileGeometry } from "../../geometry/TileGeometry";
@@ -48,8 +48,9 @@ export class TerrariumShaderLoader extends TileGeometryLoader {
 		texture.minFilter = NearestFilter;
 		texture.needsUpdate = true;
 
-		// Create a flat grid geometry at the matching resolution
-		const geometry = createFlatGrid(gridSize);
+		// Create a flat grid geometry at the matching resolution, with bounds that
+		// enclose the elevations the positionNode will apply
+		const geometry = createFlatGrid(gridSize, elevationRange(heights));
 
 		// Attach the height texture for the TSL positionNode to consume
 		geometry.userData.heightTexture = texture;
@@ -112,6 +113,46 @@ function resampleHeights(
 	return out;
 }
 
+/** Lowest and highest elevation of the grid, in metres */
+function elevationRange(heights: Float32Array): { min: number; max: number } {
+	let min = Infinity;
+	let max = -Infinity;
+	for (let k = 0; k < heights.length; k++) {
+		const h = heights[k];
+		if (h < min) min = h;
+		if (h > max) max = h;
+	}
+	return { min, max };
+}
+
+/**
+ * Flat tile grid displaced on the GPU. Its vertices sit at Z = 0 (skirt below),
+ * so bounds computed from the positions alone would be flat: three would cull
+ * tiles whose raised relief is on screen, and three-tile would measure LOD
+ * distances from sea level. The bounds are widened by the elevation range of the
+ * tile, which the GPU adds to every vertex.
+ */
+export class DisplacedTileGeometry extends TileGeometry {
+	public elevation = { min: 0, max: 0 };
+
+	public computeBoundingBox() {
+		super.computeBoundingBox();
+		// TileGeometry computes its bounds while it is constructed, before the
+		// elevation range is set
+		const box = this.boundingBox as Box3;
+		if (this.elevation) {
+			box.min.z += this.elevation.min;
+			box.max.z += this.elevation.max;
+		}
+	}
+
+	public computeBoundingSphere() {
+		this.computeBoundingBox();
+		if (!this.boundingSphere) this.boundingSphere = new Sphere();
+		(this.boundingBox as Box3).getBoundingSphere(this.boundingSphere);
+	}
+}
+
 /**
  * Creates a flat grid TileGeometry with the given resolution.
  * Vertices span [0,1] in X and Y with Z=0 (matching three-tile convention).
@@ -119,9 +160,10 @@ function resampleHeights(
  * positionNode samples the same elevation — the skirt drops skirtHeight below
  * that displaced position, hiding gaps between adjacent tiles.
  */
-function createFlatGrid(size: number): TileGeometry {
+function createFlatGrid(size: number, elevation: { min: number; max: number }): TileGeometry {
 	const dem = new Float32Array(size * size);
-	const geometry = new TileGeometry();
+	const geometry = new DisplacedTileGeometry();
+	geometry.elevation = elevation;
 	geometry.setData(dem, 1000); // 1000m skirt — GPU displacement applies to skirt too via shared UVs
 	return geometry;
 }
