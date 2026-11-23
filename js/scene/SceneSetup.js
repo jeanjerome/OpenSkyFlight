@@ -5,7 +5,8 @@ import { DEFAULT_FOV, DEFAULT_NEAR, DEFAULT_FAR, REALWORLD_START_ALTITUDE } from
 
 export async function createRenderer() {
   const renderer = new THREE.WebGPURenderer({
-    antialias: true,
+    // Anti-aliasing is temporal (TRAA, see ScenePipeline); MSAA would be wasted on it
+    antialias: false,
     powerPreference: 'high-performance',
     trackTimestamp: true,
     // Near = 1 m and far = 10 000 km: a standard depth buffer runs out of
