@@ -8,26 +8,30 @@ en fin de session.
 
 ## État courant (mis à jour le 2026-11-23)
 
-- **Lots terminés** : 0 et 1 (L1.4 achevée pendant le lot 2). **Lot en cours** : lot 2 ; L2.9 terminée,
-  L2.6 en grande partie (graphe d'élévation partagé, PMREM sur toute la scène).
+- **Lots terminés** : 0 et 1 (L1.4 achevée pendant le lot 2). **Lot en cours** : lot 2 ; L2.9 et L2.5
+  terminées, L2.6 en grande partie (graphe d'élévation partagé, PMREM sur toute la scène).
 - **Git** : branche `feat/render-hdr-pipeline` (depuis `main`), non poussée.
 - **Environnement local** : bundle three-tile construit, `npm install` fait (racine et
   `vendor/three-tile`), cache `cache/` chaud pour les vues de référence et les deux vols. Lancer
   `npm run dev` en tâche de fond avant toute mesure. Mesurer **sur l'écran intégré 120 Hz** : sur un
   écran 60 Hz, Chrome plafonne à 60 FPS et la qualité adaptative dégrade la résolution pour de bon.
-- **Référence de comparaison** : `benchmarks/render/env-terrain/` (captures avec coût GPU par vue et
-  deux benchmarks de vol, non versionnés). Chiffres dans **Mesures**, lignes « PMREM sur la scène ».
+- **Référence de comparaison** : `benchmarks/render/culling/` (captures avec coût GPU, draw calls et
+  triangles par vue, deux benchmarks de vol, non versionnés). Chiffres dans **Mesures**, lignes « L2.5 ».
 - **Lire les temps GPU** (voir Outillage) : seul le « coût GPU » de `render:capture` (`gpuMedianMs`,
   mesuré GPU saturé) compare deux états du code ; la colonne GPU des vols indique la charge, pas le coût.
-- **Ordre conseillé pour la suite du lot 2** : L2.5 → L2.1 → L2.2 → L2.3 → L2.4 → L2.8 → L2.7 ; reste de
-  L2.6 (décodage d'altitude dans un worker, `compileAsync`) seulement si p5 ou p1 le justifient.
-- **Prochaine tâche, L2.5 — points d'entrée** : `GeoTerrainManager._onTileLoaded` met
-  `mesh.frustumCulled = false` parce que la boîte englobante CPU des tuiles est plate (Z = 0) alors que
-  le `positionNode` les déplace de milliers de mètres. Le chargeur `TerrariumShaderLoader.ts` connaît
-  les altitudes de la grille (`heights`) : y calculer min/max et fixer `geometry.boundingBox` /
-  `boundingSphere` (en tenant compte des jupes de 1 000 m), puis rétablir le culling. Mesurer draw calls
-  et triangles (attendu : forte baisse hors champ) et vérifier qu'aucune tuile ne disparaît en bord
-  d'écran ni en virage.
+- **Ordre conseillé pour la suite du lot 2** : L2.1 → L2.2 → L2.3 → L2.4 → L2.8 → L2.7 ; reste de L2.6
+  (décodage d'altitude dans un worker, `compileAsync`) seulement si p5 ou p1 le justifient.
+- **Prochaine tâche, L2.1 — points d'entrée** :
+  - `js/scene/SceneSetup.js` (`createRenderer`) et la boucle de rendu de `js/app.js`
+    (`for (… gpuTimer.rendersPerFrame …) renderer.render(scene, camera)`) : remplacer par un
+    `RenderPipeline` de three r183 (vérifier le nom exact dans le build CDN : `RenderPipeline` ou
+    l'ancien `PostProcessing`) avec `pass(scene, camera)` en HalfFloat, `outputColorTransform` géré en
+    fin de chaîne. Le rendu répété pour la mesure doit appeler le pipeline.
+  - `WebGPURenderer` rend déjà dans une cible HalfFloat puis applique la conversion de sortie (deux
+    passes par frame aujourd'hui) : vérifier avec `render:capture` que le coût GPU ne double pas.
+  - Tone mapping et exposition sont fixés dans `AtmosphericSky._updateSky` (AgX / aucun en SAR) : les
+    passer au nœud de tone mapping du pipeline. Profondeur `Depth32Float` (voir L1.3).
+  - Vérifier les modes `sar` et `elevation`, et que `GPUTimer` compte toutes les passes du pipeline.
 
 ---
 
@@ -182,8 +186,14 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
 - [ ] **L2.3** Bloom (`BloomNode`) à seuil physique (soleil, reflets spéculaires).
 - [ ] **L2.4** Résolution dynamique : `AdaptiveQualityManager` pilote l'échelle de rendu interne
       reconstruite par TRAA, au lieu du `pixelRatio`.
-- [ ] **L2.5** Rétablir le frustum culling des tuiles (`GeoTerrainManager.js:154`) avec des boîtes
+- [x] **L2.5** Rétablir le frustum culling des tuiles (`GeoTerrainManager.js:154`) avec des boîtes
       englobantes calculées depuis l'altitude min/max de chaque tuile.
+      Fait : `DisplacedTileGeometry` (`TerrariumShaderLoader.ts`) élargit ses bornes de la plage
+      d'altitude de la tuile ; culling rétabli. **Aucun gain** : sur les 5 vues, aucune tuile visible
+      n'est hors du frustum (three-tile ne raffine que les tuiles dans le champ, les grosses tuiles
+      grossières le recoupent toujours) ; draw calls identiques. Les bornes justes serviront au culling
+      des cascades d'ombre (L5.3). Le point de mesure LOD reste au centre de la tuile au niveau de la
+      mer (voir Décisions).
 - [~] **L2.6** Réduire les saccades (p1) : précompilation des pipelines (`compileAsync`), matériaux de
       tuiles partagés au lieu d'un `clone()` par tuile, décodage d'image dans un worker. Chaque tuile a
       son propre graphe de nœuds (clone + `positionNode` propre) reconstruit sur le CPU à son arrivée ;
@@ -301,6 +311,8 @@ Notes de lecture :
 | 2026-11-23 | Graphe d'élévation partagé | Plan 1 (basse alt.) | 94 s | 119,3 | 80,6 | 59,5 | 3,9 (6,1) | 2 / 0 | 2,67 M | 651 |
 | 2026-11-23 | PMREM sur la scène | Vol par défaut | 128 s | 119,4 | 106,4 | 61,3 | 4,0 (5,9) | 1 / 0 | 2,12 M | 539 |
 | 2026-11-23 | PMREM sur la scène | Plan 1 (basse alt.) | 94 s | 119,3 | 83,3 | 59,9 | 3,9 (6,0) | 1 / 0 | 2,67 M | 651 |
+| 2026-11-23 | L2.5 (bornes + culling) | Vol par défaut | 128 s | 119,5 | 106,4 | 62,5 | 3,9 (6,0) | 0 / 0 | 2,12 M | 539 |
+| 2026-11-23 | L2.5 (bornes + culling) | Plan 1 (basse alt.) | 94 s | 119,5 | 81,3 | 61,0 | 4,0 (6,0) | 1 / 0 | 2,67 M | 651 |
 
 Pour mémoire, la configuration n°4 de `BENCHMARKS.md` (même machine, Chrome 146, ancien moteur
 geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,7 / 76,3 / 35,2).
@@ -319,6 +331,10 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 | 2026-11-23 | L2.9 — FPS moy / p1 | 120 / 106 | 120 / 108 | 120 / 108 | 120 / 108 | 120 / 108 |
 | 2026-11-23 | PMREM sur la scène — coût GPU ms (12 rendus/frame) | 1,26 | 1,43 | 1,47 | 1,39 | 1,43 |
 | 2026-11-23 | PMREM sur la scène — FPS moy / p1 | 120 / 110 | 120 / 106 | 120 / 109 | 120 / 108 | 120 / 110 |
+| 2026-11-23 | L2.5 — coût GPU ms (12 rendus/frame) | 1,27 | 1,47 | 1,48 | 1,38 | 1,44 |
+| 2026-11-23 | L2.5 — draw calls / triangles | 525 / 1,93 M | 633 / 2,60 M | 639 / 2,61 M | 579 / 2,03 M | 605 / 2,19 M |
+| 2026-11-23 | Essai LOD mesuré au point le plus haut (écarté) — coût GPU ms | 1,47 | 1,46 | 1,53 | 1,54 | 1,65 |
+| 2026-11-23 | Essai LOD mesuré au point le plus haut (écarté) — draw calls / triangles | 561 / 2,28 M | 633 / 2,60 M | 639 / 2,61 M | 639 / 2,57 M | 665 / 2,74 M |
 
 Les lignes « GPU ms méd. » antérieures à L2.9 ne sont pas exploitables (somme des passes, fréquence
 du GPU fixée par le régulateur). Le coût GPU réel d'une frame est ≈ 1,3–1,5 ms à 4112×2580 sur M4 Max
@@ -354,11 +370,25 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 | 2026-11-23 | Lumière du ciel sur la scène | PMREM du ciel en `scene.environment`, `HemisphereLight` retirée | Graphe d'élévation partagé entre tuiles : plus de compilation par tuile, la PMREM ne coûte plus de saccades (1 frame > 33 ms sur chaque vol) ni de temps GPU mesurable |
 | 2026-11-23 | Unités du monde | Carte réduite horizontalement de cos(lat) : 1 unité = 1 m (option préférée par l'utilisateur à la multiplication de l'altitude) | Altitudes, HUD, vues de référence, nuages et y des plans inchangés ; vitesse en vrais m/s ; seuls x/z des plans de vol changent (champ `units`) |
 | 2026-11-23 | Mesure du temps GPU | Durée couverte par les passes de la frame ; coût mesuré GPU saturé (12 rendus par frame) dans `render:capture` | À vsync le régulateur de fréquence du GPU fixe la durée mesurée (≈ 75 % de l'intervalle) ; les passes se chevauchent. Mesure saturée reproductible à ±4 % |
+| 2026-11-23 | Point de mesure du LOD des tuiles | Centre de la tuile au niveau de la mer (comportement inchangé) | Avec des bornes justes, three-tile mesurerait la distance au point le plus haut : +7 à +10 % de draw calls et +0,1–0,2 ms GPU sur les vues de montagne, sans différence visible (tuiles concernées à mi-distance, sous le brouillard), et `LODThreshold` 1,2 a été réglé pour le niveau de la mer |
 | 2026-11-23 | Vitesse par défaut | 560 m/s | Vitesse réelle de l'ancien défaut (800 unités Mercator/s) : benchmarks comparables à la baseline |
 
 ## Journal des sessions
 
 <!-- Entrée la plus récente en haut. -->
+
+### 2026-11-23 (8)
+- Fait : L2.5. Trois commits : bornes des tuiles élargies de leur plage d'altitude et culling rétabli,
+  typage du nœud de texture partagé (la vérification de types de three-tile retombe à ses 5 erreurs
+  antérieures, dues à des `@types/three` anciens), draw calls et triangles par vue dans
+  `render:capture` (`window.osf.renderInfo`).
+- Découvert : le culling n'élimine rien sur les vues de référence (0 tuile visible hors frustum,
+  vérifié tuile par tuile). Le point de mesure du LOD de three-tile prenait son altitude dans les
+  bornes plates, donc au niveau de la mer ; des bornes justes l'auraient déplacé au sommet de la
+  tuile, d'où un raffinement plus fort en montagne sans gain visible : écarté (voir Décisions).
+- Vérifié : vues identiques à la référence, aucune tuile manquante en bord d'écran (vue 2) ; vols
+  p1 62,5 / 61,0, au plus 1 frame > 33 ms.
+- Prochaine étape : L2.1 (voir État courant).
 
 ### 2026-11-23 (7)
 - Fait : L2.6 en grande partie et fin de L1.4. Deux commits : graphe d'élévation partagé entre tuiles
