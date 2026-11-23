@@ -1,6 +1,6 @@
 # OpenSkyFlight
 
-A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Earth using elevation data from AWS Terrarium and multiple texture modes (satellite, road map, SAR radar, elevation contours) — all rendered in real time with Three.js WebGPU. No install, no build step, no API key.
+A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Earth using elevation data from AWS Terrarium and multiple texture modes (satellite, road map, SAR radar, elevation contours) — all rendered in real time with Three.js WebGPU. No API key, and a single one-time build of the vendored terrain engine.
 
 ![WebGPU](https://img.shields.io/badge/WebGPU-Three.js-green)
 
@@ -38,11 +38,20 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 
 ## Quick Start
 
-No dependencies needed to run the app. Start the dev server:
+1. Build the vendored terrain engine once (**required** — the bundle is not versioned, see [Building three-tile](#building-three-tile-required)):
 
-```bash
-node scripts/serve.js
-```
+   ```bash
+   cd vendor/three-tile
+   npm install
+   npm run build:lib
+   cd ../..
+   ```
+
+2. Start the dev server (no other dependency needed to run the app):
+
+   ```bash
+   node scripts/serve.js
+   ```
 
 Then open [http://localhost:3000](http://localhost:3000) in your browser.
 
@@ -98,18 +107,19 @@ Available scripts:
 
 Use the right-side control panel to search locations, load terrain, and select texture mode.
 
-## Building three-tile (dev only)
+## Building three-tile (required)
 
 The terrain engine relies on [three-tile](https://github.com/sxguojf/three-tile), a lightweight Three.js tile map library. We vendor a patched fork (`0.11.8-osf`) in `vendor/three-tile/` with custom LOD enhancements (concentric view-center weighting, removal hysteresis).
 
-If you modify the sources, rebuild the bundle:
+The app imports the built bundle `vendor/three-tile/packages/lib/dist/three-tile-osf.js` via the import map. This file is **not versioned** (`dist/` is git-ignored), so it must be built after cloning, and again after any change to `vendor/three-tile/packages/lib/src/`:
 
 ```bash
 cd vendor/three-tile
+npm install        # first time only
 npm run build:lib
 ```
 
-This produces `vendor/three-tile/packages/lib/dist/three-tile-osf.js`, which the app imports via import map — no other change needed.
+Without this bundle the import map cannot resolve `three-tile` and the app does not start.
 
 ## Real-World Mode
 
