@@ -60,3 +60,6 @@ export const TONE_MAPPING_EXPOSURE = 0.35;
  * with the sun 55° high, as measured under a clear sky.
  */
 export const SUN_ILLUMINANCE_SCALE = 57;
+
+/** Average albedo of the ground seen from the air (forest, meadows, rock), for bounced light */
+export const GROUND_ALBEDO = 0.15;

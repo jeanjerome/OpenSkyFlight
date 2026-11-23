@@ -31,12 +31,12 @@ import Stats from 'stats.js';
 async function initApp() {
   // --- Core scene ---
   const renderer = await createRenderer();
-  const { scene, dirLight, ambientLight } = createScene();
+  const { scene, dirLight, ambientLight, hemiLight } = createScene();
   const camera = createCamera();
 
   // --- Atmosphere ---
-  // Side-effect: registers itself with scene, dirLight, and ambientLight
-  new AtmosphericSky(scene, renderer, dirLight, ambientLight);
+  // Drives the sky dome, fog, tone mapping and the scene lights
+  const atmosphericSky = new AtmosphericSky(scene, renderer, { dirLight, ambientLight, hemiLight });
   const cloudLayer = new CloudLayer(scene);
   cloudLayer.mesh.renderOrder = CLOUD_RENDER_ORDER;
 
@@ -52,9 +52,12 @@ async function initApp() {
   const _autopilotEuler = new THREE.Euler(0, 0, 0, 'YXZ');
   const _autopilotQuat = new THREE.Quaternion();
   const aircraftManager = new AircraftManager(scene);
-  aircraftManager.load('assets/models/rafale/Rafale.gltf').catch((err) => {
-    Logger.warn('App', 'Failed to load Rafale model: ' + err.message);
-  });
+  aircraftManager
+    .load('assets/models/rafale/Rafale.gltf')
+    .then(() => atmosphericSky.useEnvironmentLighting(aircraftManager.materials))
+    .catch((err) => {
+      Logger.warn('App', 'Failed to load Rafale model: ' + err.message);
+    });
 
   // --- Systems ---
   const benchmarkRunner = new BenchmarkRunner();

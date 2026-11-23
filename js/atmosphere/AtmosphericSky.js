@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { SkyMesh } from 'three/addons/objects/SkyMesh.js';
+import { lights } from 'three/tsl';
 import { CONFIG, onChange } from '../utils/config.js';
 import Logger from '../utils/Logger.js';
-import { TONE_MAPPING_EXPOSURE, SUN_ILLUMINANCE_SCALE } from '../constants/rendering.js';
+import { TONE_MAPPING_EXPOSURE, SUN_ILLUMINANCE_SCALE, GROUND_ALBEDO } from '../constants/rendering.js';
 import SkyEnvironment from './SkyEnvironment.js';
 import { preethamHorizonRadiance, preethamSkyIrradiance, preethamSunTransmittance } from './preethamSky.js';
 
@@ -18,15 +19,24 @@ function compassToTheta(compassDeg) {
 }
 
 export default class AtmosphericSky {
-  constructor(scene, renderer, dirLight, ambientLight) {
+  /**
+   * @param {THREE.Scene} scene
+   * @param {THREE.WebGPURenderer} renderer
+   * @param {{dirLight: THREE.DirectionalLight, ambientLight: THREE.AmbientLight, hemiLight: THREE.HemisphereLight}} lights
+   */
+  constructor(scene, renderer, { dirLight, ambientLight, hemiLight }) {
     this.scene = scene;
     this.renderer = renderer;
     this.dirLight = dirLight;
     this.ambientLight = ambientLight;
+    this.hemiLight = hemiLight;
+    /** Materials lit by the sky environment map instead of the hemisphere light */
+    this._envMaterials = new Set();
+    this._envTexture = null;
     this.sunDirection = new THREE.Vector3();
 
     this._fogColor = new THREE.Color();
-    this._sunIlluminance = new THREE.Color();
+    this._groundIrradiance = new THREE.Color();
 
     // SkyMesh: TSL/NodeMaterial-based sky (WebGPU compatible)
     this.sky = new SkyMesh();
@@ -57,6 +67,33 @@ export default class AtmosphericSky {
     Logger.info('AtmosphericSky', 'Sky initialized (SkyMesh/WebGPU)');
   }
 
+  /**
+   * Light materials with the prefiltered sky environment map (orientation-dependent
+   * sky light and sky reflections) instead of the hemisphere light.
+   *
+   * The environment map is not set as scene.environment: three.js rebuilds the
+   * node graph of every new terrain tile material, and the environment lighting
+   * nodes make each rebuild long enough to stall frames while tiles stream in.
+   * Each material keeps the directional and ambient lights only.
+   * @param {THREE.MeshStandardNodeMaterial[]} materials
+   */
+  useEnvironmentLighting(materials) {
+    const lightsNode = lights([this.dirLight, this.ambientLight]);
+    for (const material of materials) {
+      material.lightsNode = lightsNode;
+      this._envMaterials.add(material);
+    }
+    this._applyEnvironment();
+  }
+
+  _applyEnvironment() {
+    const sar = this._isSarMode();
+    for (const material of this._envMaterials) {
+      material.envMap = this._envTexture;
+      material.envMapIntensity = sar ? 0 : 1;
+    }
+  }
+
   _isSarMode() {
     return CONFIG.textureMode === 'sar';
   }
@@ -67,7 +104,6 @@ export default class AtmosphericSky {
       this.sky.visible = false;
       this.scene.background = new THREE.Color(0x000000);
       this.scene.fog = null;
-      this.scene.environment = null;
       // Radar imagery is display-referred: no tone mapping
       this.renderer.toneMapping = THREE.NoToneMapping;
       this.renderer.toneMappingExposure = 1;
@@ -81,6 +117,8 @@ export default class AtmosphericSky {
       this.dirLight.color.set(0xffffff);
       this.ambientLight.intensity = 0.05;
       this.ambientLight.color.set(0xffffff);
+      this.hemiLight.intensity = 0;
+      this._applyEnvironment();
 
       Logger.debug('AtmosphericSky', 'SAR mode — black sky, side-looking light');
       return;
@@ -118,12 +156,22 @@ export default class AtmosphericSky {
     this.dirLight.color.setRGB(sr, sg, sb);
     this.dirLight.intensity = SUN_ILLUMINANCE_SCALE;
 
-    // Sky light: prefiltered environment map of the sky and the ground bounce,
-    // replacing the flat ambient light
-    const skyIrradiance = preethamSkyIrradiance(this.sunDirection, skyParams);
-    this._sunIlluminance.copy(this.dirLight.color).multiplyScalar(this.dirLight.intensity);
-    this.scene.environment = this.environment.update(this.sunDirection, skyParams, this._sunIlluminance, skyIrradiance);
+    // Sky light: sky dome irradiance from above, light bounced by the ground from below
+    const [kr, kg, kb] = preethamSkyIrradiance(this.sunDirection, skyParams);
+    const cosSun = Math.max(0, this.sunDirection.y);
+    this._groundIrradiance.setRGB(
+      GROUND_ALBEDO * (sr * SUN_ILLUMINANCE_SCALE * cosSun + kr),
+      GROUND_ALBEDO * (sg * SUN_ILLUMINANCE_SCALE * cosSun + kg),
+      GROUND_ALBEDO * (sb * SUN_ILLUMINANCE_SCALE * cosSun + kb),
+    );
+    this.hemiLight.color.setRGB(kr, kg, kb);
+    this.hemiLight.groundColor.copy(this._groundIrradiance);
+    this.hemiLight.intensity = 1;
     this.ambientLight.intensity = 0;
+
+    // Environment map for the materials that opted in (see useEnvironmentLighting)
+    this._envTexture = this.environment.update(this.sunDirection, skyParams, this._groundIrradiance);
+    this._applyEnvironment();
 
     // Fog: tinted with the sky radiance at the horizon so distant terrain fades into the sky
     if (CONFIG.fogEnabled) {

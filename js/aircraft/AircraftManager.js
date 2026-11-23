@@ -15,6 +15,8 @@ export default class AircraftManager {
     this.scene = scene;
     this.mesh = null;
     this.ready = false;
+    /** @type {THREE.MeshStandardNodeMaterial[]} */
+    this.materials = [];
 
     this._visualRoll = 0;
     this._visualPitch = 0;
@@ -90,6 +92,19 @@ export default class AircraftManager {
     this.group.traverse((child) => {
       child.frustumCulled = false;
     });
+
+    // Node materials, so that the lighting of the aircraft can be set per material
+    const converted = new Map();
+    this.mesh.traverse((child) => {
+      if (!child.isMesh || !child.material || child.material.isNodeMaterial) return;
+      if (!converted.has(child.material)) {
+        const nodeMaterial = new THREE.MeshStandardNodeMaterial();
+        for (const key in child.material) nodeMaterial[key] = child.material[key];
+        converted.set(child.material, nodeMaterial);
+      }
+      child.material = converted.get(child.material);
+    });
+    this.materials = [...converted.values()];
 
     this.scene.add(this.group);
     this.ready = true;

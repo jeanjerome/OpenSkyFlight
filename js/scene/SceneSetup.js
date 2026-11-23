@@ -27,7 +27,10 @@ export function createScene() {
   const dirLight = new THREE.DirectionalLight(0xffffff, DIR_LIGHT_INTENSITY);
   dirLight.position.set(...DIR_LIGHT_POSITION);
   scene.add(dirLight);
-  return { scene, ambientLight, dirLight };
+  // Sky light from above and ground bounce from below; set by AtmosphericSky
+  const hemiLight = new THREE.HemisphereLight(0xffffff, 0x000000, 0);
+  scene.add(hemiLight);
+  return { scene, ambientLight, dirLight, hemiLight };
 }
 
 export function createCamera() {

@@ -2,9 +2,6 @@ import * as THREE from 'three';
 import { SkyMesh } from 'three/addons/objects/SkyMesh.js';
 import { preethamSkyRadiance } from './preethamSky.js';
 
-/** Average albedo of the ground seen from the air (forest, meadows, rock) */
-const GROUND_ALBEDO = 0.15;
-
 /** Edge length of each cube face of the prefiltered environment map */
 const ENV_MAP_SIZE = 256;
 
@@ -12,9 +9,8 @@ const ENV_MAP_SIZE = 256;
 const SUN_MASK_RADIUS_DEG = 1;
 
 /**
- * Prefiltered environment map (PMREM) of the sky, used as scene.environment
- * so that surfaces receive sky light that depends on their orientation, and
- * reflections of it.
+ * Prefiltered environment map (PMREM) of the sky: sky light that depends on
+ * the surface orientation, and reflections of the sky.
  *
  * Below the horizon SkyMesh repeats the horizon radiance, which would light
  * surfaces from underneath as brightly as from the horizon: a ground
@@ -59,11 +55,10 @@ export default class SkyEnvironment {
    * Re-render the environment map.
    * @param {THREE.Vector3} sunDirection - unit vector toward the sun
    * @param {{turbidity:number, rayleigh:number, mieCoefficient:number, mieDirectionalG:number}} skyParams
-   * @param {THREE.Color} sunIlluminance - sun color times intensity, at normal incidence
-   * @param {number[]} skyIrradiance - sky dome irradiance on flat ground [r, g, b]
+   * @param {THREE.Color} groundIrradiance - irradiance the ground sends upward (albedo times received irradiance)
    * @returns {THREE.Texture} the environment texture
    */
-  update(sunDirection, skyParams, sunIlluminance, skyIrradiance) {
+  update(sunDirection, skyParams, groundIrradiance) {
     this.sky.sunPosition.value.copy(sunDirection);
     this.sky.turbidity.value = skyParams.turbidity;
     this.sky.rayleigh.value = skyParams.rayleigh;
@@ -78,14 +73,8 @@ export default class SkyEnvironment {
     this.sunMaskMaterial.color.setRGB(mr, mg, mb);
     this.sunMask.visible = sunDirection.y > -0.02;
 
-    // Lambertian ground lit by the sun and the sky: L = albedo * E / pi
-    const cosSun = Math.max(0, sunDirection.y);
-    const k = GROUND_ALBEDO / Math.PI;
-    this.groundMaterial.color.setRGB(
-      k * (sunIlluminance.r * cosSun + skyIrradiance[0]),
-      k * (sunIlluminance.g * cosSun + skyIrradiance[1]),
-      k * (sunIlluminance.b * cosSun + skyIrradiance[2]),
-    );
+    // Lambertian ground: radiance = exitance / pi
+    this.groundMaterial.color.copy(groundIrradiance).multiplyScalar(1 / Math.PI);
 
     this.target = this.pmrem.fromScene(this.scene, 0, 0.1, 100, {
       size: ENV_MAP_SIZE,
