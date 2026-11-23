@@ -52,7 +52,9 @@ function getElevationNodes(): ElevationNodes {
 
 	const placeholder = new DataTexture(new Float32Array(4), 2, 2, RedFormat, FloatType);
 	placeholder.needsUpdate = true;
-	const heightMap = texture(placeholder).onObjectUpdate(
+	// Typed loosely: the installed three typings predate onObjectUpdate returning a
+	// value and TextureNode.load()
+	const heightMap: any = (texture(placeholder) as any).onObjectUpdate(
 		({ object }: { object: Mesh }) => object.geometry.userData.heightTexture as Texture,
 	);
 
