@@ -38,12 +38,12 @@ export default class BenchmarkRunner {
     return Math.max(0, WARMUP_DURATION - this.warmupElapsed);
   }
 
-  start(flightController, camera, gpuTimer, flightPlan) {
+  start(flightController, gpuTimer, flightPlan) {
     if (this.running) return;
     this.running = true;
     this.warmup = true;
     this.warmupElapsed = 0;
-    this.cameraPath = flightPlan || createDefaultFlightPlan(camera);
+    this.cameraPath = flightPlan || createDefaultFlightPlan(flightController);
     this.metrics = null;
     this.gpuTimer = gpuTimer || null;
     this._stopped = false;

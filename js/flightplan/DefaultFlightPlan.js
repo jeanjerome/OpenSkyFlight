@@ -20,11 +20,15 @@ const FLIGHT_SEGMENTS = [
   { duration: 20, yawRate: 0.035, pitchBias: 0 },
 ];
 
-export function createDefaultFlightPlan(camera) {
-  const startX = camera.position.x;
-  const startY = camera.position.y;
-  const startZ = camera.position.z;
-  const startYaw = camera.rotation.y;
+/**
+ * @param {{position: THREE.Vector3, yaw: number, pitch: number}} source - flight state the
+ *   plan starts from (FlightController); FlightPlan also reads its yaw and pitch
+ */
+export function createDefaultFlightPlan(source) {
+  const startX = source.position.x;
+  const startY = source.position.y;
+  const startZ = source.position.z;
+  const startYaw = source.yaw;
 
   const speed = CONFIG.cameraSpeed;
   const waypoints = [];
@@ -62,5 +66,5 @@ export function createDefaultFlightPlan(camera) {
     waypoints.push(new Waypoint(x, y, z, yaw));
   }
 
-  return new FlightPlan(waypoints, camera);
+  return new FlightPlan(waypoints, source);
 }

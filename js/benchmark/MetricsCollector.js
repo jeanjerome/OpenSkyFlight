@@ -65,7 +65,7 @@ export default class MetricsCollector {
       ft: Math.round(frameTime * 10) / 10,
       fps: frameTime > 0 ? Math.round(10000 / frameTime) / 10 : 0,
       tri: info.render.triangles,
-      dc: info.render.calls,
+      dc: info.render.drawCalls, // per frame; render.calls is cumulative since startup
       geo: info.memory.geometries,
       tex: info.memory.textures,
       subs,

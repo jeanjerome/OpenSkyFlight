@@ -230,7 +230,7 @@ async function initApp() {
       benchmarkRunner.stop(flightController, renderer);
     } else {
       const userPlan = flightPlanRecorder.hasValidPlan() ? flightPlanRecorder.buildPlan(flightController) : null;
-      benchmarkRunner.start(flightController, camera, gpuTimer, userPlan);
+      benchmarkRunner.start(flightController, gpuTimer, userPlan);
     }
   });
 
