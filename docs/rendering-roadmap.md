@@ -10,7 +10,7 @@ en fin de session.
 
 - **Lot terminé** : lot 1 (gains rapides). **Prochain lot** : lot 2, aucune tâche commencée.
 - **Git** : `feat/render-baseline` fusionnée dans `main` (fast-forward local, non poussée). Le lot 1 est
-  sur `feat/render-quick-wins` (12 commits au-dessus de `main`, ni fusionnée ni poussée). Demander à
+  sur `feat/render-quick-wins` (13 commits au-dessus de `main`, ni fusionnée ni poussée). Demander à
   l'utilisateur s'il faut la fusionner avant de créer la branche du lot 2 (`feat/render-hdr-pipeline`).
 - **Environnement local déjà prêt** : bundle three-tile reconstruit (anisotropie), `npm install` fait,
   cache `cache/` chaud. Lancer `npm run dev` (en tâche de fond) avant les mesures.
@@ -19,9 +19,9 @@ en fin de session.
   terrain, voir Décisions) → L2.5 → L2.1 → L2.2 → L2.3 → L2.4 → L2.8 → L2.7.
 - **Fait hors lot** : terrasses et stries du relief corrigées (décodage de l'altitude sur le CPU, voir
   L5.1 et le journal).
-- **Mesures** : un écran externe 60 Hz est apparu ; Chrome s'y ouvre et `AdaptiveQualityManager` y
-  dégrade la résolution sans jamais la rétablir (seuil de remontée 12 ms jamais atteint à 60 Hz).
-  Capturer sur l'écran 120 Hz, ou neutraliser la qualité adaptive pendant les mesures (L2.4).
+- **Mesures** : toujours sur l'écran intégré 120 Hz. Sur un écran 60 Hz, Chrome plafonne à 60 FPS et
+  `AdaptiveQualityManager` dégrade la résolution sans jamais la rétablir (seuil de remontée 12 ms jamais
+  atteint) : captures floues et mesures non comparables (corrigé par L2.4).
 - **Validation de chaque tâche** : `npm run render:capture -- --out benchmarks/render/<label>`, captures
   comparées à `benchmarks/render/lot1/` ; benchmarks de vol (défaut et `--plan 1`) à la clôture du lot.
 
@@ -261,6 +261,8 @@ Notes de lecture :
 | 2026-11-23 | Lot 1, PMREM en `scene.environment` (abandonné) | Plan 1 (basse alt.) | 94 s | 104,2 | 64,9 | 24,4 | 5,9 (9,3) | 396 / 44 | 2,67 M | 651 |
 | 2026-11-23 | Lot 1 | Vol par défaut | 128 s | 113,9 | 78,7 | 34,7 | 6,2 (10,3) | 122 / 28 | 2,12 M | 539 |
 | 2026-11-23 | Lot 1 | Plan 1 (basse alt.) | 94 s | 113,6 | 65,8 | 39,7 | 5,3 (8,6) | 49 / 4 | 2,67 M | 651 |
+| 2026-11-23 | Lot 1 + altitude décodée sur CPU | Vol par défaut | 128 s | 114,6 | 73,0 | 33,6 | 6,0 (10,3) | 50 / 4 | 2,12 M | 539 |
+| 2026-11-23 | Lot 1 + altitude décodée sur CPU | Plan 1 (basse alt.) | 94 s | 114,3 | 62,5 | 43,1 | 5,8 (8,9) | 5 / 0 | 2,67 M | 651 |
 
 Pour mémoire, la configuration n°4 de `BENCHMARKS.md` (même machine, Chrome 146, ancien moteur
 geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,7 / 76,3 / 35,2).
@@ -273,12 +275,13 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 | 2026-11-23 | Baseline — FPS moy / p1 | 120 / 109 | 120 / 108 | 120 / 111 | 120 / 106 | 120 / 109 |
 | 2026-11-23 | Lot 1 — GPU ms méd. | 9,8 | 9,7 | 9,7 | 9,6 | 10,3 |
 | 2026-11-23 | Lot 1 — FPS moy / p1 | 120 / 108 | 120 / 106 | 120 / 108 | 120 / 108 | 120 / 108 |
+| 2026-11-23 | Lot 1 + altitude CPU — FPS moy / p1 | 120 / 108 | 120 / 108 | 120 / 106 | 120 / 109 | 120 / 106 |
 
 Le temps GPU médian des vues statiques n'est pas exploitable : d'une capture à l'autre sans changement
 de code, une même vue donne ≈ 5–6 ms ou ≈ 10 ms (une valeur de `GPUTimer` couvre une ou deux frames).
 Comparer le temps GPU des benchmarks de vol jusqu'à L2.9.
 
-Constats visuels après le lot 1 (`docs/screenshots/render/lot1/`) :
+Constats visuels après le lot 1 (`docs/screenshots/render/lot1/`, état avec l'altitude décodée sur CPU) :
 - Ciel de Preetham visible, dégradé zénith/horizon, lueur solaire au couchant ; terrain et ciel se
   fondent à l'horizon (brouillard à la couleur du ciel).
 - Relief à sa vraie pente : massif du Mont-Blanc et vallée de Chamonix nettement plus raides.
@@ -320,9 +323,11 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
   par tranche de 256 m d'altitude, d'où une marche à chaque changement de R. Les données source sont
   lisses (vérifié : 1 à 3 m entre pixels voisins).
 - Corrigé (three-tile) : décodage sur le CPU en float, réduction bilinéaire, normales sur la grille
-  (L5.1 en partie). Coût ≈ 1,1 ms CPU par tuile (médiane, max 4 ms). Captures `benchmarks/render/dem-float`
-  faites sur un écran 60 Hz, à résolution dégradée : à refaire sur l'écran 120 Hz avec un benchmark de
-  vol avant la fusion.
+  (L5.1 en partie). Coût ≈ 1,1 ms CPU par tuile (médiane, max 4 ms).
+- Mesuré sur l'écran 120 Hz : frames > 33 ms 122 → 50 (vol par défaut) et 49 → 5 (plan 1) ; p1 33,6
+  (−4,5 % vs baseline) et 43,1 (+9 %) ; p5 en légère baisse (73,0 et 62,5), compatible avec le décodage
+  ajouté sur le thread principal. Captures du lot 1 remplacées par cet état.
+- Prochaine étape : inchangée (fusion de `feat/render-quick-wins`, puis lot 2 en commençant par L2.9).
 
 ### 2026-11-23 (3)
 - Fait : lot 1 complet (L1.4 partiel : PMREM sur l'avion seulement). `feat/render-baseline` fusionnée dans
