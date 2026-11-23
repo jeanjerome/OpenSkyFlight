@@ -25,9 +25,10 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 - **OSM minimap** — real-time 2D map overlay with airplane marker and independent zoom
 - **Flight plan system** — record waypoints, save/load flight plans, and engage autopilot to follow a path automatically
 - **Local tile cache** — transparent caching proxy, pre-download tiles for offline flight
-- **Atmospheric sky, lighting, clouds & fog** — Preetham sky with configurable sun position (compass bearing and elevation); HDR frame tone mapped with AgX; sun colour, sky light and fog colour derived from the same sky model; animated cloud layer
+- **Atmospheric sky, lighting, clouds & fog** — Preetham sky with configurable sun position (compass bearing and elevation); sun colour, sky light (prefiltered environment map of the sky) and fog colour derived from the same sky model; animated cloud layer
+- **HDR render pipeline** — scene rendered into a HalfFloat buffer with a 32-bit reversed depth buffer, temporal anti-aliasing (TRAA), AgX tone mapping at the end of the pipeline
 - **Dynamic resolution scaling** — adaptive pixel ratio based on frame time to maintain smooth performance
-- **Built-in benchmark** — automated camera path with FPS/GPU timing, metrics recording, and baseline comparison
+- **Built-in benchmark** — automated camera path with FPS/GPU timing (GPU span of each frame), metrics recording, and baseline comparison
 - **Toast notifications** — non-blocking user feedback for search results and errors
 - **Centralized logging** — in-app log panel with level control (DEBUG/INFO/WARN/ERROR)
 
@@ -74,8 +75,9 @@ Available scripts:
 | `npm run lint:fix` | Run ESLint with auto-fix |
 | `npm run format` | Format all files with Prettier |
 | `npm run format:check` | Check formatting without modifying files |
-| `npm run render:capture -- --out <dir>` | Screenshot and measure every reference view in Chrome (dev server must be running) |
+| `npm run render:capture -- --out <dir>` | Screenshot every reference view in Chrome and measure frame pacing, draw calls and GPU cost (dev server must be running) |
 | `npm run render:benchmark -- --out <dir> [--plan <n>]` | Run the in-app benchmark in Chrome and save its JSON report |
+| `npm run render:summary -- <report.json>...` | Print comparable figures (FPS, p5/p1, GPU, slow frames) for benchmark reports |
 
 ### Controls
 
@@ -177,7 +179,7 @@ cache/
 │   ├── flightplan/            Waypoint recording, flight plan interpolation, autopilot
 │   ├── geo/                   Tile math, elevation provider, fetch limiter
 │   ├── input/                 Keyboard dispatch (e.code for flight, e.key for actions)
-│   ├── rendering/             Adaptive resolution scaling
+│   ├── rendering/             Render pipeline (HDR scene pass, TRAA, tone mapping), adaptive resolution
 │   ├── scene/                 Renderer, scene, camera & lights factory
 │   ├── terrain/               Real-world terrain manager (three-tile integration)
 │   ├── ui/                    HUD instruments, flight plan menu, minimap, MFD panel
@@ -189,7 +191,8 @@ cache/
 │   ├── serve.js               Dev server with caching tile proxy
 │   ├── prefetch-tiles.js      Bulk tile downloader for offline use
 │   ├── render-capture.js      Reference view screenshots & frame timing (Chrome)
-│   └── render-benchmark.js    In-app flight benchmark runner (Chrome)
+│   ├── render-benchmark.js    In-app flight benchmark runner (Chrome)
+│   └── render-summary.js      Comparable figures from benchmark reports
 ├── vendor/three-tile/         Vendored three-tile (0.11.8-osf) with concentric LOD
 ├── docs/
 │   ├── rendering-roadmap.md   Rendering overhaul plan, progress, measurements, decisions
