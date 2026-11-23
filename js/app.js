@@ -31,12 +31,13 @@ import Stats from 'stats.js';
 async function initApp() {
   // --- Core scene ---
   const renderer = await createRenderer();
-  const { scene, dirLight, ambientLight, hemiLight } = createScene();
+  const { scene, dirLight, ambientLight } = createScene();
   const camera = createCamera();
 
   // --- Atmosphere ---
   // Drives the sky dome, fog, tone mapping and the scene lights
-  const atmosphericSky = new AtmosphericSky(scene, renderer, { dirLight, ambientLight, hemiLight });
+  // Drives the sky, the sun and the sky light from the configuration
+  new AtmosphericSky(scene, renderer, { dirLight, ambientLight });
   const cloudLayer = new CloudLayer(scene);
   cloudLayer.mesh.renderOrder = CLOUD_RENDER_ORDER;
 
@@ -54,7 +55,6 @@ async function initApp() {
   const aircraftManager = new AircraftManager(scene);
   aircraftManager
     .load('assets/models/rafale/Rafale.gltf')
-    .then(() => atmosphericSky.useEnvironmentLighting(aircraftManager.materials))
     .catch((err) => {
       Logger.warn('App', 'Failed to load Rafale model: ' + err.message);
     });
