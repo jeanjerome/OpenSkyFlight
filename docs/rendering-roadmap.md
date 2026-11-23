@@ -9,9 +9,8 @@ en fin de session.
 ## État courant (mis à jour le 2026-11-23)
 
 - **Lot terminé** : lot 1 (gains rapides). **Prochain lot** : lot 2, aucune tâche commencée.
-- **Git** : `feat/render-baseline` fusionnée dans `main` (fast-forward local, non poussée). Le lot 1 est
-  sur `feat/render-quick-wins` (13 commits au-dessus de `main`, ni fusionnée ni poussée). Demander à
-  l'utilisateur s'il faut la fusionner avant de créer la branche du lot 2 (`feat/render-hdr-pipeline`).
+- **Git** : lots 0 et 1 fusionnés dans `main` (fast-forward local, 19 commits en avance sur `origin/main`,
+  non poussés). Créer la branche du lot 2 (`feat/render-hdr-pipeline`) depuis `main`.
 - **Environnement local déjà prêt** : bundle three-tile reconstruit (anisotropie), `npm install` fait,
   cache `cache/` chaud. Lancer `npm run dev` (en tâche de fond) avant les mesures.
 - **Ordre conseillé pour le lot 2** : L2.9 (mesures fiables, le temps GPU des vues statiques est
