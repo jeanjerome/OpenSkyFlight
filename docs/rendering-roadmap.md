@@ -8,21 +8,32 @@ en fin de session.
 
 ## État courant (mis à jour le 2026-11-23)
 
-- **Lot terminé** : lot 1 (gains rapides). **Prochain lot** : lot 2, aucune tâche commencée.
-- **Git** : lots 0 et 1 fusionnés dans `main` (fast-forward local, 19 commits en avance sur `origin/main`,
-  non poussés). Créer la branche du lot 2 (`feat/render-hdr-pipeline`) depuis `main`.
-- **Environnement local déjà prêt** : bundle three-tile reconstruit (anisotropie), `npm install` fait,
-  cache `cache/` chaud. Lancer `npm run dev` (en tâche de fond) avant les mesures.
-- **Ordre conseillé pour le lot 2** : L2.9 (mesures fiables, le temps GPU des vues statiques est
-  inexploitable) → L2.6 (matériaux de tuiles partagés : débloque la carte d'environnement sur le
-  terrain, voir Décisions) → L2.5 → L2.1 → L2.2 → L2.3 → L2.4 → L2.8 → L2.7.
-- **Fait hors lot** : terrasses et stries du relief corrigées (décodage de l'altitude sur le CPU, voir
-  L5.1 et le journal).
-- **Mesures** : toujours sur l'écran intégré 120 Hz. Sur un écran 60 Hz, Chrome plafonne à 60 FPS et
-  `AdaptiveQualityManager` dégrade la résolution sans jamais la rétablir (seuil de remontée 12 ms jamais
-  atteint) : captures floues et mesures non comparables (corrigé par L2.4).
-- **Validation de chaque tâche** : `npm run render:capture -- --out benchmarks/render/<label>`, captures
-  comparées à `benchmarks/render/lot1/` ; benchmarks de vol (défaut et `--plan 1`) à la clôture du lot.
+- **Lots terminés** : 0 et 1. **Prochain lot** : lot 2, aucune tâche commencée.
+- **Git** : tout est fusionné dans `main` et poussé sur `origin/main`. Les branches de lot sont
+  supprimées. Créer `feat/render-hdr-pipeline` depuis `main` pour le lot 2.
+- **Environnement local** : bundle three-tile construit, `npm install` fait (racine et
+  `vendor/three-tile`), cache `cache/` chaud pour les vues de référence et les deux vols. Lancer
+  `npm run dev` en tâche de fond avant toute mesure. Mesurer **sur l'écran intégré 120 Hz** : sur un
+  écran 60 Hz, Chrome plafonne à 60 FPS et la qualité adaptative dégrade la résolution pour de bon.
+- **Référence de comparaison pour le lot 2** : `benchmarks/render/dem-float/` (captures et deux
+  benchmarks de vol de l'état actuel de `main`, non versionnés) ; captures allégées dans
+  `docs/screenshots/render/lot1/`. Chiffres dans **Mesures**, ligne « Lot 1 + altitude décodée sur CPU ».
+- **Ordre conseillé pour le lot 2** : L2.9 → L2.6 → L2.5 → L2.1 → L2.2 → L2.3 → L2.4 → L2.8 → L2.7.
+- **Première tâche, L2.9 — points d'entrée** :
+  - `js/benchmark/GPUTimer.js` : chaque frame lance `renderer.resolveTimestampsAsync('render')` sans
+    attendre ; la promesse additionne toutes les requêtes résolues depuis l'appel précédent, d'où une
+    valeur qui couvre une ou deux frames (médianes bimodales ≈ 5 / ≈ 10 ms sur les vues statiques).
+    Viser une valeur par frame (ne pas relancer tant qu'une résolution est en cours, ou rapporter la
+    somme au nombre de frames couvertes), puis un découpage par passe quand le pipeline du lot 2 existera.
+  - `js/benchmark/MetricsCollector.js` (≈ l. 175) : `summary.fps.avg` moyenne les FPS instantanés ;
+    le remplacer par frames / durée, comme `npm run render:summary`.
+  - Valider : deux captures successives d'une même vue doivent donner le même temps GPU à ±10 %.
+- **Ensuite, L2.6** : les tuiles ont chacune un matériau cloné et un `positionNode` propre
+  (`applyTerrariumElevation` dans `vendor/three-tile/packages/lib/src/material/TerrariumTSL.ts`, appelé
+  depuis `GeoTerrainManager._onTileLoaded`) : three reconstruit le graphe de nœuds à chaque tuile. Piste :
+  un matériau partagé par niveau de grille qui lit la texture d'altitude et l'image de la tuile par
+  objet. Une fois fait, mettre la PMREM du ciel en `scene.environment` et retirer la `HemisphereLight`
+  (voir Décisions), puis vérifier les saccades avec les deux benchmarks de vol.
 
 ---
 
@@ -105,6 +116,8 @@ Prérequis : `npm install`, serveur lancé (`npm run dev`), Google Chrome instal
 npm run render:capture -- --out benchmarks/render/<label>
 # Benchmark de vol (sans --plan : vol par défaut ; --plan 1 : flight-over-the-Alps-01)
 npm run render:benchmark -- --out benchmarks/render/<label> [--plan 1]
+# Indicateurs comparables (colonnes du tableau Mesures) pour un ou plusieurs rapports
+npm run render:summary -- benchmarks/render/<label>/benchmark-default.json benchmarks/render/<label>/benchmark-plan1.json
 ```
 
 - Chrome est lancé en fenêtre visible avec vsync, canevas 2056×1290 ×2 (= configuration n°4 de
@@ -313,6 +326,12 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 ## Journal des sessions
 
 <!-- Entrée la plus récente en haut. -->
+
+### 2026-11-23 (5)
+- Fait : `feat/render-quick-wins` fusionnée dans `main` et poussée ; branches de lot supprimées. README mis
+  à jour (altitude décodée sur CPU, monde en mètres, éclairage, feuille de route, scripts de rendu).
+  Ajout de `npm run render:summary` (indicateurs du tableau Mesures, auparavant calculés à la main).
+- Prochaine étape : créer `feat/render-hdr-pipeline`, puis L2.9 (voir État courant).
 
 ### 2026-11-23 (4)
 - Signalé par l'utilisateur : stries sur certaines tuiles (vues 2 et 4 du lot 1). Deux motifs : terrasses

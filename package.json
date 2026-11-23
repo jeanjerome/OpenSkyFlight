@@ -10,7 +10,8 @@
     "format": "prettier --write \"js/**/*.js\" \"*.js\" \"scripts/**/*.js\"",
     "format:check": "prettier --check \"js/**/*.js\" \"*.js\" \"scripts/**/*.js\"",
     "render:capture": "node scripts/render-capture.js",
-    "render:benchmark": "node scripts/render-benchmark.js"
+    "render:benchmark": "node scripts/render-benchmark.js",
+    "render:summary": "node scripts/render-summary.js"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

@@ -13,7 +13,7 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 
 ## Features
 
-- **Real-world elevation** — decoded from [AWS Terrarium](https://registry.opendata.aws/terrain-tiles/) PNG tiles on the GPU via TSL `positionNode`
+- **Real-world elevation** — [AWS Terrarium](https://registry.opendata.aws/terrain-tiles/) PNG tiles decoded into float height textures and displaced on the GPU via TSL `positionNode`, in a metric world (1 unit = 1 m) that keeps slopes at their true steepness
 - **4 texture modes** — Satellite imagery, Road map, SAR radar, and Elevation contour lines — cycle with `T` or pick from the control panel
 - **Hi-Res mode (zoom 18)** — press `R` to toggle upsampled elevation with zoom-18 satellite textures for sharper close-up detail. Hi-res tiles are concentrated at the view center and fade concentrically toward the periphery. Best suited for static or slow-moving views; fast flight may cause temporary pixelation while high-zoom tiles load
 - **Adaptive LOD** — quadtree subdivision based on camera distance, with concentric view-center weighting for hi-res zoom levels
@@ -25,7 +25,7 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 - **OSM minimap** — real-time 2D map overlay with airplane marker and independent zoom
 - **Flight plan system** — record waypoints, save/load flight plans, and engage autopilot to follow a path automatically
 - **Local tile cache** — transparent caching proxy, pre-download tiles for offline flight
-- **Atmospheric sky, clouds & fog** — procedural sky with configurable sun position, animated cloud layer, and exponential distance fog
+- **Atmospheric sky, lighting, clouds & fog** — Preetham sky with configurable sun position (compass bearing and elevation); HDR frame tone mapped with AgX; sun colour, sky light and fog colour derived from the same sky model; animated cloud layer
 - **Dynamic resolution scaling** — adaptive pixel ratio based on frame time to maintain smooth performance
 - **Built-in benchmark** — automated camera path with FPS/GPU timing, metrics recording, and baseline comparison
 - **Toast notifications** — non-blocking user feedback for search results and errors
@@ -109,7 +109,7 @@ Use the right-side control panel to search locations, load terrain, and select t
 
 ## Building three-tile (required)
 
-The terrain engine relies on [three-tile](https://github.com/sxguojf/three-tile), a lightweight Three.js tile map library. We vendor a patched fork (`0.11.8-osf`) in `vendor/three-tile/` with custom LOD enhancements (concentric view-center weighting, removal hysteresis).
+The terrain engine relies on [three-tile](https://github.com/sxguojf/three-tile), a lightweight Three.js tile map library. We vendor a patched fork (`0.11.8-osf`) in `vendor/three-tile/` with custom LOD enhancements (concentric view-center weighting, removal hysteresis), WebGPU tile materials, Terrarium elevation decoded into float height textures, and anisotropic filtering of tile imagery.
 
 The app imports the built bundle `vendor/three-tile/packages/lib/dist/three-tile-osf.js` via the import map. This file is **not versioned** (`dist/` is git-ignored), so it must be built after cloning, and again after any change to `vendor/three-tile/packages/lib/src/`:
 
@@ -138,7 +138,7 @@ Default location: **Mont Blanc** (45.8326°N, 6.8652°E).
 
 ## How It Works
 
-1. **Elevation** — Terrarium PNG tiles (AWS S3) are decoded into heightmaps on the GPU via a TSL `positionNode` shader (`R×256 + G + B/256 − 32768` meters)
+1. **Elevation** — Terrarium PNG tiles (AWS S3) are decoded on the CPU (`R×256 + G + B/256 − 32768` metres), resampled at the tile grid vertices into a float texture, and displaced on the GPU by a TSL `positionNode` shader. The tile map is scaled horizontally by cos(latitude) so that world units are metres on all three axes
 2. **LOD system** — three-tile's quadtree subdivision splits tiles near the camera into 4 children at higher zoom; a concentric weighting concentrates hi-res tiles (zoom 16–18) at the view center while distant and peripheral tiles stay coarse
 3. **Textures** — Four modes: Satellite (ESRI) and Road map (OSM) fetch raster tiles on demand; SAR radar and Elevation contours are GPU-generated via TSL shaders
 4. **Caching** — A Node.js proxy intercepts all `/tiles/` requests: serves from disk on hit, fetches upstream on miss, caches for next time
@@ -170,12 +170,12 @@ cache/
 ├── js/
 │   ├── app.js                 Orchestrator: init, input bindings, render loop
 │   ├── aircraft/              Rafale GLTF model loading & animation
-│   ├── atmosphere/            Procedural sky, cloud layer, fog
+│   ├── atmosphere/            Sky model, sky lighting & environment map, cloud layer, fog
 │   ├── benchmark/             Automated perf testing & baseline comparison
 │   ├── camera/                Flight controller (6-DOF), chase camera, springs
 │   ├── constants/             Shared constants (camera, HUD, physics, terrain…)
 │   ├── flightplan/            Waypoint recording, flight plan interpolation, autopilot
-│   ├── geo/                   Tile math, elevation/texture providers, fetch limiter
+│   ├── geo/                   Tile math, elevation provider, fetch limiter
 │   ├── input/                 Keyboard dispatch (e.code for flight, e.key for actions)
 │   ├── rendering/             Adaptive resolution scaling
 │   ├── scene/                 Renderer, scene, camera & lights factory
@@ -187,10 +187,14 @@ cache/
 │   └── flightplans/           Saved flight plan JSON files
 ├── scripts/
 │   ├── serve.js               Dev server with caching tile proxy
-│   └── prefetch-tiles.js      Bulk tile downloader for offline use
+│   ├── prefetch-tiles.js      Bulk tile downloader for offline use
+│   ├── render-capture.js      Reference view screenshots & frame timing (Chrome)
+│   └── render-benchmark.js    In-app flight benchmark runner (Chrome)
 ├── vendor/three-tile/         Vendored three-tile (0.11.8-osf) with concentric LOD
-├── docs/screenshots/          README screenshots
-├── benchmarks/                Benchmark result JSON files
+├── docs/
+│   ├── rendering-roadmap.md   Rendering overhaul plan, progress, measurements, decisions
+│   └── screenshots/           README screenshots, reference view captures per milestone
+├── benchmarks/                Benchmark reports and full-resolution captures (git-ignored)
 └── cache/                     Local tile cache (git-ignored)
 ```
 
