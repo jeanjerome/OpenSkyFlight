@@ -8,32 +8,24 @@ en fin de session.
 
 ## État courant (mis à jour le 2026-11-23)
 
-- **Lots terminés** : 0 et 1. **Prochain lot** : lot 2, aucune tâche commencée.
-- **Git** : tout est fusionné dans `main` et poussé sur `origin/main`. Les branches de lot sont
-  supprimées. Créer `feat/render-hdr-pipeline` depuis `main` pour le lot 2.
+- **Lots terminés** : 0 et 1. **Lot en cours** : lot 2, L2.9 terminée.
+- **Git** : branche `feat/render-hdr-pipeline` (depuis `main`), non poussée.
 - **Environnement local** : bundle three-tile construit, `npm install` fait (racine et
   `vendor/three-tile`), cache `cache/` chaud pour les vues de référence et les deux vols. Lancer
   `npm run dev` en tâche de fond avant toute mesure. Mesurer **sur l'écran intégré 120 Hz** : sur un
   écran 60 Hz, Chrome plafonne à 60 FPS et la qualité adaptative dégrade la résolution pour de bon.
-- **Référence de comparaison pour le lot 2** : `benchmarks/render/dem-float/` (captures et deux
-  benchmarks de vol de l'état actuel de `main`, non versionnés) ; captures allégées dans
-  `docs/screenshots/render/lot1/`. Chiffres dans **Mesures**, ligne « Lot 1 + altitude décodée sur CPU ».
-- **Ordre conseillé pour le lot 2** : L2.9 → L2.6 → L2.5 → L2.1 → L2.2 → L2.3 → L2.4 → L2.8 → L2.7.
-- **Première tâche, L2.9 — points d'entrée** :
-  - `js/benchmark/GPUTimer.js` : chaque frame lance `renderer.resolveTimestampsAsync('render')` sans
-    attendre ; la promesse additionne toutes les requêtes résolues depuis l'appel précédent, d'où une
-    valeur qui couvre une ou deux frames (médianes bimodales ≈ 5 / ≈ 10 ms sur les vues statiques).
-    Viser une valeur par frame (ne pas relancer tant qu'une résolution est en cours, ou rapporter la
-    somme au nombre de frames couvertes), puis un découpage par passe quand le pipeline du lot 2 existera.
-  - `js/benchmark/MetricsCollector.js` (≈ l. 175) : `summary.fps.avg` moyenne les FPS instantanés ;
-    le remplacer par frames / durée, comme `npm run render:summary`.
-  - Valider : deux captures successives d'une même vue doivent donner le même temps GPU à ±10 %.
-- **Ensuite, L2.6** : les tuiles ont chacune un matériau cloné et un `positionNode` propre
-  (`applyTerrariumElevation` dans `vendor/three-tile/packages/lib/src/material/TerrariumTSL.ts`, appelé
-  depuis `GeoTerrainManager._onTileLoaded`) : three reconstruit le graphe de nœuds à chaque tuile. Piste :
+- **Référence de comparaison** : `benchmarks/render/gpu-timer-a/` (captures avec le coût GPU par vue
+  et deux benchmarks de vol, non versionnés). Chiffres dans **Mesures**, lignes « L2.9 ».
+- **Lire les temps GPU** (voir Outillage) : seul le « coût GPU » de `render:capture` (`gpuMedianMs`,
+  mesuré GPU saturé) compare deux états du code ; la colonne GPU des vols indique la charge, pas le coût.
+- **Ordre conseillé pour la suite du lot 2** : L2.6 → L2.5 → L2.1 → L2.2 → L2.3 → L2.4 → L2.8 → L2.7.
+- **Prochaine tâche, L2.6 — points d'entrée** : les tuiles ont chacune un matériau cloné et un
+  `positionNode` propre (`applyTerrariumElevation` dans
+  `vendor/three-tile/packages/lib/src/material/TerrariumTSL.ts`, appelé depuis
+  `GeoTerrainManager._onTileLoaded`) : three reconstruit le graphe de nœuds à chaque tuile. Piste :
   un matériau partagé par niveau de grille qui lit la texture d'altitude et l'image de la tuile par
   objet. Une fois fait, mettre la PMREM du ciel en `scene.environment` et retirer la `HemisphereLight`
-  (voir Décisions), puis vérifier les saccades avec les deux benchmarks de vol.
+  (voir Décisions), puis vérifier les saccades (p1, frames > 33 ms) avec les deux benchmarks de vol.
 
 ---
 
@@ -112,7 +104,7 @@ Cible : 60 FPS sur M4 Pro / Chrome, preset High, résolution native ×2 avec mis
 Prérequis : `npm install`, serveur lancé (`npm run dev`), Google Chrome installé.
 
 ```bash
-# Captures + FPS/temps GPU des 5 vues de référence
+# Captures + FPS + coût GPU des 5 vues de référence (--renders 12 par défaut)
 npm run render:capture -- --out benchmarks/render/<label>
 # Benchmark de vol (sans --plan : vol par défaut ; --plan 1 : flight-over-the-Alps-01)
 npm run render:benchmark -- --out benchmarks/render/<label> [--plan 1]
@@ -126,9 +118,21 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
   p1 des benchmarks de vol pour les saccades.
 - Lancer chaque mesure deux fois de suite si le cache de tuiles (`cache/`) est vide : la première
   passe le remplit.
-- Le temps GPU vient de `GPUTimer` (`renderer.resolveTimestampsAsync`) qui additionne les requêtes
-  résolues depuis le dernier appel : une valeur peut couvrir plus d'une frame. Indicateur relatif
-  seulement, jusqu'à L2.9.
+- Temps GPU (`GPUTimer`) : durée entre le début de la première passe de rendu d'une frame et la fin
+  de la dernière, lue dans les horodatages bruts du pool de requêtes de three (r183). Additionner les
+  durées des passes, comme `resolveTimestampsAsync`, compte deux fois leur chevauchement sur un GPU
+  à tuiles (≈ +60 %).
+- **À vsync, le temps GPU ne mesure pas le coût d'une frame.** Le régulateur de fréquence du GPU
+  Apple ralentit le GPU tant qu'il a de la marge : une frame légère occupe ≈ 75 % de l'intervalle de
+  rafraîchissement (≈ 6 ms à 120 Hz) quel que soit son coût, et la fréquence choisie varie d'une
+  capture à l'autre (d'où les médianes bimodales ≈ 5 / ≈ 10 ms d'avant L2.9). `render:capture`
+  rend donc chaque vue `--renders` fois par frame (`window.osf.setRendersPerFrame`) pour que le GPU
+  soit le goulot à fréquence stable, et rapporte la durée ÷ nombre de rendus (`gpuMedianMs`).
+  `gpuBusy` (≈ temps GPU × FPS) proche de 1 confirme que le GPU était le goulot. Garder le même
+  `--renders` entre deux mesures comparées : le coût par rendu baisse de ≈ 15 % entre 4 et 16 rendus
+  (chevauchement entre rendus successifs).
+- Découpage par sous-système : les passes se chevauchant, leurs durées ne s'additionnent pas.
+  Mesurer le coût d'un effet par différence, coût GPU avec et sans l'effet.
 
 ## Lot 1 — Gains rapides
 
@@ -185,9 +189,14 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       matériaux partagés, passer la PMREM en `scene.environment` et retirer la `HemisphereLight`.
 - [ ] **L2.7** Presets de qualité (Low / Medium / High / Ultra) dans `config.js` et le panneau MFD.
 - [ ] **L2.8** Exposition automatique : histogramme de luminance en compute shader, adaptation temporelle.
-- [ ] **L2.9** Fiabiliser les mesures : `GPUTimer` avec une mesure par frame (horodatages de passe
+- [x] **L2.9** Fiabiliser les mesures : `GPUTimer` avec une mesure par frame (horodatages de passe
       attribués à la frame) exportée par sous-système (terrain, ciel, post-traitement) ; `summary.fps.avg`
       calculé comme frames / durée au lieu de la moyenne des FPS instantanés.
+      Fait : three r183 attribuait déjà les requêtes à la frame ; la bimodalité venait du chevauchement
+      des passes additionnées et du régulateur de fréquence du GPU (voir Outillage). `GPUTimer` mesure
+      la durée couverte par les passes de la frame ; `render:capture` mesure le coût GPU saturé
+      (12 rendus par frame) : deux captures successives concordent à ±4 %. Découpage par sous-système
+      abandonné au profit de mesures par différence (passes non additives).
 
 ## Lot 3 — Atmosphère physique et heure du jour
 
@@ -257,10 +266,11 @@ Machine de référence : Apple M4 Max (40 cœurs GPU), écran 120 Hz · Chrome 1
 fenêtre visible, vsync · Canevas 2056×1290 ×2 (4112×2580 px rendus) · Cache de tuiles chaud.
 
 Notes de lecture :
-- « FPS moy » = nombre de frames / durée. Le champ `summary.fps.avg` du rapport JSON fait la moyenne
-  des FPS instantanés, biaisée vers le haut par les frames de rattrapage (127,7 au lieu de 113,8
-  sur le vol par défaut) — à corriger avec L2.9.
-- GPU ms = médiane (p95 entre parenthèses), indicateur relatif (voir Outillage).
+- « FPS moy » = nombre de frames / durée (égal à `summary.fps.avg` depuis L2.9 ; avant, ce champ
+  moyennait les FPS instantanés : 127,7 au lieu de 113,8 sur le vol par défaut de la baseline).
+- GPU ms des vols = médiane (p95 entre parenthèses) à vsync : charge du GPU, pas coût (voir
+  Outillage). Jusqu'à « Lot 1 + altitude décodée sur CPU » : somme des passes (≈ +60 %) ; depuis
+  L2.9 : durée couverte par les passes.
 - Frames lentes = nombre de frames > 33,3 ms / > 50 ms.
 
 ### Benchmarks de vol
@@ -275,6 +285,8 @@ Notes de lecture :
 | 2026-11-23 | Lot 1 | Plan 1 (basse alt.) | 94 s | 113,6 | 65,8 | 39,7 | 5,3 (8,6) | 49 / 4 | 2,67 M | 651 |
 | 2026-11-23 | Lot 1 + altitude décodée sur CPU | Vol par défaut | 128 s | 114,6 | 73,0 | 33,6 | 6,0 (10,3) | 50 / 4 | 2,12 M | 539 |
 | 2026-11-23 | Lot 1 + altitude décodée sur CPU | Plan 1 (basse alt.) | 94 s | 114,3 | 62,5 | 43,1 | 5,8 (8,9) | 5 / 0 | 2,67 M | 651 |
+| 2026-11-23 | L2.9 (mesure seule) | Vol par défaut | 128 s | 114,6 | 71,9 | 33,0 | 3,8 (6,1) | 46 / 0 | 2,12 M | 539 |
+| 2026-11-23 | L2.9 (mesure seule) | Plan 1 (basse alt.) | 94 s | 114,2 | 61,7 | 43,5 | 3,8 (6,1) | 4 / 0 | 2,67 M | 651 |
 
 Pour mémoire, la configuration n°4 de `BENCHMARKS.md` (même machine, Chrome 146, ancien moteur
 geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,7 / 76,3 / 35,2).
@@ -288,10 +300,13 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 | 2026-11-23 | Lot 1 — GPU ms méd. | 9,8 | 9,7 | 9,7 | 9,6 | 10,3 |
 | 2026-11-23 | Lot 1 — FPS moy / p1 | 120 / 108 | 120 / 106 | 120 / 108 | 120 / 108 | 120 / 108 |
 | 2026-11-23 | Lot 1 + altitude CPU — FPS moy / p1 | 120 / 108 | 120 / 108 | 120 / 106 | 120 / 109 | 120 / 106 |
+| 2026-11-23 | L2.9 — coût GPU ms (12 rendus/frame), capture 1 | 1,28 | 1,45 | 1,49 | 1,37 | 1,43 |
+| 2026-11-23 | L2.9 — coût GPU ms (12 rendus/frame), capture 2 | 1,28 | 1,46 | 1,47 | 1,32 | 1,42 |
+| 2026-11-23 | L2.9 — FPS moy / p1 | 120 / 106 | 120 / 108 | 120 / 108 | 120 / 108 | 120 / 108 |
 
-Le temps GPU médian des vues statiques n'est pas exploitable : d'une capture à l'autre sans changement
-de code, une même vue donne ≈ 5–6 ms ou ≈ 10 ms (une valeur de `GPUTimer` couvre une ou deux frames).
-Comparer le temps GPU des benchmarks de vol jusqu'à L2.9.
+Les lignes « GPU ms méd. » antérieures à L2.9 ne sont pas exploitables (somme des passes, fréquence
+du GPU fixée par le régulateur). Le coût GPU réel d'une frame est ≈ 1,3–1,5 ms à 4112×2580 sur M4 Max
+(`gpuBusy` 0,92–0,94), loin du budget de 16,6 ms.
 
 Constats visuels après le lot 1 (`docs/screenshots/render/lot1/`, état avec l'altitude décodée sur CPU) :
 - Ciel de Preetham visible, dégradé zénith/horizon, lueur solaire au couchant ; terrain et ciel se
@@ -321,11 +336,23 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 | 2026-11-23 | Échelle d'éclairage | Soleil, ciel, ambiance et brouillard dérivés du modèle de `SkyMesh` (port CPU) | Une seule échelle de radiance ; auparavant le terrain était 50 fois moins lumineux que le ciel. Provisoire jusqu'au lot 3 |
 | 2026-11-23 | Lumière du ciel sur le terrain | `HemisphereLight` (ciel / rebond du sol) au lieu de la PMREM | La PMREM en `scene.environment` alourdit le graphe de nœuds reconstruit pour chaque tuile : frames > 33 ms 57 → 396 sur le plan 1. À revoir après L2.6 |
 | 2026-11-23 | Unités du monde | Carte réduite horizontalement de cos(lat) : 1 unité = 1 m (option préférée par l'utilisateur à la multiplication de l'altitude) | Altitudes, HUD, vues de référence, nuages et y des plans inchangés ; vitesse en vrais m/s ; seuls x/z des plans de vol changent (champ `units`) |
+| 2026-11-23 | Mesure du temps GPU | Durée couverte par les passes de la frame ; coût mesuré GPU saturé (12 rendus par frame) dans `render:capture` | À vsync le régulateur de fréquence du GPU fixe la durée mesurée (≈ 75 % de l'intervalle) ; les passes se chevauchent. Mesure saturée reproductible à ±4 % |
 | 2026-11-23 | Vitesse par défaut | 560 m/s | Vitesse réelle de l'ancien défaut (800 unités Mercator/s) : benchmarks comparables à la baseline |
 
 ## Journal des sessions
 
 <!-- Entrée la plus récente en haut. -->
+
+### 2026-11-23 (6)
+- Fait : branche `feat/render-hdr-pipeline` ; L2.9. Deux commits : temps GPU par frame et coût GPU
+  saturé dans `render:capture`, `summary.fps.avg` = frames / durée.
+- Découvert : three r183 attribue déjà les horodatages à la frame (l'hypothèse « une valeur couvre
+  une ou deux frames » était fausse). Les deux passes d'une frame (scène, puis conversion de sortie)
+  se chevauchent : 9,9 ms additionnées pour 6,0 ms couvertes. Et à vsync la durée couverte reste
+  ≈ 6–6,4 ms que l'on rende la scène 1, 2 ou 4 fois par frame : le régulateur de fréquence du GPU
+  vise ≈ 75 % d'occupation. Le coût réel n'apparaît que GPU saturé : ≈ 1,3–1,5 ms par vue.
+- Vérifié : deux captures successives à ±4 % ; vols inchangés (p1 33,0 / 43,5 contre 33,6 / 43,1).
+- Prochaine étape : L2.6 (voir État courant).
 
 ### 2026-11-23 (5)
 - Fait : `feat/render-quick-wins` fusionnée dans `main` et poussée ; branches de lot supprimées. README mis
