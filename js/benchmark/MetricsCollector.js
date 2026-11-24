@@ -251,6 +251,7 @@ export default class MetricsCollector {
       hiResMode: CONFIG.hiResMode,
       zoom: CONFIG.zoom,
       fogEnabled: CONFIG.fogEnabled,
+      bloomEnabled: CONFIG.bloomEnabled,
       showClouds: CONFIG.showClouds,
       maxPixelRatio: CONFIG.maxPixelRatio,
     };

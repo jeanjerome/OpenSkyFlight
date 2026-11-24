@@ -63,3 +63,14 @@ export const SUN_ILLUMINANCE_SCALE = 57;
 
 /** Average albedo of the ground seen from the air (forest, meadows, rock), for bounced light */
 export const GROUND_ALBEDO = 0.15;
+
+// --- Bloom ---
+// Only pixels brighter than any lit diffuse surface and than the sky itself
+// (the sun disc and mirror-like reflections of the sun) bloom; see
+// AtmosphericSky for the threshold.
+
+/** Share of the light above the threshold spread by the bloom, per blur level (5 levels) */
+export const BLOOM_STRENGTH = 0.015;
+
+/** Weight of the wide blur levels against the narrow ones, in [0, 1] */
+export const BLOOM_RADIUS = 0.8;

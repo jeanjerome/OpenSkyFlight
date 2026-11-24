@@ -18,6 +18,7 @@
  *
  * Rendering:
  * @property {number}  maxPixelRatio          - Maximum device pixel ratio (default: 2)
+ * @property {boolean} bloomEnabled           - Glow around the sun and its specular reflections (default: true)
  *
  * Atmosphere:
  * @property {number}  sunElevation           - Sun elevation angle in degrees, range [0..90] (default: 35)
@@ -58,6 +59,7 @@ const CONFIG = {
   cameraMode: 'chase',
   mouseSensitivity: 0.002,
   maxPixelRatio: 2,
+  bloomEnabled: true,
   lat: 45.8326, // Mont Blanc default
   lon: 6.8652,
   zoom: 15,

@@ -143,6 +143,7 @@ export default class ControlPanel {
 
     this._bindCheckbox('showClouds', 'showClouds');
     this._bindCheckbox('fogEnabled', 'fogEnabled');
+    this._bindCheckbox('bloomEnabled', 'bloomEnabled');
   }
 
   _setupSlider(id, configKey, min, max, step) {

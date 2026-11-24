@@ -4,9 +4,19 @@ import { CONFIG, onChange } from '../utils/config.js';
 import Logger from '../utils/Logger.js';
 import { TONE_MAPPING_EXPOSURE, SUN_ILLUMINANCE_SCALE, GROUND_ALBEDO } from '../constants/rendering.js';
 import SkyEnvironment from './SkyEnvironment.js';
-import { preethamHorizonRadiance, preethamSkyIrradiance, preethamSunTransmittance } from './preethamSky.js';
+import {
+  preethamHorizonRadiance,
+  preethamSkyIrradiance,
+  preethamSkyRadiance,
+  preethamSunTransmittance,
+} from './preethamSky.js';
 
 const DEG2RAD = Math.PI / 180;
+
+/** Angle from the sun's centre just outside SkyMesh's solar disc (0.27° radius) */
+const SUN_AUREOLE_ANGLE = 0.5 * DEG2RAD;
+
+const luminance = (r, g, b) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
 
 /**
  * Spherical theta (as used by Vector3.setFromSphericalCoords) of a compass bearing.
@@ -22,13 +32,16 @@ export default class AtmosphericSky {
    * @param {THREE.Scene} scene
    * @param {THREE.WebGPURenderer} renderer
    * @param {{dirLight: THREE.DirectionalLight, ambientLight: THREE.AmbientLight}} lights
+   * @param {import('../rendering/ScenePipeline.js').default} pipeline - receives the bloom threshold
    */
-  constructor(scene, renderer, { dirLight, ambientLight }) {
+  constructor(scene, renderer, { dirLight, ambientLight }, pipeline) {
     this.scene = scene;
     this.renderer = renderer;
+    this.pipeline = pipeline;
     this.dirLight = dirLight;
     this.ambientLight = ambientLight;
     this.sunDirection = new THREE.Vector3();
+    this._aureoleDirection = new THREE.Vector3();
 
     this._fogColor = new THREE.Color();
     this._groundIrradiance = new THREE.Color();
@@ -54,7 +67,7 @@ export default class AtmosphericSky {
 
     // React to config changes
     this._unsub = onChange((key) => {
-      if (['sunElevation', 'sunAzimuth', 'skyTurbidity', 'skyRayleigh', 'fogEnabled', 'fogDensity', 'textureMode'].includes(key)) {
+      if (['sunElevation', 'sunAzimuth', 'skyTurbidity', 'skyRayleigh', 'fogEnabled', 'fogDensity', 'textureMode', 'bloomEnabled'].includes(key)) {
         this._updateSky();
       }
     });
@@ -86,6 +99,7 @@ export default class AtmosphericSky {
       this.ambientLight.intensity = 0.05;
       this.ambientLight.color.set(0xffffff);
       this.scene.environment = null;
+      this.pipeline.setBloom(false);
 
       Logger.debug('AtmosphericSky', 'SAR mode — black sky, side-looking light');
       return;
@@ -137,6 +151,8 @@ export default class AtmosphericSky {
     // materials are not rebuilt when the sun moves
     this.scene.environment = this.environment.update(this.sunDirection, skyParams, this._groundIrradiance);
 
+    this._updateBloomThreshold(skyParams, kr, kg, kb);
+
     // Fog: tinted with the sky radiance at the horizon so distant terrain fades into the sky
     if (CONFIG.fogEnabled) {
       const [r, g, b] = preethamHorizonRadiance(this.sunDirection, skyParams);
@@ -153,9 +169,36 @@ export default class AtmosphericSky {
     }
 
     Logger.debug('AtmosphericSky', 'Sky updated', {
+      bloomThreshold: this.bloomThreshold,
       elevation: sunElevation,
       azimuth: sunAzimuth,
       sun: this.dirLight.color.getHexString(),
     });
+  }
+
+  /**
+   * Bloom threshold: the luminance of the brightest radiance that is not the sun
+   * itself, so that only the solar disc and mirror-like reflections of the sun
+   * bloom. That is the larger of a white diffuse surface facing the sun (sun and
+   * sky irradiance over pi) and the sky just outside the solar disc, whose
+   * aureole outshines every diffuse surface when the sun is low.
+   */
+  _updateBloomThreshold(skyParams, skyR, skyG, skyB) {
+    const sun = this.dirLight.color;
+    const sunIlluminance = luminance(sun.r, sun.g, sun.b) * this.dirLight.intensity;
+    const peakDiffuse = (sunIlluminance + luminance(skyR, skyG, skyB)) / Math.PI;
+
+    const elevation = Math.asin(THREE.MathUtils.clamp(this.sunDirection.y, -1, 1));
+    const horizontal = Math.hypot(this.sunDirection.x, this.sunDirection.z) || 1;
+    const aureoleElevation = elevation + SUN_AUREOLE_ANGLE;
+    this._aureoleDirection.set(
+      (this.sunDirection.x / horizontal) * Math.cos(aureoleElevation),
+      Math.sin(aureoleElevation),
+      (this.sunDirection.z / horizontal) * Math.cos(aureoleElevation),
+    );
+    const [ar, ag, ab] = preethamSkyRadiance(this._aureoleDirection, this.sunDirection, skyParams);
+
+    this.bloomThreshold = Math.max(peakDiffuse, luminance(ar, ag, ab));
+    this.pipeline.setBloom(CONFIG.bloomEnabled, this.bloomThreshold);
   }
 }

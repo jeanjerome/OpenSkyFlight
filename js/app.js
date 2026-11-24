@@ -38,8 +38,8 @@ async function initApp() {
   // --- Atmosphere ---
   // Drives the sky dome, fog, tone mapping and the scene lights
   // Drives the sky, the sun and the sky light from the configuration
-  new AtmosphericSky(scene, renderer, { dirLight, ambientLight });
   const scenePipeline = new ScenePipeline(renderer, scene, camera);
+  new AtmosphericSky(scene, renderer, { dirLight, ambientLight }, scenePipeline);
   const cloudLayer = new CloudLayer(scene);
   cloudLayer.mesh.renderOrder = CLOUD_RENDER_ORDER;
 

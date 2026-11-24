@@ -1,6 +1,11 @@
 import * as THREE from 'three';
-import { mrt, output, pass, velocity } from 'three/tsl';
+import { mrt, output, pass, uniform, vec4, velocity } from 'three/tsl';
 import { traa } from 'three/addons/tsl/display/TRAANode.js';
+import { bloom } from 'three/addons/tsl/display/BloomNode.js';
+import { BLOOM_STRENGTH, BLOOM_RADIUS } from '../constants/rendering.js';
+
+/** Bloom threshold that no HalfFloat value reaches, until the lighting sets one */
+const NO_BLOOM_THRESHOLD = 1e6;
 
 /**
  * Frame rendering through a RenderPipeline: the scene is rendered into a
@@ -11,6 +16,12 @@ import { traa } from 'three/addons/tsl/display/TRAANode.js';
  * Anti-aliasing is temporal (TRAA): the camera is jittered by a sub-pixel offset
  * every frame and the frames are accumulated, reprojected with a per-pixel
  * velocity buffer written by the scene pass. MSAA is off, as TRAA requires.
+ *
+ * Bloom spreads the light of the pixels brighter than a threshold over their
+ * surroundings, as the scattering in a camera lens or in the eye does. It reads
+ * the anti-aliased image, so that sub-pixel highlights do not flicker in the
+ * glow, and is added to it before tone mapping. The threshold is a scene
+ * radiance set by the lighting (see setBloom).
  *
  * Tone mapping is read from renderer.toneMapping (set by AtmosphericSky, none in
  * SAR mode); the pipeline rebuilds its output node when it changes. The exposure
@@ -31,10 +42,37 @@ export default class ScenePipeline {
       this.scenePass.getTextureNode('velocity'),
       camera,
     );
+    this._antiAliased = this.traaNode.getTextureNode();
+
+    this._bloomThreshold = uniform(NO_BLOOM_THRESHOLD);
+    this.bloomNode = bloom(this._antiAliased, BLOOM_STRENGTH, BLOOM_RADIUS, this._bloomThreshold);
+    this._bloomEnabled = true;
 
     this._pipeline = new THREE.RenderPipeline(renderer);
-    this._pipeline.outputNode = this.traaNode;
+    this._pipeline.outputNode = this._buildOutput();
     this._toneMapping = renderer.toneMapping;
+  }
+
+  _buildOutput() {
+    if (!this._bloomEnabled) return this._antiAliased;
+    return vec4(this._antiAliased.rgb.add(this.bloomNode.rgb), this._antiAliased.a);
+  }
+
+  /**
+   * @param {boolean} enabled - whether the bloom pass runs
+   * @param {number} [threshold] - luminance of the scene radiance (before
+   *   exposure) above which pixels bloom
+   */
+  setBloom(enabled, threshold = NO_BLOOM_THRESHOLD) {
+    this._bloomThreshold.value = threshold;
+    // A soft knee as wide as the threshold: highlights fade into the bloom
+    // instead of popping in as they cross it
+    this.bloomNode.smoothWidth.value = threshold;
+    if (enabled !== this._bloomEnabled) {
+      this._bloomEnabled = enabled;
+      this._pipeline.outputNode = this._buildOutput();
+      this._pipeline.needsUpdate = true;
+    }
   }
 
   /**
@@ -59,6 +97,7 @@ export default class ScenePipeline {
 
   dispose() {
     this._pipeline.dispose();
+    this.bloomNode.dispose();
     this.traaNode.dispose();
     this.scenePass.dispose();
   }
