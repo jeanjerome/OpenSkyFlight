@@ -3,11 +3,12 @@
 // Runs the in-app benchmark (B key) in Chrome and saves the JSON report it downloads.
 //
 // Requires the dev server (`npm run dev`) and Google Chrome.
-// Usage: node scripts/render-benchmark.js --out benchmarks/render/<label> [--plan <n>]
+// Usage: node scripts/render-benchmark.js --out benchmarks/render/<label> [--plan <n>] [--set quality=low ...]
 //
 // Without --plan the built-in default flight is flown (≈ 5 min at 6000 m, the
 // flight used by BENCHMARKS.md). --plan <n> selects the n-th file of
-// assets/flightplans/ (sorted by name) through the flight plan menu.
+// assets/flightplans/ (sorted by name) through the flight plan menu. --set passes a
+// configuration value (js/utils/config.js) as a URL parameter, e.g. a quality preset.
 
 import { chromium } from 'playwright-core';
 import { mkdirSync } from 'node:fs';
@@ -18,6 +19,7 @@ const { values } = parseArgs({
     out: { type: 'string' },
     url: { type: 'string', default: 'http://localhost:3000/' },
     plan: { type: 'string' },
+    set: { type: 'string', multiple: true, default: [] },
     width: { type: 'string', default: '2056' },
     height: { type: 'string', default: '1290' },
   },
@@ -39,7 +41,18 @@ const context = await browser.newContext({
   acceptDownloads: true,
 });
 const page = await context.newPage();
-await page.goto(values.url, { waitUntil: 'load' });
+// Developer mode enables the benchmark key; a fresh browser profile starts from the default settings
+const url = new URL(values.url);
+url.searchParams.set('dev', '1');
+for (const assignment of values.set) {
+  const eq = assignment.indexOf('=');
+  if (eq < 1) {
+    console.error(`Invalid --set ${assignment}, expected key=value`);
+    process.exit(1);
+  }
+  url.searchParams.set(assignment.slice(0, eq), assignment.slice(eq + 1));
+}
+await page.goto(url.href, { waitUntil: 'load' });
 await page.waitForFunction(() => window.osf !== undefined, null, { timeout: 30000 });
 
 // Let the initial terrain finish loading so the warmup starts from a steady state

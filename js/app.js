@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { CONFIG, onChange, update } from './utils/config.js';
+import { loadSettings, isDevMode } from './utils/settingsStore.js';
+import { bindQualitySettings } from './utils/qualityPresets.js';
 import {
   CLOUD_RENDER_ORDER,
   REALWORLD_FAR_PLANE,
@@ -29,7 +31,14 @@ import ChaseCameraController from './camera/ChaseCameraController.js';
 import FlightPlanRecorder from './flightplan/FlightPlanRecorder.js';
 import Stats from 'stats.js';
 
+/** An Escape this soon after the menu opened is the one that released the mouse */
+const ESCAPE_REOPEN_GUARD_MS = 500;
+
 async function initApp() {
+  // --- Settings: stored, then URL, then the technical values of the graphics settings ---
+  bindQualitySettings(loadSettings());
+  const devMode = isDevMode();
+
   // --- Core scene ---
   const renderer = await createRenderer();
   const { scene, dirLight, ambientLight } = createScene();
@@ -88,16 +97,9 @@ async function initApp() {
   minimap.setFlightPlanRecorder(flightPlanRecorder);
   const hudCanvas = document.getElementById('hud');
 
-  // --- Control Panel ---
-  function regenerate() {
-    geoTerrainManager.reinit();
-    flightController.position.set(0, REALWORLD_START_ALTITUDE, 0);
-  }
-  // Side-effect: binds DOM controls to CONFIG
-  new ControlPanel(regenerate);
-
   // --- Logger panel ---
   Logger.bindPanel(document.getElementById('log-panel'));
+  if (CONFIG.showLogs) Logger.show();
   document.getElementById('log-panel-clear').addEventListener('click', () => Logger.clear());
   Logger.info('App', 'Application started');
 
@@ -105,14 +107,23 @@ async function initApp() {
   setupResizeHandler(camera, renderer, hud);
 
   // --- Config listeners ---
-  onChange((key, value) => {
-    if (key === 'showHud') hudCanvas.style.display = value ? 'block' : 'none';
+  const hiresBadge = document.getElementById('hires-badge');
+  const applyDisplay = () => {
+    hudCanvas.style.display = CONFIG.showHud ? 'block' : 'none';
+    hiresBadge.style.display = CONFIG.hiResMode ? 'block' : 'none';
+  };
+  applyDisplay();
+  onChange((key) => {
+    if (key === 'showHud' || key === 'hiResMode') applyDisplay();
+    if (key === 'showHud') updateFlyHint();
+    if (key === 'cameraMode') chaseCameraController.reset();
   });
 
   // --- Input bindings ---
   const input = new InputManager();
 
   input.onKey('x', () => {
+    if (!devMode) return;
     const active = geoTerrainManager.toggleDebug();
     Logger.info('App', `Debug tiles ${active ? 'enabled' : 'disabled'}`);
   });
@@ -125,10 +136,8 @@ async function initApp() {
     update('showMinimap', !CONFIG.showMinimap);
   });
 
-  const hiresBadge = document.getElementById('hires-badge');
   input.onKey('r', () => {
     const active = geoTerrainManager.toggleHiRes();
-    hiresBadge.style.display = active ? 'block' : 'none';
     Logger.info('App', `Hi-res mode (zoom 18) ${active ? 'enabled' : 'disabled'}`);
   });
 
@@ -142,13 +151,11 @@ async function initApp() {
   input.onKey('v', () => {
     const next = CONFIG.cameraMode === 'chase' ? 'cockpit' : 'chase';
     update('cameraMode', next);
-    chaseCameraController.reset();
     Logger.info('App', `Camera mode: ${next}`);
   });
 
   input.onKey('i', () => {
     const active = hud.toggleStats();
-    document.getElementById('help').style.display = active ? 'block' : 'none';
     stats.dom.style.display = active ? 'block' : 'none';
     Logger.info('App', `Info ${active ? 'enabled' : 'disabled'}`);
   });
@@ -184,7 +191,14 @@ async function initApp() {
   });
 
   input.on('Escape', () => {
-    if (hud.isFlightPlanMenuOpen()) hud.closeFlightPlanMenu();
+    if (hud.isFlightPlanMenuOpen()) {
+      hud.closeFlightPlanMenu();
+    } else if (panel.isOpen) {
+      // The Escape that released the mouse already opened the menu
+      if (performance.now() - panel.openedAt > ESCAPE_REOPEN_GUARD_MS) panel.resume();
+    } else {
+      panel.open();
+    }
   });
 
   input.onKey('n', (e) => {
@@ -223,21 +237,27 @@ async function initApp() {
     }
   });
 
-  input.onKey('b', (e) => {
-    if (e.shiftKey) {
-      if (!benchmarkRunner._lastReport) {
-        Logger.warn('App', 'No completed benchmark — run one first before storing baseline');
-        return;
-      }
-      BenchmarkComparator.storeBaseline(benchmarkRunner._lastReport);
+  function storeBaseline() {
+    if (!benchmarkRunner._lastReport) {
+      Logger.warn('App', 'No completed benchmark — run one first before storing baseline');
       return;
     }
+    BenchmarkComparator.storeBaseline(benchmarkRunner._lastReport);
+  }
+
+  function toggleBenchmark() {
     if (benchmarkRunner.isRunning()) {
       benchmarkRunner.stop(flightController, renderer);
     } else {
       const userPlan = flightPlanRecorder.hasValidPlan() ? flightPlanRecorder.buildPlan(flightController) : null;
       benchmarkRunner.start(flightController, gpuTimer, userPlan);
     }
+  }
+
+  input.onKey('b', (e) => {
+    if (!devMode) return;
+    if (e.shiftKey) storeBaseline();
+    else toggleBenchmark();
   });
 
   // --- Reference views (reproducible viewpoints for rendering comparisons) ---
@@ -269,8 +289,68 @@ async function initApp() {
   }
 
   input.onKey('k', () => {
+    if (!devMode) return;
     applyReferenceView((referenceViewIndex + 1) % REFERENCE_VIEWS.length);
   });
+
+  // --- Settings menu ---
+  // Opening it pauses the flight; the scene keeps rendering so graphics changes show
+  let paused = false;
+  let smoothedFrameMs = 16.7;
+  const panel = new ControlPanel({
+    devMode,
+    actions: {
+      resume: () => {
+        if (!flightController.locked) {
+          renderer.domElement.requestPointerLock()?.catch?.(() => {
+            // Refused right after the mouse was released with Escape: a click on the scene takes it back
+          });
+        }
+      },
+      flyTo: (lat, lon) => {
+        update('lat', lat);
+        update('lon', lon);
+        geoTerrainManager.reinit();
+        flightController.position.set(0, REALWORLD_START_ALTITUDE, 0);
+      },
+      reloadTerrain: () => geoTerrainManager.reinit(),
+      referenceViews: REFERENCE_VIEWS.map((v) => v.name),
+      setReferenceView: (index) => applyReferenceView(index),
+      toggleDebugTiles: () => geoTerrainManager.toggleDebug(),
+      toggleBenchmark,
+      storeBaseline,
+      metrics: () => {
+        const info = renderer.info.render;
+        return {
+          'Frame rate': `${(1000 / smoothedFrameMs).toFixed(0)} FPS`,
+          'GPU time': `${gpuTimer.getLastGPUTimeMs().toFixed(2)} ms`,
+          'Render scale': `${Math.round(scenePipeline.renderScale * 100)} %`,
+          'Pixel ratio': renderer.getPixelRatio().toFixed(2),
+          Quality: CONFIG.quality,
+          'Draw calls': String(info.drawCalls),
+          Triangles: info.triangles.toLocaleString('en-US'),
+          'Tile downloads': String(geoTerrainManager.pendingDownloads),
+        };
+      },
+    },
+  });
+
+  const flyHint = document.getElementById('fly-hint');
+  document.getElementById('menu-button').addEventListener('click', () => panel.open());
+  function updateFlyHint() {
+    flyHint.hidden = panel.isOpen || flightController.locked || !CONFIG.showHud;
+  }
+  panel.onToggle((open) => {
+    paused = open;
+    updateFlyHint();
+  });
+  document.addEventListener('pointerlockchange', () => {
+    // Escape releases the mouse before the page sees the key: open the menu then
+    if (flightController.locked) panel.close();
+    else panel.open();
+    updateFlyHint();
+  });
+  updateFlyHint();
 
   // Read-only state and view selection for automated captures and measurements
   window.osf = {
@@ -305,9 +385,11 @@ async function initApp() {
     stats.begin();
 
     const now = performance.now();
-    const dt = Math.min((now - prevTime) / 1000, MAX_DELTA_TIME);
+    // The simulation stands still while the settings menu is open
+    const dt = paused ? 0 : Math.min((now - prevTime) / 1000, MAX_DELTA_TIME);
     const frameTimeMs = now - prevTime;
     prevTime = now;
+    smoothedFrameMs += (frameTimeMs - smoothedFrameMs) * 0.05;
 
     // --- Input phase ---
     flightController.update(dt);

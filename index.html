@@ -25,15 +25,9 @@
   <canvas id="hud"></canvas>
 <div id="crosshair"></div>
   <div id="hires-badge" style="display:none;">HI-RES Z18</div>
-  <div id="help">
-    Click to capture mouse | Mouse : steer flight<br>
-    W/↑ S/↓ : forward / backward | A/← D/→ : strafe<br>
-    V : toggle view | H : toggle HUD | M : toggle map | I : info &amp; help<br>
-    T : cycle texture mode | R : hi-res mode (static views) | X : debug tiles<br>
-    N : record waypoints | Shift+N : clear plan | P : add waypoint<br>
-    L : load flight plan | G : autopilot on/off<br>
-    K : cycle reference views<br>
-    B : benchmark | Shift+B : store baseline
+  <div id="fly-hint" hidden>
+    <span>Click to fly</span>
+    <button id="menu-button" class="sm-btn" type="button">Menu&ensp;<kbd>Esc</kbd></button>
   </div>
 
   <div id="flightplan-menu" style="display:none;">
@@ -59,112 +53,6 @@
       <button id="log-panel-clear">CLEAR</button>
     </div>
     <div id="log-panel"></div>
-  </div>
-
-  <div id="panel-trigger"></div>
-  <div id="control-panel">
-    <div class="mfd-header">MFD-01 <span>/</span> TERRAIN SYS</div>
-    <div class="mfd-body">
-
-      <!-- ── SIMULATION ── -->
-      <div class="mfd-section-label">SIMULATION</div>
-
-      <div class="ctrl-group">
-        <label>SPEED <span id="cameraSpeed-val"></span></label>
-        <input type="range" id="cameraSpeed" />
-      </div>
-
-      <div class="ctrl-group checkbox-group">
-        <input type="checkbox" id="showLogs" />
-        <label for="showLogs">LOGS</label>
-      </div>
-
-      <div class="ctrl-group" id="logLevel-group">
-        <label>LOG LEVEL</label>
-        <select id="logLevel">
-          <option value="DEBUG">DEBUG</option>
-          <option value="INFO">INFO</option>
-          <option value="WARN" selected>WARN</option>
-          <option value="ERROR">ERROR</option>
-        </select>
-      </div>
-
-      <!-- ── CONFIGURATION ── -->
-      <div class="mfd-section-label">CONFIGURATION</div>
-
-      <div id="realworld-controls">
-        <div class="ctrl-group">
-          <label>SEARCH LOCATION</label>
-          <div class="search-row">
-            <input type="text" id="placeSearch" placeholder="Mont Blanc, Paris..." />
-            <button id="searchBtn">&#128269;</button>
-          </div>
-        </div>
-        <div class="ctrl-group">
-          <label>LATITUDE</label>
-          <input type="number" id="lat" step="0.001" />
-        </div>
-        <div class="ctrl-group">
-          <label>LONGITUDE</label>
-          <input type="number" id="lon" step="0.001" />
-        </div>
-        <div class="ctrl-group">
-          <label>TEXTURE</label>
-          <select id="textureMode">
-            <option value="satellite">Satellite</option>
-            <option value="osm">Road map</option>
-            <option value="sar">SAR radar</option>
-            <option value="elevation">Elevation lines</option>
-          </select>
-        </div>
-        <button id="loadTerrain" class="mfd-btn">LOAD TERRAIN</button>
-        <hr class="section-separator" />
-      </div>
-
-      <!-- ── ATMOSPHERE ── -->
-      <div class="mfd-section-label">ATMOSPHERE</div>
-
-      <div class="ctrl-group">
-        <label>SUN ELEVATION <span id="sunElevation-val"></span></label>
-        <input type="range" id="sunElevation" />
-      </div>
-
-      <div class="ctrl-group">
-        <label>SUN AZIMUTH <span id="sunAzimuth-val"></span></label>
-        <input type="range" id="sunAzimuth" />
-      </div>
-
-      <div class="ctrl-group">
-        <label>TURBIDITY <span id="skyTurbidity-val"></span></label>
-        <input type="range" id="skyTurbidity" />
-      </div>
-
-      <div class="ctrl-group checkbox-group">
-        <input type="checkbox" id="showClouds" checked />
-        <label for="showClouds">CLOUD LAYER</label>
-      </div>
-
-      <div class="ctrl-group">
-        <label>CLOUD ALT <span id="cloudAltitude-val"></span></label>
-        <input type="range" id="cloudAltitude" />
-      </div>
-
-      <div class="ctrl-group checkbox-group">
-        <input type="checkbox" id="fogEnabled" checked />
-        <label for="fogEnabled">ATMOSPHERIC FOG</label>
-      </div>
-
-      <div class="ctrl-group checkbox-group">
-        <input type="checkbox" id="bloomEnabled" checked />
-        <label for="bloomEnabled">BLOOM</label>
-      </div>
-
-      <div class="ctrl-group checkbox-group">
-        <input type="checkbox" id="autoExposure" checked />
-        <label for="autoExposure">AUTO EXPOSURE</label>
-      </div>
-
-    </div><!-- /mfd-body -->
   </div>
 
   <script type="module" src="js/app.js"></script>

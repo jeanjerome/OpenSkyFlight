@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CONFIG } from '../utils/config.js';
+import { CONFIG, onChange } from '../utils/config.js';
 import { CLEAR_COLOR, AMBIENT_INTENSITY, DIR_LIGHT_INTENSITY, DIR_LIGHT_POSITION } from '../constants/rendering.js';
 import { DEFAULT_FOV, DEFAULT_NEAR, DEFAULT_FAR, REALWORLD_START_ALTITUDE } from '../constants/camera.js';
 
@@ -49,5 +49,10 @@ export function setupResizeHandler(camera, renderer, hud) {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
     hud.resize(window.innerWidth, window.innerHeight);
+  });
+  onChange((key, value) => {
+    if (key !== 'maxPixelRatio') return;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, value));
+    renderer.setSize(window.innerWidth, window.innerHeight);
   });
 }

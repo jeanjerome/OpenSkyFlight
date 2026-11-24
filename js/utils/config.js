@@ -1,3 +1,5 @@
+import { SETTINGS_BY_KEY } from './settingsSchema.js';
+
 /**
  * @typedef {Object} AppConfig
  *
@@ -6,8 +8,6 @@
  * @property {number}  lon                    - Longitude in decimal degrees (default: 6.8652)
  * @property {number}  zoom                   - Tile zoom level (default: 15)
  * @property {number}  minZoom                - Minimum zoom for LOD rings (default: 3)
- * @property {number}  maxTotalTiles          - Maximum loaded tiles (default: 1000)
- * @property {number}  lodRingRadius          - LOD ring radius in tiles (default: 8)
  * @property {string}  textureMode             - 'satellite' | 'osm' | 'sar' | 'elevation' (default: 'satellite')
  * @property {boolean} hiResMode              - Hi-res zoom 18 mode (default: false)
  *
@@ -16,7 +16,14 @@
  * @property {string}  cameraMode             - 'chase' | 'cockpit' (default: 'chase')
  * @property {number}  mouseSensitivity       - Mouse look sensitivity (default: 0.002)
  *
+ * Graphics (user-facing; each one drives technical settings, see qualityPresets.js):
+ * @property {string}  quality                - 'low' | 'medium' | 'high' | 'ultra' | 'custom' (default: 'high')
+ * @property {string}  imageSharpness         - 'standard' | 'high' | 'maximum' (default: 'maximum')
+ * @property {string}  terrainDetail          - 'normal' | 'high' | 'maximum' (default: 'high')
+ *
  * Rendering:
+ * @property {number}  terrainLodThreshold    - Tile subdivision threshold: higher keeps fine relief further away (default: 1.2)
+ * @property {number}  textureAnisotropy      - Anisotropic filtering of ground textures, applied on terrain reload (default: 16)
  * @property {number}  maxPixelRatio          - Maximum device pixel ratio (default: 2)
  * @property {number}  renderScale            - Highest resolution of the 3D scene relative to the screen, range [0.5..1] (default: 1)
  * @property {boolean} dynamicResolution      - Lower the scene resolution when the GPU exceeds the 60 FPS budget (default: true)
@@ -42,26 +49,16 @@
  * @property {number}  minimapZoom            - Minimap zoom level, range [3..18] (default: 13)
  */
 
-/** Validation rules: { min, max } for numeric clamping */
-const CONFIG_VALIDATION = {
-  cameraSpeed: { min: 1, max: 4000 },
-  sunElevation: { min: 0, max: 90 },
-  sunAzimuth: { min: 0, max: 360 },
-  skyTurbidity: { min: 1, max: 10 },
-  cloudAltitude: { min: 500, max: 12000 },
-  cloudOpacity: { min: 0, max: 1 },
-  renderScale: { min: 0.5, max: 1 },
-  fogDensity: { min: 0, max: 0.01 },
-  minimapZoom: { min: 3, max: 18 },
-  lat: { min: -90, max: 90 },
-  lon: { min: -180, max: 180 },
-};
-
 /** @type {AppConfig} */
 const CONFIG = {
   cameraSpeed: 560,
   cameraMode: 'chase',
   mouseSensitivity: 0.002,
+  quality: 'high',
+  imageSharpness: 'maximum',
+  terrainDetail: 'high',
+  terrainLodThreshold: 1.2,
+  textureAnisotropy: 16,
   maxPixelRatio: 2,
   renderScale: 1,
   dynamicResolution: true,
@@ -72,8 +69,6 @@ const CONFIG = {
   zoom: 15,
   textureMode: 'satellite', // 'satellite' | 'osm' | 'sar' | 'elevation'
   minZoom: 3,
-  maxTotalTiles: 1000,
-  lodRingRadius: 8,
   showHud: true,
   logLevel: 'WARN',
   showLogs: false,
@@ -91,6 +86,9 @@ const CONFIG = {
   hiResMode: false,
 };
 
+/** Values before any stored, URL or user change */
+const DEFAULTS = Object.freeze({ ...CONFIG });
+
 const listeners = new Set();
 
 function onChange(fn) {
@@ -99,11 +97,12 @@ function onChange(fn) {
 }
 
 function update(key, value) {
-  // Validate and clamp numeric values
-  const rule = CONFIG_VALIDATION[key];
-  if (rule && typeof value === 'number') {
-    value = Math.max(rule.min, Math.min(rule.max, value));
+  // Clamp numbers to the range of their setting, reject unknown choices
+  const setting = SETTINGS_BY_KEY[key];
+  if (setting && typeof value === 'number' && setting.min !== undefined) {
+    value = Math.max(setting.min, Math.min(setting.max, value));
   }
+  if (setting?.options && !setting.options.some(([v]) => v === value)) return;
 
   if (CONFIG[key] !== value) {
     CONFIG[key] = value;
@@ -111,4 +110,4 @@ function update(key, value) {
   }
 }
 
-export { CONFIG, onChange, update };
+export { CONFIG, DEFAULTS, onChange, update };

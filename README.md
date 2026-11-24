@@ -14,14 +14,14 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 ## Features
 
 - **Real-world elevation** — [AWS Terrarium](https://registry.opendata.aws/terrain-tiles/) PNG tiles decoded into float height textures and displaced on the GPU via TSL `positionNode`, in a metric world (1 unit = 1 m) that keeps slopes at their true steepness
-- **4 texture modes** — Satellite imagery, Road map, SAR radar, and Elevation contour lines — cycle with `T` or pick from the control panel
+- **4 texture modes** — Satellite imagery, Road map, SAR radar, and Elevation contour lines — cycle with `T` or pick from the settings menu
 - **Hi-Res mode (zoom 18)** — press `R` to toggle upsampled elevation with zoom-18 satellite textures for sharper close-up detail. Hi-res tiles are concentrated at the view center and fade concentrically toward the periphery. Best suited for static or slow-moving views; fast flight may cause temporary pixelation while high-zoom tiles load
 - **Adaptive LOD** — quadtree subdivision based on camera distance, with concentric view-center weighting for hi-res zoom levels
 - **Rafale aircraft** — 3D GLTF model with retracted landing gear, animated banking and pitch, chase camera (30 m behind)
 - **Cockpit / chase toggle** — press `V` to switch between first-person cockpit (roll applied to horizon) and third-person chase view
 - **Flight simulator controls** — 6-DOF camera with pointer lock, banking, pitch/yaw, full 360° looping
 - **Aircraft-style HUD** — compass, artificial horizon, altimeter (MSL + AGL), speed indicator
-- **MFD cockpit panel** — auto-hiding control panel with military flight display aesthetics
+- **Settings menu** — `Esc` pauses the flight and opens tabbed settings (Graphics, World, Flight, Controls) over the live scene; a quality preset (Low / Medium / High / Ultra) sets the graphics settings at once, settings are remembered across sessions and can be given in the URL (`?quality=low&showClouds=true`); `?dev=1` adds a Developer tab (live GPU figures, reference views, benchmark, raw rendering values)
 - **OSM minimap** — real-time 2D map overlay with airplane marker and independent zoom
 - **Flight plan system** — record waypoints, save/load flight plans, and engage autopilot to follow a path automatically
 - **Local tile cache** — transparent caching proxy, pre-download tiles for offline flight
@@ -76,7 +76,7 @@ Available scripts:
 | `npm run format` | Format all files with Prettier |
 | `npm run format:check` | Check formatting without modifying files |
 | `npm run render:capture -- --out <dir>` | Screenshot every reference view in Chrome and measure frame pacing, draw calls and GPU cost (dev server must be running); `--views 1,6` selects views, `--set key=value` overrides a setting |
-| `npm run render:benchmark -- --out <dir> [--plan <n>]` | Run the in-app benchmark in Chrome and save its JSON report |
+| `npm run render:benchmark -- --out <dir> [--plan <n>]` | Run the in-app benchmark in Chrome and save its JSON report; `--set key=value` passes a setting, e.g. `--set quality=low` |
 | `npm run render:summary -- <report.json>...` | Print comparable figures (FPS, p5/p1, GPU, slow frames) for benchmark reports |
 
 ### Controls
@@ -91,23 +91,25 @@ Available scripts:
 | `V` | Toggle cockpit / chase view |
 | `H` | Toggle HUD |
 | `M` | Toggle minimap |
-| `I` | Toggle info & help overlay |
+| `I` | Toggle performance figures |
 | `R` | Toggle Hi-Res mode (zoom 18) — best for static views |
-| `X` | Toggle debug tile overlay |
-| `B` | Start / stop benchmark |
-| `Shift+B` | Store last benchmark as baseline |
-| `K` | Cycle reference views (also `?view=<n>` in the URL) |
+| `X` | Toggle debug tile overlay (developer mode) |
+| `B` | Start / stop benchmark (developer mode) |
+| `Shift+B` | Store last benchmark as baseline (developer mode) |
+| `K` | Cycle reference views (developer mode; also `?view=<n>` in the URL) |
 | `N` | Start / stop flight plan recording |
 | `Shift+N` | Clear current flight plan |
 | `P` | Add waypoint (while recording) |
 | `L` | Open / close flight plan menu |
 | `G` | Engage / disengage autopilot |
 | `1`–`9` | Select flight plan from menu |
-| `Esc` | Release pointer lock / close menu |
+| `Esc` | Pause and open the settings menu / resume / close the flight plan menu |
+
+> **Developer mode:** open the app with `?dev=1` (remembered until `?dev=0`) to enable the developer shortcuts and the Developer tab of the settings menu.
 
 > **Keyboard layouts:** Flight controls (WASD) use physical key positions, so they map to ZQSD on AZERTY keyboards. All other shortcuts use the character printed on the key and work identically on any layout.
 
-Use the right-side control panel to search locations, load terrain, and select texture mode.
+The settings menu (`Esc`) also lists every shortcut in its Controls tab.
 
 ## Building three-tile (required)
 
@@ -125,7 +127,7 @@ Without this bundle the import map cannot resolve `three-tile` and the app does 
 
 ## Real-World Mode
 
-Enter coordinates (or search a place name) in the control panel, then click **Load Terrain**. The app fetches elevation data from AWS Terrarium and overlays one of four texture modes, switchable at runtime with `T` or the control panel.
+Search a place name or enter coordinates in the World tab of the settings menu, then click **Fly there**. The app fetches elevation data from AWS Terrarium and overlays one of four texture modes, switchable at runtime with `T` or the settings menu.
 
 Default location: **Mont Blanc** (45.8326°N, 6.8652°E).
 
@@ -182,8 +184,8 @@ cache/
 │   ├── rendering/             Render pipeline (HDR scene pass, TAAU, bloom, tone mapping), dynamic resolution
 │   ├── scene/                 Renderer, scene, camera & lights factory
 │   ├── terrain/               Real-world terrain manager (three-tile integration)
-│   ├── ui/                    HUD instruments, flight plan menu, minimap, MFD panel
-│   └── utils/                 Reactive config, logger
+│   ├── ui/                    HUD instruments, flight plan menu, minimap, settings menu
+│   └── utils/                 Reactive config, settings schema, quality presets, stored settings, logger
 ├── assets/
 │   ├── models/                3D models (Rafale GLTF)
 │   └── flightplans/           Saved flight plan JSON files

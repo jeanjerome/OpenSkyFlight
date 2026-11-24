@@ -61,10 +61,13 @@ page.on('console', (m) => {
   if (m.type() === 'error') errors.push(m.text());
 });
 
-await page.goto(values.url, { waitUntil: 'load' });
+// Developer mode, HUD and minimap hidden; a fresh browser profile starts from the default settings
+const url = new URL(values.url);
+url.searchParams.set('dev', '1');
+url.searchParams.set('showHud', 'false');
+url.searchParams.set('showMinimap', 'false');
+await page.goto(url.href, { waitUntil: 'load' });
 await page.waitForFunction(() => window.osf !== undefined, null, { timeout: 30000 });
-await page.keyboard.press('h'); // hide HUD
-await page.keyboard.press('m'); // hide minimap
 
 const overrides = {};
 for (const assignment of values.set) {

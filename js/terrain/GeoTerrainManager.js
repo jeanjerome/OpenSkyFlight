@@ -1,7 +1,7 @@
 import { Fn, float, vec2, vec3, uv, positionWorld, fract, smoothstep, mix, min, max, sin, step, clamp, fwidth, sRGBTransferEOTF } from 'three/tsl';
 import * as THREE from 'three';
 import { LoaderFactory, TileMap, TileSource, applyTerrariumElevation } from 'three-tile';
-import { CONFIG, onChange } from '../utils/config.js';
+import { CONFIG, onChange, update } from '../utils/config.js';
 import ElevationProvider from '../geo/ElevationProvider.js';
 
 // Web Mercator constants (WGS84)
@@ -27,7 +27,6 @@ export default class GeoTerrainManager {
   constructor(scene, renderer) {
     this.scene = scene;
     this.renderer = renderer;
-    LoaderFactory.textureAnisotropy = renderer.getMaxAnisotropy();
     this.tileMap = null;
     /** @deprecated Alias for backwards compat — use tileMap */
     this.mapView = null;
@@ -42,6 +41,8 @@ export default class GeoTerrainManager {
     this._syntheticNodes = {};
 
     onChange((key, value) => {
+      if (key === 'terrainLodThreshold' && this.tileMap) this.tileMap.LODThreshold = value;
+      if (key === 'hiResMode') this.reinit();
       if (key === 'textureMode') {
         const newWireframe = GeoTerrainManager._isSynthetic(value);
         if (newWireframe !== this._wireframeMode) {
@@ -68,6 +69,8 @@ export default class GeoTerrainManager {
     this.mapView = null;
 
     const effectiveZoom = CONFIG.hiResMode ? 18 : 15;
+    // Read by the image loader for every tile, so a change applies to tiles loaded afterwards
+    LoaderFactory.textureAnisotropy = Math.min(CONFIG.textureAnisotropy, this.renderer.getMaxAnisotropy());
 
     // Image source — satellite or OSM tiles
     const imgSource = new TileSource({
@@ -117,8 +120,8 @@ export default class GeoTerrainManager {
     this.horizontalScale = Math.cos((lat * Math.PI) / 180);
     this.tileMap.scale.set(this.horizontalScale, this.horizontalScale, 1);
 
-    // LOD tuning
-    this.tileMap.LODThreshold = 1.2;
+    // Higher keeps finer tiles further away
+    this.tileMap.LODThreshold = CONFIG.terrainLodThreshold;
 
     // Center the map so that (lat, lon) is at world origin
     this._centerMercator = latLonToMercator(lat, lon);
@@ -354,8 +357,7 @@ export default class GeoTerrainManager {
   }
 
   toggleHiRes() {
-    CONFIG.hiResMode = !CONFIG.hiResMode;
-    this.reinit();
+    update('hiResMode', !CONFIG.hiResMode);
     return CONFIG.hiResMode;
   }
 

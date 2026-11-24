@@ -254,6 +254,11 @@ export default class MetricsCollector {
 
   getConfigSnapshot() {
     return {
+      quality: CONFIG.quality,
+      imageSharpness: CONFIG.imageSharpness,
+      terrainDetail: CONFIG.terrainDetail,
+      terrainLodThreshold: CONFIG.terrainLodThreshold,
+      textureAnisotropy: CONFIG.textureAnisotropy,
       hiResMode: CONFIG.hiResMode,
       zoom: CONFIG.zoom,
       fogEnabled: CONFIG.fogEnabled,
