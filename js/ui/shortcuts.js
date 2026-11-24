@@ -11,6 +11,7 @@ export const SHORTCUTS = [
       { keys: ['W', '↑'], action: 'Fly forward' },
       { keys: ['S', '↓'], action: 'Fly backward' },
       { keys: ['A', '←', 'D', '→'], action: 'Slide sideways' },
+      { keys: ['O'], action: 'Anti-collision lights on or off' },
       { keys: ['Esc'], action: 'Pause and open this menu' },
     ],
   },

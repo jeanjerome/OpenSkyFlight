@@ -33,6 +33,7 @@ import {
   vec4,
 } from 'three/tsl';
 import { GLOW_LAYER, SCENE_UNIT_LUMINANCE } from '../constants/rendering.js';
+import { CONFIG } from '../utils/config.js';
 import {
   AIRCRAFT_LIGHTS,
   AFTERBURNER_FLAME_LENGTH,
@@ -77,7 +78,8 @@ function lensLuminance(candelas) {
  * afar. A halo shows when its light is in front of the scene (not hidden by the
  * airframe or the terrain) and within the light's field of view. Steady
  * position lights (red left, green right, white tail), red beacons flashing on
- * the fin and under the fuselage, double white strobes on the wingtips.
+ * the fin and under the fuselage, double white strobes on the wingtips. The
+ * flashing lights (anti-collision) have their own switch (CONFIG.antiCollisionLights).
  *
  * The engines glow from inside their nozzles with thrust, and the afterburner
  * adds a flame with shock diamonds, also drawn by the glow pass.
@@ -285,7 +287,7 @@ export default class AircraftLights {
     const lens = this._lensLevels.array;
     const halo = this._haloLevels.array;
     this._specs.forEach((spec, i) => {
-      let on = flashing(spec.flash, this._time);
+      let on = spec.flash && !CONFIG.antiCollisionLights ? 0 : flashing(spec.flash, this._time);
       // Field of view of the light: full inside, fading over 10° at its edge
       if (spec.axis && on > 0) {
         this._worldPosition.set(...spec.position).applyMatrix4(this.model.matrixWorld);

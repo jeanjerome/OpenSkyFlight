@@ -304,6 +304,15 @@ export const SETTINGS = [
     persist: true,
   },
   {
+    key: 'antiCollisionLights',
+    tab: 'flight',
+    section: 'Aircraft',
+    label: 'Anti-collision lights',
+    help: 'Flashing red beacons and white wingtip strobes (O).',
+    type: 'toggle',
+    persist: true,
+  },
+  {
     key: 'showHud',
     tab: 'flight',
     section: 'Display',

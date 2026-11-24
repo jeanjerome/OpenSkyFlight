@@ -156,6 +156,11 @@ async function initApp() {
     Logger.info('App', `Hi-res mode (zoom 18) ${active ? 'enabled' : 'disabled'}`);
   });
 
+  input.onKey('o', () => {
+    update('antiCollisionLights', !CONFIG.antiCollisionLights);
+    showNotification(`Anti-collision lights ${CONFIG.antiCollisionLights ? 'on' : 'off'}`);
+  });
+
   input.onKey('t', () => {
     const modes = ['satellite', 'osm', 'sar', 'elevation'];
     const idx = modes.indexOf(CONFIG.textureMode);

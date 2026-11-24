@@ -15,6 +15,7 @@ import { SETTINGS_BY_KEY } from './settingsSchema.js';
  * @property {number}  cameraSpeed            - Flight speed in m/s, range [1..4000] (default: 560)
  * @property {string}  cameraMode             - 'chase' | 'cockpit' (default: 'chase')
  * @property {number}  mouseSensitivity       - Mouse look sensitivity (default: 0.002)
+ * @property {boolean} antiCollisionLights    - Flashing red beacons and white wingtip strobes of the aircraft (default: true)
  *
  * Graphics (user-facing; each one drives technical settings, see qualityPresets.js):
  * @property {string}  quality                - 'low' | 'medium' | 'high' | 'ultra' | 'custom' (default: 'high')
@@ -60,6 +61,7 @@ const CONFIG = {
   cameraSpeed: 560,
   cameraMode: 'chase',
   mouseSensitivity: 0.002,
+  antiCollisionLights: true,
   quality: 'high',
   imageSharpness: 'maximum',
   terrainDetail: 'high',
