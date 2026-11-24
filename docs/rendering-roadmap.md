@@ -9,7 +9,7 @@ en fin de session.
 ## État courant (mis à jour le 2026-11-24)
 
 - **Lots terminés** : 0 et 1 (L1.4 achevée pendant le lot 2). **Lot en cours** : lot 2 ; L2.9, L2.5,
-  L2.1, L2.2, L2.3 et L2.4 terminées, L2.6 en grande partie (graphe d'élévation partagé, PMREM sur toute la scène).
+  L2.1, L2.2, L2.3, L2.4 et L2.8 terminées, L2.6 en grande partie (graphe d'élévation partagé, PMREM sur toute la scène).
 - **three.js** : r187 (import map d'`index.html`), mis à jour depuis r183 pour le TRAA compatible avec
   la profondeur inversée.
 - **Git** : branche `feat/render-hdr-pipeline` (depuis `main`), non poussée.
@@ -18,9 +18,9 @@ en fin de session.
   `npm run dev` en tâche de fond avant toute mesure. Mesurer **sur l'écran intégré 120 Hz** : sur un
   écran 60 Hz, Chrome plafonne à 60 FPS (la résolution dynamique ne se déclenche plus à tort depuis
   L2.4, mais les FPS ne sont pas comparables).
-- **Référence de comparaison** : `benchmarks/render/taau/` (captures des **6** vues avec coût GPU
-  **à pleine résolution**, échelle, draw calls et triangles, deux benchmarks de vol, non versionnés).
-  Chiffres dans **Mesures**, lignes « L2.4 ». **Les coûts GPU antérieurs à L2.4 ont été mesurés à
+- **Référence de comparaison** : `benchmarks/render/ae/` (captures des **6** vues avec coût GPU
+  **à pleine résolution**, échelle, luminance adaptée, draw calls et triangles, deux benchmarks de vol,
+  non versionnés). Chiffres dans **Mesures**, lignes « L2.8 ». **Les coûts GPU antérieurs à L2.4 ont été mesurés à
   1028×645** (voir Outillage) : ne comparer qu'aux lignes « pleine résolution ».
 - **Vue 6** (face au soleil bas, massif en contre-jour) ajoutée pour le bloom, et plus tard les rayons
   crépusculaires et le reflet d'objectif (L4.7).
@@ -28,20 +28,20 @@ en fin de session.
   mesuré GPU saturé) compare deux états du code ; la colonne GPU des vols indique la charge, pas le coût.
 - **Rendu** : `js/rendering/ScenePipeline.js` — `RenderPipeline` : passe de scène HalfFloat (profondeur
   float32, MRT couleur + vitesse, sans MSAA, échelle réglable) → `taau()` (reconstruction à la
-  résolution de sortie) → `bloom()` ajouté à l'image TAAU → tone mapping et espace couleur en sortie.
+  résolution de sortie) → `bloom()` ajouté à l'image TAAU → × correction d'exposition automatique
+  (`AutoExposureNode`, histogramme mesuré sur l'image TAAU) → tone mapping et espace couleur en sortie.
   Seuil du bloom fixé par `AtmosphericSky` (voir L2.3) ; échelle de la passe de scène pilotée par
   `AdaptiveQualityManager` (voir L2.4), plafonnée par `CONFIG.renderScale`.
-- **Ordre conseillé pour la suite du lot 2** : L2.8 → L2.7 ; reste de L2.6 (décodage d'altitude dans
-  un worker, `compileAsync`) seulement si p5 ou p1 le justifient.
-- **Prochaine tâche, L2.8 (exposition automatique) — points d'entrée** : l'exposition est fixe (0,35,
-  `TONE_MAPPING_EXPOSURE`, posée par `AtmosphericSky` sur `renderer.toneMappingExposure`, lue en
-  direct par la sortie du pipeline). Histogramme de luminance logarithmique de l'image TAAU par
-  compute shader (WebGPU) → moyenne pondérée en excluant les extrêmes → adaptation temporelle
-  (vitesses différentes vers le clair et vers le sombre) → exposition. Repli WebGL2 sans compute :
-  moyenne par réduction successive, ou exposition fixe. Bornes min/max d'exposition pour que la vue 6
-  (soleil dans le champ) et la vue 4 (coucher) restent lisibles ; le seuil du bloom est une radiance
-  avant exposition, il ne change pas. Mesurer le coût à pleine résolution.
-
+- **Ordre conseillé pour la suite du lot 2** : L2.7, puis clôture du lot (captures dans
+  `docs/screenshots/render/lot2/`, fusion dans `main` après accord de l'utilisateur) ; reste de L2.6
+  (décodage d'altitude dans un worker, `compileAsync`) seulement si p5 ou p1 le justifient.
+- **Prochaine tâche, L2.7 (presets de qualité) — points d'entrée** : réglages déjà dans `config.js` :
+  `maxPixelRatio` (résolution de sortie), `renderScale` et `dynamicResolution` (`AdaptiveQualityManager`),
+  `bloomEnabled`, `autoExposure`, `maxTotalTiles`, `lodRingRadius` ; dans three-tile : `LODThreshold`
+  et l'anisotropie des textures (fixés dans `GeoTerrainManager.js`). Un preset = un jeu de valeurs
+  appliqué par `update()` ; le panneau MFD n'expose aujourd'hui que des cases (brouillard, bloom,
+  exposition automatique) : ajouter un sélecteur de preset et mémoriser le choix (`localStorage`).
+  Mesurer chaque preset sur les vues de référence (coût GPU) et en vol (p1).
 ---
 
 ## Comment reprendre le travail (début de session)
@@ -162,6 +162,8 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
   par rendu et ne réagit plus aux rendus répétés.
 - À pleine résolution, deux captures successives concordent à ±1 % sur les vues 1, 3, 4 et 6, à
   ±12–14 % sur les vues 2 et 5.
+- Les vues 2 à 5 varient jusqu'à ±0,5 ms entre deux captures identiques ; les vues 1 et 6 à
+  ±0,05 ms. Mesurer un effet bon marché par différence sur les vues 1 et 6.
 - `--views` (sous-ensemble de vues) change la séquence de chargement des tuiles : triangles et coût
   diffèrent de la capture complète (vue 2 : 2,36 M contre 2,60 M). Ne comparer que des séquences
   identiques.
@@ -262,7 +264,16 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       les saccades. Reste, optionnel : décodage d'altitude dans un worker (≈ 1,1 ms par tuile sur le
       thread principal), `compileAsync`.
 - [ ] **L2.7** Presets de qualité (Low / Medium / High / Ultra) dans `config.js` et le panneau MFD.
-- [ ] **L2.8** Exposition automatique : histogramme de luminance en compute shader, adaptation temporelle.
+- [x] **L2.8** Exposition automatique : histogramme de luminance en compute shader, adaptation temporelle.
+      Fait : `AutoExposureNode` — passe compute sur une grille fixe de 256×144 points de l'image TAAU
+      (avant bloom), histogramme de 64 classes de log₂ luminance sur [−8, 10], moyenne entre les
+      percentiles 40 et 90 (soleil et ombres profondes exclus), adaptation exponentielle (3/s vers le
+      clair, 1/s vers le sombre), état sur le GPU, sans relecture. Correction de l'exposition de base
+      (0,35) : 60 % de l'écart à une luminance de référence de 1,32 (moyenne géométrique des vues de
+      jour), bornée à [−1,5 ; +1] EV. Luminances mesurées : 2,35 / 0,77 / 1,32 / 0,22 / 1,86 / 0,88
+      (vues 1 à 6), soit −0,5 / +0,5 / 0 / +1 (borne) / −0,3 / +0,3 EV. Compensation totale (100 %)
+      essayée d'abord : vallées de la vue 1 trop sombres, coucher de soleil de la vue 4 sans ambiance.
+      Coût ≈ +0,03 ms. Coupée en SAR et sur WebGL2 (pas d'atomiques) ; case du panneau.
 - [x] **L2.9** Fiabiliser les mesures : `GPUTimer` avec une mesure par frame (horodatages de passe
       attribués à la frame) exportée par sous-système (terrain, ciel, post-traitement) ; `summary.fps.avg`
       calculé comme frames / durée au lieu de la moyenne des FPS instantanés.
@@ -377,6 +388,8 @@ Notes de lecture :
 | 2026-11-24 | L2.3 (bloom) | Plan 1 (basse alt.) | 94 s | 119,3 | 81,3 | 61,3 | 5,0 (6,3) | 1 / 0 | 2,67 M | 664 |
 | 2026-11-24 | L2.4 (TAAU, résolution dynamique ; échelle 1 tout le vol) | Vol par défaut | 128 s | 119,3 | 106,4 | 62,9 | 4,1 (6,3) | 0 / 0 | 2,12 M | 552 |
 | 2026-11-24 | L2.4 (TAAU, résolution dynamique ; échelle 1 tout le vol) | Plan 1 (basse alt.) | 94 s | 119,4 | 84,7 | 59,9 | 5,1 (6,3) | 0 / 0 | 2,67 M | 664 |
+| 2026-11-24 | L2.8 (exposition automatique) | Vol par défaut | 128 s | 119,3 | 105,3 | 62,9 | 4,1 (6,3) | 1 / 0 | 2,12 M | 552 |
+| 2026-11-24 | L2.8 (exposition automatique) | Plan 1 (basse alt.) | 94 s | 119,2 | 82,0 | 61,0 | 5,3 (6,5) | 1 / 0 | 2,67 M | 664 |
 
 Pour mémoire, la configuration n°4 de `BENCHMARKS.md` (même machine, Chrome 146, ancien moteur
 geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,7 / 76,3 / 35,2).
@@ -412,6 +425,9 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 | 2026-11-24 | **Pleine résolution** — L2.4 : TAAU + bloom, échelle 1, capture 2 (référence) | 3,08 | 4,46 | 3,63 | 3,33 | 3,51 | 3,26 |
 | 2026-11-24 | **Pleine résolution** — TAAU + bloom, échelle 0,75 | 2,82 | 3,88 | 2,95 | 2,71 | 2,65 | 2,99 |
 | 2026-11-24 | **Pleine résolution** — TAAU + bloom, échelle 0,5 | 2,13 | 2,77 | 2,57 | 2,25 | 2,43 | 2,28 |
+| 2026-11-24 | **Pleine résolution** — L2.8 sans exposition automatique | 3,09 | 4,66 | 4,11 | 3,76 | 3,53 | 3,26 |
+| 2026-11-24 | **Pleine résolution** — L2.8, capture 1 | 3,12 | 5,10 | 4,14 | 4,03 | 3,28 | 3,90 |
+| 2026-11-24 | **Pleine résolution** — L2.8, capture 2 | 3,12 | 4,49 | 3,66 | 3,37 | 3,16 | 3,30 |
 
 Les lignes « GPU ms méd. » antérieures à L2.9 ne sont pas exploitables (somme des passes, fréquence
 du GPU fixée par le régulateur). Les lignes « coût GPU » de L2.9 à L2.3 ont été mesurées à 1028×645
@@ -456,11 +472,21 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 | 2026-11-24 | Mesure du coût GPU | Répétitions = frames de nœuds successives | Mise à jour « par rendu » impossible pour TRAA et bloom : three compte chaque rendu de quad comme un rendu, d'où des rendus imbriqués de la scène |
 | 2026-11-24 | Anti-crénelage | TAAU (`TAAUNode`) au lieu de TRAA, à toutes les échelles | Seul nœud de three r187 qui reconstruit la résolution de sortie depuis une passe de scène réduite ; changer de nœud selon l'échelle recompilerait la chaîne au moment d'une surcharge. Image identique à l'échelle 1, +0,1 à +0,8 ms |
 | 2026-11-24 | Signal de la résolution dynamique | Temps GPU par rendu (médiane sur 30 frames), budget 60 FPS, hausse par paliers après 2 s | L'intervalle entre frames vaut l'intervalle de rafraîchissement à vsync (un écran 60 Hz semble toujours au budget) et grimpe pendant la mesure saturée ; le régulateur de fréquence masque la marge, d'où une hausse par essais, défaite en une fenêtre si elle surcharge |
+| 2026-11-24 | Exposition automatique | Compensation partielle (60 %) autour de l'exposition de base, bornée à [−1,5 ; +1] EV, calée sur les vues de jour | La compensation totale uniformise les scènes (neige grise, crépuscule comme en plein jour) ; l'exposition de base, réglée sur les vues de référence, reste l'aspect de jour. Correction appliquée sur le GPU (pas de latence de relecture) |
 | 2026-11-23 | Vitesse par défaut | 560 m/s | Vitesse réelle de l'ancien défaut (800 unités Mercator/s) : benchmarks comparables à la baseline |
 
 ## Journal des sessions
 
 <!-- Entrée la plus récente en haut. -->
+
+### 2026-11-24 (12)
+- Fait : L2.8. Commit : exposition automatique par histogramme GPU (`AutoExposureNode`), case du
+  panneau, luminance adaptée dans les captures (`window.osf.adaptedLuminance()`), README.
+- Vérifié : luminances mesurées identiques d'une capture à l'autre ; adaptation vue 1 → vue 4 à 90 %
+  en ≈ 2,3 s, retour en ≈ 1 s ; coût ≈ +0,03 ms ; vols p1 62,9 / 61,0 ; SAR sans correction,
+  `elevation` avec.
+- Problème ouvert : dispersion du coût GPU des vues 2 à 5 (±0,5 ms entre captures identiques).
+- Prochaine étape : L2.7 (voir État courant), puis clôture du lot 2.
 
 ### 2026-11-24 (11)
 - Fait : L2.4. Trois commits : TAAU à la place de TRAA, résolution dynamique pilotée par le temps GPU
