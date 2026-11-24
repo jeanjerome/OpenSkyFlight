@@ -22,6 +22,7 @@ import { eciToEcefMatrix, julianDate, moonDirectionECI, sunDirectionECI } from '
 import { NIGHT_SKY_ILLUMINANCE, moonIlluminance, moonPhaseFactor, sunIlluminance } from './skyIlluminance.js';
 import {
   BLOOM_THRESHOLD_FLOOR,
+  CITY_LIGHTS_ADAPTATION_ALBEDO,
   DISTANT_GROUND_ALBEDO,
   EMISSIVE_EXPOSURE_SHARE,
   SCENE_UNIT_LUMINANCE,
@@ -193,6 +194,11 @@ export default class AtmosphericSky {
      */
     this.emissiveExposure = uniform(1).setGroup(renderGroup);
     this._environmentExposure = 1;
+    /**
+     * Mean luminance (cd/m²) of the town lights the camera overlooks
+     * (CityLights.viewLuminance): the eye adapts to them (see _updateNightLight)
+     */
+    this.groundLightsLuminance = 0;
 
     // The light of the scene: the sun, or the moon on a moonlit night. Its
     // direction and its brightness relative to the sun, for the light
@@ -455,7 +461,8 @@ export default class AtmosphericSky {
    * the moon sets the exposure before the scene (preExposure): once the sun
    * is lower than NIGHT_EXPOSURE_START_ELEVATION, it makes up for the falling
    * light, so that only NIGHT_EXPOSURE_VISIBLE_SHARE of the drop (in stops)
-   * remains visible. When the moon outshines the twilight, it becomes the
+   * remains visible. The lights of the towns in view add to that light level,
+   * as the eye adapts to them. When the moon outshines the twilight, it becomes the
    * light of the scene, with its phase.
    */
   _updateNightLight(geo, sunElevation) {
@@ -471,7 +478,9 @@ export default class AtmosphericSky {
     const moonElevation = Math.asin(THREE.MathUtils.clamp(moonECEF.dot(this._up), -1, 1)) / DEG2RAD;
     const twilight = sunIlluminance(sunElevation);
     const moonlight = moonIlluminance(moonElevation, phaseAngle);
-    const total = twilight + moonlight + NIGHT_SKY_ILLUMINANCE;
+    // Town lights count as the illuminance that would light the ground as brightly
+    const townLights = (Math.PI * this.groundLightsLuminance) / CITY_LIGHTS_ADAPTATION_ALBEDO;
+    const total = twilight + moonlight + NIGHT_SKY_ILLUMINANCE + townLights;
     const drop = Math.max(0, Math.log2(sunIlluminance(NIGHT_EXPOSURE_START_ELEVATION) / total));
     const preExposure = 2 ** ((1 - NIGHT_EXPOSURE_VISIBLE_SHARE) * drop);
     this.preExposure.value = preExposure;

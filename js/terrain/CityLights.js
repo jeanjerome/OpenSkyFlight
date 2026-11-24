@@ -23,12 +23,19 @@ import {
 import { CONFIG } from '../utils/config.js';
 import Logger from '../utils/Logger.js';
 import {
+  CITY_LIGHTS_ADAPTATION_FLOOR,
+  CITY_LIGHTS_ADAPTATION_MAX_RADIUS,
+  CITY_LIGHTS_ADAPTATION_MIN_RADIUS,
+  CITY_LIGHTS_ADAPTATION_RADIUS,
+  CITY_LIGHTS_ADAPTATION_SPEED_TO_BRIGHT,
+  CITY_LIGHTS_ADAPTATION_SPEED_TO_DARK,
   CITY_LIGHTS_COLOR,
   CITY_LIGHTS_LUMINANCE,
   CITY_LIGHTS_OFF_ELEVATION,
   CITY_LIGHTS_ON_ELEVATION,
   CITY_LIGHTS_REGION_TILES,
   CITY_LIGHTS_ZOOM,
+  SCENE_UNIT_LUMINANCE,
 } from '../constants/rendering.js';
 
 const TILE_SIZE = 256;
@@ -47,6 +54,14 @@ const LIGHT_SPILL = 0.05;
 /** Share of the cell the spot covers: the spot's mean over a cell */
 const SPOT_COVERAGE = (Math.PI * LIGHT_RADIUS ** 2) / LIGHT_CELL ** 2;
 const REGION_SIZE = CITY_LIGHTS_REGION_TILES * TILE_SIZE;
+
+/** Samples across the area whose mean light the eye adapts to (see _updateViewLuminance) */
+const ADAPTATION_GRID = 9;
+
+/** Lit share of the ground from the stored value (square root of the intensity), as the shader's contrast */
+function densityOf(stored) {
+  return Math.max(0, (stored * stored - 0.04) / 0.96) ** 2;
+}
 
 /** Seconds between texture uploads while the tiles of a region arrive */
 const UPLOAD_INTERVAL = 0.3;
@@ -156,6 +171,10 @@ export default class CityLights {
     this._context = this._canvas.getContext('2d', { willReadFrequently: true });
 
     this.node = this._buildNode(exposure);
+
+    /** Mean luminance (cd/m²) of the lit ground the camera overlooks, as the eye adapts to it */
+    this.viewLuminance = 0;
+    this._forward = new THREE.Vector3();
   }
 
   /**
@@ -178,6 +197,7 @@ export default class CityLights {
         const stored = texture(this.texture, st).r;
         // Contrast: the sensor's background goes, town centres stand out and
         // the glow the image spreads around them fades
+        // (densityOf on the CPU)
         const density = stored.mul(stored).sub(0.04).max(0).div(0.96).pow2().toVar();
 
         // Towns are lit everywhere; elsewhere lights gather in hamlets, where a
@@ -234,11 +254,13 @@ export default class CityLights {
   }
 
   /**
-   * @param {THREE.Vector3} cameraPosition - world position
+   * @param {THREE.Camera} camera
+   * @param {number} groundElevation - elevation of the ground below the camera (m)
    * @param {number} sunElevation - degrees
    * @param {number} dt - seconds
    */
-  update(cameraPosition, sunElevation, dt) {
+  update(camera, groundElevation, sunElevation, dt) {
+    const cameraPosition = camera.position;
     const dusk = (CITY_LIGHTS_OFF_ELEVATION - sunElevation) / (CITY_LIGHTS_OFF_ELEVATION - CITY_LIGHTS_ON_ELEVATION);
     this._level.value = CONFIG.textureMode === 'sar' ? 0 : THREE.MathUtils.smoothstep(dusk, 0, 1);
 
@@ -258,12 +280,69 @@ export default class CityLights {
     // The world origin moves when the terrain is rebuilt around a new place
     if (this._region && this.terrain.tileMap !== this._tileMap) this._placeRegion();
 
+    this._updateViewLuminance(camera, groundElevation, dt);
+
     this._sinceUpload += dt;
     if (this._dirty && this._sinceUpload >= UPLOAD_INTERVAL) {
       this.texture.needsUpdate = true;
       this._dirty = false;
       this._sinceUpload = 0;
     }
+  }
+
+  /**
+   * Mean luminance of the lit ground over a disc ahead of the camera, whose
+   * radius grows with the height above the ground (the area in view), from
+   * the region's image: over a town at low altitude the lights fill the view
+   * and the eye adapts to them, from high above they are a small part of it.
+   * The eye adapts to the logarithmic mean of the luminances in view, over
+   * the light of the unlit ground (CITY_LIGHTS_ADAPTATION_FLOOR), so that a
+   * town only counts once it fills much of the view.
+   * It follows the view at the eye's pace, faster toward light.
+   */
+  _updateViewLuminance(camera, groundElevation, dt) {
+    let target = 0;
+    const size = this._size.value;
+    if (this._region && this._level.value > 0 && size.x !== 0 && size.y !== 0) {
+      const height = Math.max(0, camera.position.y - groundElevation);
+      const radius = THREE.MathUtils.clamp(
+        height * CITY_LIGHTS_ADAPTATION_RADIUS,
+        CITY_LIGHTS_ADAPTATION_MIN_RADIUS,
+        CITY_LIGHTS_ADAPTATION_FLOOR,
+  CITY_LIGHTS_ADAPTATION_MAX_RADIUS,
+      );
+      const forward = camera.getWorldDirection(this._forward).setY(0);
+      if (forward.lengthSq() > 1e-6) forward.normalize();
+      const cx = camera.position.x + forward.x * radius * 0.5;
+      const cz = camera.position.z + forward.z * radius * 0.5;
+      const origin = this._origin.value;
+      let sum = 0;
+      let count = 0;
+      for (let j = 0; j < ADAPTATION_GRID; j++) {
+        for (let i = 0; i < ADAPTATION_GRID; i++) {
+          const u = ((i + 0.5) / ADAPTATION_GRID) * 2 - 1;
+          const v = ((j + 0.5) / ADAPTATION_GRID) * 2 - 1;
+          if (u * u + v * v > 1) continue;
+          const s = (cx + u * radius - origin.x) / size.x;
+          const t = (cz + v * radius - origin.y) / size.y;
+          count++;
+          let luminance = 0;
+          if (s >= 0 && s < 1 && t >= 0 && t < 1) {
+            const stored = this._data[Math.floor(t * REGION_SIZE) * REGION_SIZE + Math.floor(s * REGION_SIZE)] / 255;
+            luminance = densityOf(stored) * CITY_LIGHTS_LUMINANCE * SCENE_UNIT_LUMINANCE * this._level.value;
+          }
+          sum += Math.log2(luminance + CITY_LIGHTS_ADAPTATION_FLOOR);
+        }
+      }
+      target = Math.max(0, 2 ** (sum / count) - CITY_LIGHTS_ADAPTATION_FLOOR);
+    }
+    // In stops, from a floor far below any lit town
+    const floor = 1e-4;
+    const current = Math.log2(this.viewLuminance + floor);
+    const goal = Math.log2(target + floor);
+    const speed = goal > current ? CITY_LIGHTS_ADAPTATION_SPEED_TO_BRIGHT : CITY_LIGHTS_ADAPTATION_SPEED_TO_DARK;
+    const step = Math.sign(goal - current) * Math.min(Math.abs(goal - current), speed * dt);
+    this.viewLuminance = Math.max(0, 2 ** (current + step) - floor);
   }
 
   /** World bounds of the region, from its corners */

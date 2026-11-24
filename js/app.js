@@ -519,8 +519,9 @@ async function initApp() {
     groundElevation = geoTerrainManager.getGroundElevation(camera.position.x, camera.position.z);
 
     // --- Render phase ---
+    atmosphericSky.groundLightsLuminance = cityLights.viewLuminance;
     atmosphericSky.update(dt);
-    cityLights.update(camera.position, atmosphericSky.sunElevation, dt);
+    cityLights.update(camera, groundElevation, atmosphericSky.sunElevation, dt);
     if (timer) timer.begin('render');
     gpuTimer.beginFrame();
     renderer.info.reset();

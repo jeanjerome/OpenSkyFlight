@@ -182,3 +182,23 @@ export const CITY_LIGHTS_COLOR = [1, 0.62, 0.3];
 /** Sun elevations (degrees) between which the lights come on at dusk */
 export const CITY_LIGHTS_OFF_ELEVATION = 2;
 export const CITY_LIGHTS_ON_ELEVATION = -4;
+
+/**
+ * The eye adapts to the lights of the towns it overlooks: their logarithmic
+ * mean luminance over the ground ahead of and below the camera, in a radius of
+ * this many times the height above the ground (m, within the bounds), counts
+ * in the light level that sets the night exposure (see AtmosphericSky)...
+ */
+export const CITY_LIGHTS_ADAPTATION_RADIUS = 3;
+export const CITY_LIGHTS_ADAPTATION_MIN_RADIUS = 1500;
+export const CITY_LIGHTS_ADAPTATION_MAX_RADIUS = 20000;
+
+/** Luminance of unlit ground at night (cd/m²), under the logarithmic mean of the view (see CityLights) */
+export const CITY_LIGHTS_ADAPTATION_FLOOR = 1e-3;
+
+/** ...as the illuminance that would light ground of this albedo to that luminance */
+export const CITY_LIGHTS_ADAPTATION_ALBEDO = 0.2;
+
+/** Rates (per second, in stops) at which that adaptation follows a brighter or a darker view */
+export const CITY_LIGHTS_ADAPTATION_SPEED_TO_BRIGHT = 2;
+export const CITY_LIGHTS_ADAPTATION_SPEED_TO_DARK = 0.7;
