@@ -8,19 +8,23 @@ en fin de session.
 
 ## État courant (mis à jour le 2026-11-24, session 18)
 
-- **Lots terminés** : 0, 1 et 2, fusionnés dans `main` (lot 2 le 2026-11-24). Lot 2 : toutes les tâches faites sauf le reste optionnel de
+- **Lots terminés** : 0 à 3, fusionnés dans `main` (lots 2 et 3 le 2026-11-24). Lot 3 : bilan dans
+  **Mesures** (lignes « Clôture du lot 3 ») et constats visuels sous les tableaux. Lot 2 : toutes les tâches faites sauf le reste optionnel de
   L2.6 (décodage d'altitude dans un worker, `compileAsync`), reporté : p5 et p1 ne le justifient
   plus. Bilan dans **Mesures** (lignes « Clôture du lot 2 ») et constats visuels sous les tableaux.
 - **three.js** : r187 (import map d'`index.html`), mis à jour depuis r183 pour le TRAA compatible avec
   la profondeur inversée.
-- **Git** : lots 0 à 2 dans `main` ; lot 3 sur la branche locale `feat/render-atmosphere` (créée depuis
-  `main`, **non poussée**). Reprendre sur cette branche.
+- **Git** : lots 0 à 3 dans `main` (branche `feat/render-atmosphere` fusionnée puis supprimée). Le
+  lot 4 commence sur une nouvelle branche `feat/render-clouds` créée depuis `main`.
 - **Environnement local** : bundle three-tile construit, `npm install` fait (racine et
   `vendor/three-tile`), cache `cache/` chaud pour les vues de référence et les deux vols. Lancer
   `npm run dev` en tâche de fond avant toute mesure. Mesurer **sur l'écran intégré 120 Hz** : sur un
   écran 60 Hz, Chrome plafonne à 60 FPS (la résolution dynamique ne se déclenche plus à tort depuis
   L2.4, mais les FPS ne sont pas comparables).
-- **Référence de comparaison** : `benchmarks/render/lot2/` (état de clôture du lot 2, preset High :
+- **Référence de comparaison** : `benchmarks/render/lot3/` (état de clôture du lot 3 ; coût GPU des
+  vues : seconde capture `lot3-cap2/`, la première ayant un pic thermique sur la vue 6 ; second vol du
+  plan 1 dans `lot3-flight2/`), captures versionnées dans `docs/screenshots/render/lot3/` (6 vues et
+  deux vues de nuit). Ancienne référence : `benchmarks/render/lot2/` (état de clôture du lot 2, preset High :
   captures des **6** vues avec coût GPU **à pleine résolution**, échelle, luminance adaptée, draw
   calls et triangles, deux benchmarks de vol, non versionnés). Chiffres dans **Mesures**, lignes
   « Clôture du lot 2 » ; captures versionnées dans `docs/screenshots/render/lot2/`. **Les coûts GPU antérieurs à L2.4 ont été mesurés à
@@ -44,8 +48,7 @@ en fin de session.
   `js/utils/settingsStore.js`. `render:capture` et `render:benchmark` ouvrent l'app avec `?dev=1`
   (et HUD / mini-carte masqués par l'URL pour les captures), dans un profil vierge : preset High,
   identique à l'état d'avant L2.10, donc les mesures de référence restent comparables.
-- **Lot 3 en cours** sur `feat/render-atmosphere` (non poussée) : toutes les tâches faites (L3.1 à
-  L3.8), reste la clôture (voir « Prochaine session »). Code : `js/atmosphere/AtmosphericSky.js`
+- **Lot 3 terminé** (L3.1 à L3.10). Code : `js/atmosphere/AtmosphericSky.js`
   (contexte d'atmosphère dans `renderer.contextNode`, uniformes dans le groupe `render`, repère ECEF
   recalé chaque frame sous la caméra, horloge, soleil, lune, pré-exposition de nuit, aérosols tirés de
   la visibilité), `AerialPerspectiveVolume.js` (froxels par compute), `sunPosition.js`,
@@ -61,16 +64,13 @@ en fin de session.
   call) : tout uniforme commun à la frame doit passer en `renderGroup` ; le ray marching de takram lit
   un bruit bleu à `screenCoordinate`, absent d'un compute (`raymarchSampleOffset`) ; comparer
   WebGPU et WebGL2 avec `autoExposure=false` (exposition automatique WebGPU seulement).
-- **Prochaine session** : 1) trait clair ou sombre à l'horizon géométrique, au-delà du terrain (bord du
-  sol dessiné par le ciel de takram, visible vue 4) ; 2) lumières des villes de près : la donnée Black
-  Marble (≈ 450 m/pixel) reste grossière, une ville survolée à basse altitude sans lune paraît très
-  claire (l'exposition s'adapte à elle) ; 3) clôture du lot : captures versionnées
-  `docs/screenshots/render/lot3/`, bilan, fusion dans `main` avec l'accord de l'utilisateur.
-  Régression du p1 réglée (session 18, voir **Décisions**) : plan 1 p1 63,7 / 62,5 et p5 105,3
-  contre 61,7 et 81,3 au lot 2. Référence de comparaison du lot 3 : `benchmarks/render/l3-opaque/`
-  (6 vues) et `l3-opaque-flight1/`, `l3-opaque-flight2/` (vols). Worktree de `main` prêt dans
-  `../osf-main` (liens symboliques faits ; `node scripts/serve.js --port 3001` dedans).
-- **Suite** : clôture du lot 3, puis lot 4 (nuages volumétriques). Points ouverts : coût CPU de soumission (≈ 5 µs par
+- **Prochaine session** : lot 4, en commençant par L4.1 (textures de bruit 3D par compute). La
+  couche nuageuse plane actuelle suit déjà la courbure de la Terre (sous-divisée) ; les nuages
+  volumétriques devront faire de même (couche sphérique autour de la caméra) et reprendre le
+  contexte takram pour leur éclairage.
+- **Suite** : lot 4 (nuages volumétriques). Points ouverts : culling des tuiles par three presque
+  inopérant (sphère englobante calculée en coordonnées locales où l'épaisseur est en mètres et la
+  largeur en tuiles : rayon démesuré une fois mis à l'échelle), piste CPU et GPU pour le lot 5 ; coût CPU de soumission (≈ 5 µs par
   draw call) qui limitait Ultra à 120 Hz, à remesurer depuis qu’une tuile ne coûte plus qu’un draw call ; minimap OSM bloquée par la politique d'usage des tuiles
   d'OpenStreetMap (hors rendu, voir **Problèmes hors rendu relevés**).
 ---
@@ -496,6 +496,21 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       (instanciation, géométries fusionnées). Interrupteur des feux anticollision (gyrophares et
       éclats ; demande de l'utilisateur) : réglage « Anti-collision lights » de l'onglet Flight,
       touche O (celle des feux à éclats dans les simulateurs courants) ; les feux de position restent allumés.
+- [x] **L3.9** (ajoutée) Horizon : courbure de la Terre et sol lointain.
+      Fait : terrain abaissé de d²/2R autour de la caméra dans le nœud d'élévation partagé de
+      three-tile (`tile/curvature.ts`), test de visibilité des tuiles abaissé d'autant, couche nuageuse
+      sous-divisée et courbée ; sous l'horizon, la passe du ciel dessine le sol de l'ellipsoïde (albédo
+      `DISTANT_GROUND_ALBEDO`, éclairé par le soleil ou la lune et le ciel, vu à travers l'air) au lieu
+      de la diffusion seule de takram, dont la table saute à l'horizon (trait clair) et laissait une
+      bande de brume entre le bord du terrain et l'horizon. Images de jour inchangées ailleurs qu'à
+      l'horizon (PSNR ≥ 42 dB), coût GPU inchangé.
+- [x] **L3.10** (ajoutée) Villes survolées de près sans lune.
+      Fait : la moyenne logarithmique de la luminance des lumières des villes sur un disque devant la
+      caméra (rayon 3 × la hauteur sol, 1,5 à 20 km), suivie au rythme de l'œil, s'ajoute à
+      l'éclairement qui fixe la pré-exposition (`CityLights.viewLuminance`). Une ville qui remplit la
+      vue n'est plus une plaque grise saturée mais des points orangés sur un sol sombre ; vue de haut,
+      où elle n'occupe qu'une petite part de la vue, rien ne change (la moyenne arithmétique
+      assombrissait la montagne au clair de lune à cause de Chamonix).
 - [x] **L3.7** Vérifier les modes `sar` et `elevation` (ciel désactivé).
       Fait : SAR sans atmosphère (ciel noir, éclairage latéral, sans tone mapping) ; `elevation` avec
       ciel et perspective aérienne, un peu clair (albédo élevé de la palette hypsométrique), accepté.
@@ -618,6 +633,9 @@ Notes de lecture :
 | 2026-11-24 | L3 tuiles opaques | Vol par défaut | 128 s | 119,4 | 108,7 | 63,7 | 4,3 (6,4) | 0 / 0 | 1,11 M | 316 |
 | 2026-11-24 | L3 tuiles opaques, capture 1 | Plan 1 (basse alt.) | 94 s | 119,5 | 105,3 | 63,7 | 4,8 (6,5) | 1 / 0 | 1,38 M | 372 |
 | 2026-11-24 | L3 tuiles opaques, capture 2 | Plan 1 (basse alt.) | 94 s | 119,5 | 105,3 | 62,5 | 4,9 (6,5) | 0 / 0 | 1,38 M | 372 |
+| 2026-11-24 | **Clôture du lot 3** (preset High) | Vol par défaut | 128 s | 119,3 | 108,7 | 63,3 | 4,3 (6,3) | 0 / 0 | 1,11 M | 316 |
+| 2026-11-24 | **Clôture du lot 3** (preset High), capture 1 | Plan 1 (basse alt.) | 94 s | 119,2 | 105,3 | 64,1 | 4,8 (6,6) | 1 / 1 | 1,39 M | 372 |
+| 2026-11-24 | **Clôture du lot 3** (preset High), capture 2 | Plan 1 (basse alt.) | 94 s | 119,5 | 105,3 | 64,1 | 4,8 (6,5) | 0 / 0 | 1,38 M | 372 |
 | 2026-11-24 | L2.7 preset Ultra, LODThreshold 1,4 | Vol par défaut | 128 s | 115,6 | 85,5 | 53,5 | 5,0 (6,5) | 1 / 0 | 2,84 M | 714 |
 
 Pour mémoire, la configuration n°4 de `BENCHMARKS.md` (même machine, Chrome 146, ancien moteur
@@ -669,6 +687,7 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 | 2026-11-24 | **Pleine résolution** — L3 nuit, feux de l'avion, villes (jour) | 4,93 | 6,28 | 5,52 | 4,89 | 4,63 | 4,77 |
 | 2026-11-24 | **Pleine résolution** — L3 sans fond de tuile three-tile | 4,23 | 5,65 | 5,53 | 4,74 | 4,43 | 4,68 |
 | 2026-11-24 | **Pleine résolution** — L3 tuiles opaques | 3,46 | 3,44 | 3,94 | 3,88 | 4,35 | 4,00 |
+| 2026-11-24 | **Pleine résolution** — **Clôture du lot 3** (courbure, sol lointain ; seconde capture) | 3,44 | 3,43 | 3,49 | 3,40 | 3,80 | 3,48 |
 | 2026-11-24 | L3 sans fond de tuile — draw calls (contre 549 / 657 / 663 / 603 / 631 / 603) | 307 | 361 | 364 | 334 | 348 | 334 |
 | 2026-11-24 | L2.7 Low et Medium (LODThreshold 0,9) — draw calls / triangles | 382 / 1,26 M | 412 / 1,53 M | 454 / 1,69 M | 388 / 1,30 M | 384 / 1,21 M | 382 / 1,26 M |
 | 2026-11-24 | L2.7 Ultra 1,4 — draw calls / triangles | 712 / 2,66 M | 790 / 3,36 M | 820 / 3,45 M | 730 / 2,77 M | 768 / 2,78 M | 724 / 2,69 M |
@@ -682,6 +701,22 @@ pour la géométrie seulement. Le coût GPU réel d'une frame est ≈ 3–5 ms �
 Bilan du lot 2 (état de clôture contre lot 1 + altitude CPU) : vol par défaut p5 73,0 → 106,4 et
 p1 33,6 → 61,3 (frames > 33 ms 50 → 4), plan 1 p5 62,5 → 81,3 et p1 43,1 → 61,7 ; coût GPU d'une frame
 3,1 à 5,1 ms à 4112×2580, loin du budget de 16,6 ms. Critère de sortie respecté (p1 en hausse).
+
+Bilan du lot 3 (état de clôture contre lot 2) : atmosphère physique, heure du jour, nuit et feux de
+l'avion pour un coût GPU par vue de 3,4 à 3,8 ms à 4112×2580 (lot 2 : 3,1 à 5,1), grâce aux tuiles
+opaques et sans fond ; vol par défaut p5 106,4 → 108,7 et p1 61,3 → 63,3, plan 1 p5 81,3 → 105,3 et
+p1 61,7 → 64,1, draw calls en vol divisés par 1,8. Critère de sortie respecté (p1 en hausse).
+
+Constats visuels après le lot 3 (`docs/screenshots/render/lot3/`, preset High, 6 vues et deux vues de
+nuit) :
+- Ciel, perspective aérienne et lumière du ciel issus des mêmes tables : profondeur au loin, contre-jour
+  crédible (vues 4 et 6), vallées voilées par les aérosols, coucher de soleil rougi.
+- Horizon : relief lointain abaissé par la courbure, fondu dans la brume, sans trait ni bande.
+- Nuit : étoiles, lune et clair de lune bleuté sur la neige (`night-moon-view-4`), villes en points
+  orangés sur un sol sombre de près (`night-town-view-3`), feux et postcombustion de l'avion.
+- Restent : terrain proche un peu voilé vu d'altitude, image un peu terne (étalonnage L6.3), nappe
+  nuageuse plane (lot 4), pas d'ombres portées (lot 5), lumières des villes en semis aléatoire (pas
+  de rues), donnée Black Marble grossière.
 
 Constats visuels après le lot 2 (`docs/screenshots/render/lot2/`, preset High, 6 vues) :
 - Image HDR stable : TAAU sans crénelage ni scintillement, bords et détails lointains comme avec MSAA.
@@ -745,6 +780,9 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 | 2026-11-24 | Halos et flammes | Passe dédiée (calque, demi-résolution) ajoutée après le TAAU, test d'occultation dans le shader | Additifs et transparents dans la passe de scène, ils prendraient la perspective aérienne du terrain derrière eux et le TAAU les traînerait (vitesses du fond) |
 | 2026-11-24 | Régression du p1 du plan 1 (−12 % après la nuit) | Réduire le coût plutôt que l'accepter ou réserver des effets aux presets élevés (choix de l'utilisateur) ; cause trouvée dans three-tile, pas dans la nuit | three-tile dessinait chaque tuile deux fois (fond uni à plat au niveau de la mer, invisible sous l'imagerie) : 251 draw calls inutiles en vol, chacun alourdi par l'éclairage de l'atmosphère. Fond masqué (`backgroundMaterial.visible = false`) : CPU de rendu en vol 3,84 → 2,84 ms (`main` : 2,71) |
 | 2026-11-24 | Transparence des tuiles | Sources d'imagerie de three-tile déclarées opaques (`transparent: false`, `true` par défaut dans three-tile) | Tuiles dans la liste transparente : triées du loin vers le près, sans rejet précoce par la profondeur, le shader du terrain tournait sur tous les versants cachés. Images identiques (PSNR ≥ 45 dB), coût GPU −0,1 à −2,2 ms selon la vue |
+| 2026-11-24 | Courbure de la Terre | Terrain abaissé de d²/2R autour de la caméra dans le nuanceur de sommets (suggestion de l'utilisateur), positions horizontales inchangées | La carte plate ne rejoignait pas l'horizon de la sphère de l'atmosphère et plaçait les sommets lointains trop haut (3 km à 200 km). Repère local recalé sous la caméra : rien ne change près de l'avion (altitude sol, collisions) ; écart corde/arc 4 m à 200 km ; vecteurs de mouvement du TAAU sans la variation de la courbure (0,07 m à 100 km par frame à 560 m/s, sous le pixel) ; la sphère englobante de three, déjà démesurée, ne coupe aucune tuile |
+| 2026-11-24 | Sol au-delà des tuiles | Sol diffus de l'ellipsoïde calculé dans la passe du ciel (éclairement et diffusion jusqu'au point de takram) plutôt que la luminance du ciel de takram sous l'horizon | Sous l'horizon, takram ne rend que la lumière diffusée le long du rayon, avec un saut de sa table de diffusion à l'horizon (trait clair) ; un maillage de sol supplémentaire coûterait des draw calls et de la géométrie pour un rendu identique |
+| 2026-11-24 | Adaptation aux lumières des villes | Moyenne logarithmique de leur luminance sur la zone en vue, calculée sur le CPU depuis la mosaïque Black Marble, ajoutée à l'éclairement de la pré-exposition | Déterministe comme la pré-exposition (pas de relecture GPU ni de boucle) ; la moyenne arithmétique laissait une ville lointaine assombrir tout un paysage au clair de lune, la moyenne logarithmique (comme l'adaptation de l'œil et le tone mapping de Reinhard) ne compte une ville que si elle remplit la vue |
 | 2026-11-23 | Vitesse par défaut | 560 m/s | Vitesse réelle de l'ancien défaut (800 unités Mercator/s) : benchmarks comparables à la baseline |
 
 ## Journal des sessions
@@ -764,7 +802,13 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
   plan 1 p1 63,7 et 62,5, p5 105,3 ; vol par défaut p1 63,7, p5 108,7 (lot 2 : 61,3 et 106,4).
   Images identiques (PSNR ≥ 45 dB), modes `sar` et `elevation` vérifiés.
 - Étoiles rendues à chaque frame : < 0,03 ms de CPU au profil, laissées en l'état.
-- Prochaine étape : voir État courant (« Prochaine session »).
+- Ensuite, à la demande de l'utilisateur : L3.9 (courbure de la Terre, suggérée par l'utilisateur, et
+  sol lointain sous l'horizon) et L3.10 (adaptation de l'exposition de nuit aux villes en vue). Détails
+  sous les tâches et dans **Décisions**.
+- Clôture du lot 3 : captures `docs/screenshots/render/lot3/`, mesures « Clôture du lot 3 » (vues 3,40
+  à 3,80 ms ; plan 1 p1 64,1 deux fois ; vol par défaut p1 63,3), bilan et constats visuels, lint
+  sans erreur ; branche fusionnée dans `main` avec l'accord de l'utilisateur.
+- Prochaine étape : lot 4, L4.1 (voir État courant).
 
 ### 2026-11-24 (17)
 - Fait : L3.6 (nuit : étoiles, lune et clair de lune, pré-exposition, vision nocturne, lumières des
