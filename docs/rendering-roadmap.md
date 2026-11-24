@@ -9,7 +9,8 @@ en fin de session.
 ## État courant (mis à jour le 2026-11-24)
 
 - **Lots terminés** : 0 et 1 (L1.4 achevée pendant le lot 2). **Lot en cours** : lot 2 ; L2.9, L2.5,
-  L2.1, L2.2, L2.3, L2.4 et L2.8 terminées, L2.6 en grande partie (graphe d'élévation partagé, PMREM sur toute la scène).
+  L2.1, L2.2, L2.3, L2.4, L2.8 et L2.10 terminées, L2.7 implémentée (mesures et réglage des valeurs
+  restants), L2.6 en grande partie (graphe d'élévation partagé, PMREM sur toute la scène).
 - **three.js** : r187 (import map d'`index.html`), mis à jour depuis r183 pour le TRAA compatible avec
   la profondeur inversée.
 - **Git** : branche `feat/render-hdr-pipeline` (depuis `main`), non poussée.
@@ -32,15 +33,23 @@ en fin de session.
   (`AutoExposureNode`, histogramme mesuré sur l'image TAAU) → tone mapping et espace couleur en sortie.
   Seuil du bloom fixé par `AtmosphericSky` (voir L2.3) ; échelle de la passe de scène pilotée par
   `AdaptiveQualityManager` (voir L2.4), plafonnée par `CONFIG.renderScale`.
-- **Ordre conseillé pour la suite du lot 2** : L2.10 (définition du panneau de configuration, **à
-  décider avec l'utilisateur avant de coder**) → L2.7 (presets, qui s'y intègrent) → clôture du lot
-  (captures dans `docs/screenshots/render/lot2/`, fusion dans `main` après accord de l'utilisateur) ;
-  reste de L2.6 (décodage d'altitude dans un worker, `compileAsync`) seulement si p5 ou p1 le
-  justifient.
-- **Prochaine session — commencer par L2.10** : les presets de qualité (L2.7) obligent à revoir le
-  panneau, qui a grandi par ajouts successifs. Présenter à l'utilisateur l'état des lieux de L2.10 et
-  les questions qui y sont listées, proposer une conception (rôle, intégration, design, maquette),
-  la faire valider, puis implémenter L2.10 et L2.7 ensemble.
+- **Réglages** : menu ouvert par Échap (`js/ui/ControlPanel.js`), généré depuis
+  `js/utils/settingsSchema.js` ; presets et correspondance réglages utilisateur → valeurs techniques
+  dans `js/utils/qualityPresets.js` ; `localStorage` et paramètres d'URL dans
+  `js/utils/settingsStore.js`. `render:capture` et `render:benchmark` ouvrent l'app avec `?dev=1`
+  (et HUD / mini-carte masqués par l'URL pour les captures), dans un profil vierge : preset High,
+  identique à l'état d'avant L2.10, donc les mesures de référence restent comparables.
+- **Ordre conseillé pour la suite du lot 2** : fin de L2.7 (mesurer chaque preset, régler les
+  valeurs) → clôture du lot (captures dans `docs/screenshots/render/lot2/`, fusion dans `main` après
+  accord de l'utilisateur) ; reste de L2.6 (décodage d'altitude dans un worker, `compileAsync`)
+  seulement si p5 ou p1 le justifient.
+- **Prochaine session — finir L2.7** : mesurer Low / Medium / High / Ultra sur les 6 vues
+  (`render:capture -- --set quality=low`, coût GPU à pleine résolution : passer aussi
+  `--set dynamicResolution=false`, sinon l'échelle varie) et en vol (`render:benchmark -- --set
+  quality=low`, p1), puis ajuster `IMAGE_SHARPNESS` et `TERRAIN_DETAIL` dans `qualityPresets.js`
+  (valeurs actuelles provisoires : échelle 0,6 / 0,8 / 1 ; LODThreshold 0,9 / 1,2 / 1,6 ; anisotropie
+  4 / 16 / 16). Vérifier aussi pourquoi l'échelle dynamique restait à 0,7 en session interactive
+  (GPU ≈ 3,8 ms à 120 Hz) : remontée trop lente après le chargement des tuiles ?
 ---
 
 ## Comment reprendre le travail (début de session)
@@ -269,6 +278,15 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       dans `GeoTerrainManager.js`. Un preset = un jeu de valeurs appliqué par `update()`, un réglage
       modifié à la main fait passer en « Custom ». Mesurer chaque preset sur les vues de référence
       (coût GPU, vues 1 et 6 pour les petits écarts) et en vol (p1). Dépend de L2.10.
+      Implémenté avec L2.10 (2026-11-24) : `maxTotalTiles` et `lodRingRadius` n'étaient plus lus par
+      personne (vestiges de l'ancien moteur de terrain), supprimés ; three-tile n'offre pas de
+      « distance de vue » (les tuiles grossières couvrent tout jusqu'à l'horizon), seulement
+      `LODThreshold` (à chaud) et l'anisotropie (tuiles chargées ensuite, donc rechargement du
+      terrain). Réglages utilisateur : Image sharpness → `renderScale` (même effet sur écran Retina ou
+      standard ; `maxPixelRatio` reste un réglage brut de l'onglet Developer, appliqué à chaud),
+      Prioritise smoothness → `dynamicResolution`, Terrain detail → `terrainLodThreshold` +
+      `textureAnisotropy`, Sun glow → bloom, Eye adaptation → exposition automatique. Preset High =
+      état d'avant. **Reste** : les mesures et le réglage des valeurs (voir État courant).
 - [x] **L2.8** Exposition automatique : histogramme de luminance en compute shader, adaptation temporelle.
       Fait : `AutoExposureNode` — passe compute sur une grille fixe de 256×144 points de l'image TAAU
       (avant bloom), histogramme de 64 classes de log₂ luminance sur [−8, 10], moyenne entre les
@@ -279,7 +297,7 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       (vues 1 à 6), soit −0,5 / +0,5 / 0 / +1 (borne) / −0,3 / +0,3 EV. Compensation totale (100 %)
       essayée d'abord : vallées de la vue 1 trop sombres, coucher de soleil de la vue 4 sans ambiance.
       Coût ≈ +0,03 ms. Coupée en SAR et sur WebGL2 (pas d'atomiques) ; case du panneau.
-- [ ] **L2.10** Panneau de configuration : définir son rôle, son intégration à l'application et son
+- [x] **L2.10** Panneau de configuration : définir son rôle, son intégration à l'application et son
       design, puis le reconstruire (préalable à L2.7). **Conception à valider avec l'utilisateur.**
       État des lieux (2026-11-24) :
       - `index.html` (balisage écrit à la main, contrôle par contrôle) + `js/ui/ControlPanel.js`
@@ -317,6 +335,24 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
         à la main, avec `CONFIG_VALIDATION` dans le même schéma.
       - Design : garder l'esthétique MFD (cohérente avec le HUD) ou une interface plus sobre ;
         lisibilité, densité, sélecteur de preset, comportement sur petit écran.
+      Décisions de l'utilisateur (2026-11-24) :
+      - Menu d'options à onglets : Graphics / World / Flight / Controls / Developer. Les réglages
+        doivent être compréhensibles par l'utilisateur, sans exposer les paramètres techniques : chaque
+        réglage utilisateur pilote des valeurs techniques, réglables une à une dans l'onglet Developer.
+      - Échap ouvre le menu et met le vol en pause ; la scène reste rendue derrière le panneau
+        translucide pour voir l'effet des réglages. Reprise par « Resume » ou un clic dans la scène.
+      - Style sobre (verre sombre, typographie lisible) avec le vert du HUD comme seul accent.
+      - Persistance `localStorage` + paramètres d'URL prioritaires (non mémorisés).
+      - Onglet Developer et raccourcis K, X, B caché sauf `?dev=1` (mémorisé jusqu'à `?dev=0`).
+      - Interface en anglais.
+      Fait : `settingsSchema.js` (libellé, aide, type, plage, onglet, section, persistance,
+      rechargement du terrain ; la validation de `config.js` en dérive), `ControlPanel.js` réécrit
+      (génération depuis le schéma, aide de la ligne survolée en pied de panneau, mesures en direct
+      dans Developer, rechargement du terrain différé à la fermeture), `settingsStore.js`,
+      `shortcuts.js` (onglet Controls, remplace l'aide `#help`), indication « Click to fly · Menu Esc »
+      tant que la souris est libre. Zone de survol du bord droit et thème MFD du panneau supprimés.
+      Vérifié dans Chrome : presets, passage en Custom puis reconnaissance d'un preset, persistance
+      après rechargement, Échap, largeur 400 px, captures sans HUD ni indication.
 - [x] **L2.9** Fiabiliser les mesures : `GPUTimer` avec une mesure par frame (horodatages de passe
       attribués à la frame) exportée par sous-système (terrain, ciel, post-traitement) ; `summary.fps.avg`
       calculé comme frames / durée au lieu de la moyenne des FPS instantanés.
@@ -521,6 +557,13 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 ## Journal des sessions
 
 <!-- Entrée la plus récente en haut. -->
+
+### 2026-11-24 (13)
+- Fait : L2.10 (conception validée avec l'utilisateur, voir les décisions sous L2.10) et la partie
+  code de L2.7 (presets, réglages utilisateur et leur correspondance technique).
+- Constat : `maxTotalTiles` et `lodRingRadius` étaient morts ; « distance de vue » remplacée par
+  Terrain detail (`LODThreshold` + anisotropie).
+- Prochaine étape : mesures et réglage des presets (fin de L2.7), puis clôture du lot 2.
 
 ### 2026-11-24 (12)
 - Fait : L2.8. Commit : exposition automatique par histogramme GPU (`AutoExposureNode`), case du
