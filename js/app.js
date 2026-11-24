@@ -276,6 +276,7 @@ async function initApp() {
   window.osf = {
     referenceViews: REFERENCE_VIEWS.map((v) => v.name),
     setReferenceView: (n) => applyReferenceView(n - 1),
+    setConfig: (key, value) => update(key, value),
     pendingTileDownloads: () => geoTerrainManager.pendingDownloads,
     lastGpuTimeMs: () => gpuTimer.getLastGPUTimeMs(),
     // Draw calls and triangles of the last frame

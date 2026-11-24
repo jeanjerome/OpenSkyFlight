@@ -5,6 +5,11 @@
 //
 // Requires the dev server (`npm run dev`) and Google Chrome.
 // Usage: node scripts/render-capture.js --out benchmarks/render/<label> [--headless] [--width 2056 --height 1290]
+//        [--views 1,6] [--set bloomEnabled=false ...]
+//
+// --views captures only the listed views (1-based). --set overrides a configuration
+// value (js/utils/config.js) before the captures, e.g. to measure the cost of an
+// effect by difference; values are parsed as JSON, falling back to a string.
 //
 // Output: view-<n>.png screenshots (HUD and minimap hidden) and views.json.
 // Chrome runs headed with vsync by default: headless or uncapped frame pacing
@@ -31,6 +36,8 @@ const { values } = parseArgs({
     height: { type: 'string', default: '1290' },
     measureMs: { type: 'string', default: '5000' },
     renders: { type: 'string', default: '12' },
+    views: { type: 'string' },
+    set: { type: 'string', multiple: true, default: [] },
   },
 });
 if (!values.out) {
@@ -58,6 +65,26 @@ await page.goto(values.url, { waitUntil: 'load' });
 await page.waitForFunction(() => window.osf !== undefined, null, { timeout: 30000 });
 await page.keyboard.press('h'); // hide HUD
 await page.keyboard.press('m'); // hide minimap
+
+const overrides = {};
+for (const assignment of values.set) {
+  const eq = assignment.indexOf('=');
+  if (eq < 1) {
+    console.error(`Invalid --set ${assignment}, expected key=value`);
+    process.exit(1);
+  }
+  const raw = assignment.slice(eq + 1);
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    value = raw;
+  }
+  overrides[assignment.slice(0, eq)] = value;
+}
+for (const [key, value] of Object.entries(overrides)) {
+  await page.evaluate(([k, v]) => window.osf.setConfig(k, v), [key, value]);
+}
 
 /** Wait until no tile download has been pending for 3 s. Returns the wait in ms, -1 on timeout. */
 async function waitTilesSettled(maxMs = 90000) {
@@ -141,8 +168,9 @@ async function measureGpu(renders, ms) {
 }
 
 const views = await page.evaluate(() => window.osf.referenceViews);
+const selected = values.views ? values.views.split(',').map(Number) : views.map((_, i) => i + 1);
 const results = [];
-for (let n = 1; n <= views.length; n++) {
+for (const n of selected) {
   await page.evaluate((i) => window.osf.setReferenceView(i), n);
   await page.waitForTimeout(1500);
   const tilesSettledMs = await waitTilesSettled();
@@ -163,6 +191,7 @@ const report = {
   userAgent: await page.evaluate(() => navigator.userAgent),
   viewport: `${values.width}x${values.height}@2x`,
   headless: values.headless,
+  overrides,
   results,
   errors,
 };

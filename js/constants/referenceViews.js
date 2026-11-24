@@ -70,4 +70,16 @@ export const REFERENCE_VIEWS = [
     showClouds: true,
     cloudAltitude: 4500,
   },
+  {
+    name: 'Mont Blanc massif — facing the low sun',
+    lat: 45.93,
+    lon: 6.98,
+    altitude: 4200,
+    heading: 225,
+    pitch: -2,
+    sunElevation: 10,
+    sunCompassAzimuth: 245,
+    cameraMode: 'chase',
+    showClouds: false,
+  },
 ];
