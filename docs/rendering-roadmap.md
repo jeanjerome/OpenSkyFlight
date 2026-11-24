@@ -9,8 +9,7 @@ en fin de session.
 ## État courant (mis à jour le 2026-11-24)
 
 - **Lots terminés** : 0 et 1 (L1.4 achevée pendant le lot 2). **Lot en cours** : lot 2 ; L2.9, L2.5,
-  L2.1, L2.2, L2.3, L2.4, L2.8 et L2.10 terminées, L2.7 implémentée (mesures et réglage des valeurs
-  restants), L2.6 en grande partie (graphe d'élévation partagé, PMREM sur toute la scène).
+  L2.1, L2.2, L2.3, L2.4, L2.7, L2.8 et L2.10 terminées, L2.6 en grande partie (graphe d'élévation partagé, PMREM sur toute la scène).
 - **three.js** : r187 (import map d'`index.html`), mis à jour depuis r183 pour le TRAA compatible avec
   la profondeur inversée.
 - **Git** : branche `feat/render-hdr-pipeline` (depuis `main`), non poussée.
@@ -39,17 +38,13 @@ en fin de session.
   `js/utils/settingsStore.js`. `render:capture` et `render:benchmark` ouvrent l'app avec `?dev=1`
   (et HUD / mini-carte masqués par l'URL pour les captures), dans un profil vierge : preset High,
   identique à l'état d'avant L2.10, donc les mesures de référence restent comparables.
-- **Ordre conseillé pour la suite du lot 2** : fin de L2.7 (mesurer chaque preset, régler les
-  valeurs) → clôture du lot (captures dans `docs/screenshots/render/lot2/`, fusion dans `main` après
+- **Ordre conseillé pour la suite du lot 2** : clôture du lot (captures dans `docs/screenshots/render/lot2/`, fusion dans `main` après
   accord de l'utilisateur) ; reste de L2.6 (décodage d'altitude dans un worker, `compileAsync`)
   seulement si p5 ou p1 le justifient.
-- **Prochaine session — finir L2.7** : mesurer Low / Medium / High / Ultra sur les 6 vues
-  (`render:capture -- --set quality=low`, coût GPU à pleine résolution : passer aussi
-  `--set dynamicResolution=false`, sinon l'échelle varie) et en vol (`render:benchmark -- --set
-  quality=low`, p1), puis ajuster `IMAGE_SHARPNESS` et `TERRAIN_DETAIL` dans `qualityPresets.js`
-  (valeurs actuelles provisoires : échelle 0,6 / 0,8 / 1 ; LODThreshold 0,9 / 1,2 / 1,6 ; anisotropie
-  4 / 16 / 16). Vérifier aussi pourquoi l'échelle dynamique restait à 0,7 en session interactive
-  (GPU ≈ 3,8 ms à 120 Hz) : remontée trop lente après le chargement des tuiles ?
+- **Prochaine session — clôture du lot 2** : captures des 6 vues dans `docs/screenshots/render/lot2/`
+  (preset High), constats visuels, bilan du lot, puis fusion dans `main` **après accord de
+  l'utilisateur**. Point ouvert pour plus tard : le coût CPU de soumission (≈ 5 µs par draw call)
+  limite Ultra à 120 Hz.
 ---
 
 ## Comment reprendre le travail (début de session)
@@ -271,7 +266,7 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       46 → 3 et p1 33 → 62 (vol par défaut). PMREM ensuite passée en `scene.environment`, sans effet sur
       les saccades. Reste, optionnel : décodage d'altitude dans un worker (≈ 1,1 ms par tuile sur le
       thread principal), `compileAsync`.
-- [ ] **L2.7** Presets de qualité (Low / Medium / High / Ultra) dans `config.js` et le panneau MFD.
+- [x] **L2.7** Presets de qualité (Low / Medium / High / Ultra) dans `config.js` et le panneau MFD.
       Réglages disponibles dans `config.js` : `maxPixelRatio` (résolution de sortie), `renderScale` et
       `dynamicResolution` (`AdaptiveQualityManager`), `bloomEnabled`, `autoExposure`, `maxTotalTiles`,
       `lodRingRadius` ; dans three-tile : `LODThreshold` (1,2) et l'anisotropie des textures, fixés
@@ -286,7 +281,19 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       standard ; `maxPixelRatio` reste un réglage brut de l'onglet Developer, appliqué à chaud),
       Prioritise smoothness → `dynamicResolution`, Terrain detail → `terrainLodThreshold` +
       `textureAnisotropy`, Sun glow → bloom, Eye adaptation → exposition automatique. Preset High =
-      état d'avant. **Reste** : les mesures et le réglage des valeurs (voir État courant).
+      état d'avant.
+      Mesures (lignes « L2.7 » de **Mesures**, `benchmarks/render/preset-*/`, captures à échelle fixe) :
+      High reproduit la référence `ae` (vol p1 62,5 contre 62,9). Low −40 à −55 % de coût GPU,
+      Medium −20 à −40 %, p1 en vol ≈ 79 pour les deux (LODThreshold 0,9 : −35 % de triangles et de
+      draw calls) ; Low visiblement plus flou, crêtes légèrement crénelées. Ultra à LODThreshold 1,6 :
+      gain visuel à peine perceptible (pentes lointaines un peu plus nettes), +55 % de draw calls,
+      vol saccadé (p5 76, p1 48,5) ; ramené à 1,4 : p5 85,5, p1 53,5. Ces saccades viennent du CPU,
+      pas du GPU : la soumission du rendu passe de 2,8 ms (High) à 3,7 ms (Ultra 1,4) en moyenne,
+      le p95 du temps de frame de 9,4 à 11,7 ms ; au-delà de 8,3 ms à 120 Hz, mais dans le budget de
+      60 Hz. Ultra reste un preset optionnel pour machines puissantes ; à revoir si le coût CPU par
+      draw call baisse (regroupement des tuiles, décodage d'altitude en worker de L2.6).
+      La résolution dynamique applique désormais tout de suite un plafond relevé (changement de
+      Image sharpness dans le menu) au lieu de remonter par pas de 0,05 toutes les 2 s.
 - [x] **L2.8** Exposition automatique : histogramme de luminance en compute shader, adaptation temporelle.
       Fait : `AutoExposureNode` — passe compute sur une grille fixe de 256×144 points de l'image TAAU
       (avant bloom), histogramme de 64 classes de log₂ luminance sur [−8, 10], moyenne entre les
@@ -469,6 +476,11 @@ Notes de lecture :
 | 2026-11-24 | L2.4 (TAAU, résolution dynamique ; échelle 1 tout le vol) | Plan 1 (basse alt.) | 94 s | 119,4 | 84,7 | 59,9 | 5,1 (6,3) | 0 / 0 | 2,67 M | 664 |
 | 2026-11-24 | L2.8 (exposition automatique) | Vol par défaut | 128 s | 119,3 | 105,3 | 62,9 | 4,1 (6,3) | 1 / 0 | 2,12 M | 552 |
 | 2026-11-24 | L2.8 (exposition automatique) | Plan 1 (basse alt.) | 94 s | 119,2 | 82,0 | 61,0 | 5,3 (6,5) | 1 / 0 | 2,67 M | 664 |
+| 2026-11-24 | L2.7 preset Low (échelle 0,6) | Vol par défaut | 128 s | 119,8 | 107,5 | 79,4 | 4,5 (5,8) | 1 / 0 | 1,28 M | 384 |
+| 2026-11-24 | L2.7 preset Medium (échelle 0,8) | Vol par défaut | 128 s | 119,9 | 108,7 | 78,7 | 4,5 (6,0) | 1 / 0 | 1,28 M | 394 |
+| 2026-11-24 | L2.7 preset High (défaut) | Vol par défaut | 128 s | 119,3 | 106,4 | 62,5 | 3,9 (6,3) | 0 / 0 | 2,12 M | 552 |
+| 2026-11-24 | L2.7 preset Ultra, LODThreshold 1,6 (écarté) | Vol par défaut | 128 s | 112,5 | 76,3 | 48,5 | 5,5 (6,7) | 4 / 0 | 3,50 M | 846 |
+| 2026-11-24 | L2.7 preset Ultra, LODThreshold 1,4 | Vol par défaut | 128 s | 115,6 | 85,5 | 53,5 | 5,0 (6,5) | 1 / 0 | 2,84 M | 714 |
 
 Pour mémoire, la configuration n°4 de `BENCHMARKS.md` (même machine, Chrome 146, ancien moteur
 geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,7 / 76,3 / 35,2).
@@ -507,6 +519,13 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 | 2026-11-24 | **Pleine résolution** — L2.8 sans exposition automatique | 3,09 | 4,66 | 4,11 | 3,76 | 3,53 | 3,26 |
 | 2026-11-24 | **Pleine résolution** — L2.8, capture 1 | 3,12 | 5,10 | 4,14 | 4,03 | 3,28 | 3,90 |
 | 2026-11-24 | **Pleine résolution** — L2.8, capture 2 | 3,12 | 4,49 | 3,66 | 3,37 | 3,16 | 3,30 |
+| 2026-11-24 | **Pleine résolution** — L2.7 preset Low (échelle 0,6, sans bloom) | 1,75 | 2,21 | 2,26 | 2,06 | 1,76 | 1,84 |
+| 2026-11-24 | **Pleine résolution** — L2.7 preset Medium (échelle 0,8) | 2,35 | 3,02 | 3,07 | 2,63 | 2,48 | 2,59 |
+| 2026-11-24 | **Pleine résolution** — L2.7 preset High | 3,10 | 5,08 | 3,65 | 3,36 | 3,15 | 3,36 |
+| 2026-11-24 | **Pleine résolution** — L2.7 preset Ultra, LODThreshold 1,6 (écarté) | 3,64 | 5,92 | 4,97 | 4,75 | 4,03 | 4,20 |
+| 2026-11-24 | **Pleine résolution** — L2.7 preset Ultra, LODThreshold 1,4 | 3,88 | 4,83 | 4,31 | 4,09 | 3,49 | 3,73 |
+| 2026-11-24 | L2.7 Low et Medium (LODThreshold 0,9) — draw calls / triangles | 382 / 1,26 M | 412 / 1,53 M | 454 / 1,69 M | 388 / 1,30 M | 384 / 1,21 M | 382 / 1,26 M |
+| 2026-11-24 | L2.7 Ultra 1,4 — draw calls / triangles | 712 / 2,66 M | 790 / 3,36 M | 820 / 3,45 M | 730 / 2,77 M | 768 / 2,78 M | 724 / 2,69 M |
 
 Les lignes « GPU ms méd. » antérieures à L2.9 ne sont pas exploitables (somme des passes, fréquence
 du GPU fixée par le régulateur). Les lignes « coût GPU » de L2.9 à L2.3 ont été mesurées à 1028×645
@@ -563,7 +582,9 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
   code de L2.7 (presets, réglages utilisateur et leur correspondance technique).
 - Constat : `maxTotalTiles` et `lodRingRadius` étaient morts ; « distance de vue » remplacée par
   Terrain detail (`LODThreshold` + anisotropie).
-- Prochaine étape : mesures et réglage des presets (fin de L2.7), puis clôture du lot 2.
+- Fait ensuite : mesures des presets (L2.7 terminée) ; Ultra ramené à LODThreshold 1,4 ; plafond de
+  la résolution dynamique relevé appliqué immédiatement ; `render:capture` passe `--set` dans l'URL.
+- Prochaine étape : clôture du lot 2.
 
 ### 2026-11-24 (12)
 - Fait : L2.8. Commit : exposition automatique par histogramme GPU (`AutoExposureNode`), case du
