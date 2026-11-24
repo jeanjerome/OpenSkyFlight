@@ -850,6 +850,8 @@ const Tt = /* @__PURE__ */ k({
     }), qo(M, N, b);
   }
 ), Zo = /* @__PURE__ */ W(
+  // OSF: the position of the sample in each ray-march segment can be set by the
+  // context (raymarchSampleOffset), for passes without a screen position
   (n, t, e, s, o, i, a) => {
     const { lutNode: r, parametersNode: u, scatteringSampleCount: c } = n, d = r.getTextureNode("transmittance"), l = r.getTextureNode("multipleScattering"), { solarIrradiance: h, bottomRadius: m, miePhaseFunctionG: p } = u, y = ct(
       c.x,
@@ -862,7 +864,7 @@ const Tt = /* @__PURE__ */ k({
     return wt({ type: "float", start: 0, end: y }, ({ i: b }) => {
       const A = b.mul(S).toVar(), z = b.add(1).mul(S).toVar();
       A.mulAssign(A), z.mulAssign(z), A.mulAssign(x), z.assign(z.greaterThan(1).select(i, x.mul(z)));
-      const L = z.sub(A), R = A.add(L.mul(No)), V = pe(
+      const L = z.sub(A), R = A.add(L.mul(n.raymarchSampleOffset ?? No)), V = pe(
         u,
         _(
           R.pow2().add(pt(2, t, e, R)).add(t.pow2())

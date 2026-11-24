@@ -14,6 +14,7 @@ import {
 } from '@takram/three-atmosphere/webgpu';
 import { CONFIG, onChange } from '../utils/config.js';
 import Logger from '../utils/Logger.js';
+import AerialPerspectiveVolume from './AerialPerspectiveVolume.js';
 import { TONE_MAPPING_EXPOSURE } from '../constants/rendering.js';
 
 const DEG2RAD = Math.PI / 180;
@@ -136,7 +137,9 @@ export default class AtmosphericSky {
     this._applyMode();
     this._unsub = onChange((key) => {
       if (['sunElevation', 'sunAzimuth'].includes(key)) this._updateSunDirection();
-      if (['fogEnabled', 'textureMode', 'bloomEnabled', 'autoExposure'].includes(key)) this._applyMode();
+      if (['fogEnabled', 'aerialPerspectiveVolume', 'textureMode', 'bloomEnabled', 'autoExposure'].includes(key)) {
+        this._applyMode();
+      }
     });
 
     Logger.info('AtmosphericSky', 'Atmosphere initialized (precomputed scattering)');
@@ -229,7 +232,8 @@ export default class AtmosphericSky {
   /**
    * The atmosphere over the scene pass: aerial perspective on the geometry
    * (transmittance and in-scattered light between the camera and the surface,
-   * the "Distance fog" setting), and the sky behind it.
+   * the "Distance haze" setting; read from a volume computed once per frame on
+   * WebGPU, see AerialPerspectiveVolume), and the sky behind it.
    *
    * The sky is only evaluated where the scene pass left no depth, and is seen
    * through the coverage left by the transparent geometry drawn there (the
@@ -241,7 +245,9 @@ export default class AtmosphericSky {
    */
   _overScene(color, depth) {
     let surface = color;
-    if (CONFIG.fogEnabled) {
+    if (CONFIG.fogEnabled && CONFIG.aerialPerspectiveVolume && this.renderer.backend.isWebGPUBackend) {
+      surface = new AerialPerspectiveVolume(color, depth, this.atmosphere, this.camera);
+    } else if (CONFIG.fogEnabled) {
       surface = aerialPerspective(color, depth);
       surface.skyNode = null;
     }

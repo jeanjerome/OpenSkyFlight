@@ -113,3 +113,10 @@ export const AUTO_EXPOSURE_MAX_EV = 1;
 /** Adaptation rates (1/s): toward a brighter scene, toward a darker one */
 export const AUTO_EXPOSURE_SPEED_TO_BRIGHT = 3;
 export const AUTO_EXPOSURE_SPEED_TO_DARK = 1;
+
+/**
+ * Cells of the aerial perspective volume (across, down, in distance), whatever
+ * the resolution, and distance of its last cell (m)
+ */
+export const AERIAL_PERSPECTIVE_VOLUME_SIZE = [128, 64, 64];
+export const AERIAL_PERSPECTIVE_VOLUME_DISTANCE = 1000e3;

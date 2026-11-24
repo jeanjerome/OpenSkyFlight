@@ -42,6 +42,13 @@ changing `parameters.mieScattering` and `parameters.mieExtinction`, setting
 `lutNode.needsUpdate = true` computes the tables again, and the shaders pick up
 the new values without recompiling. Lines marked `OSF:`.
 
+**Ray-march sample position** — the ray-marched scattering places one sample in
+each segment at a position given by spatio-temporal blue noise read at the
+fragment's screen coordinate, which a compute shader does not have. In
+`three-atmosphere/build/webgpu.js`, the position comes from
+`raymarchSampleOffset` on the atmosphere context when it is set (a float node),
+and from the blue noise otherwise. Line marked `OSF:`.
+
 **Local assets** — the default URLs of the star catalogue and of the
 spatio-temporal blue noise pointed to `media.githubusercontent.com`; they resolve
 next to the module instead (`new URL('../assets/…', import.meta.url)`), in

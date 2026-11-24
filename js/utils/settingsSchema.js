@@ -408,6 +408,14 @@ export const SETTINGS = [
     reload: 'terrain',
   },
   {
+    key: 'aerialPerspectiveVolume',
+    tab: 'dev',
+    section: 'Atmosphere',
+    label: 'Aerial perspective volume',
+    help: 'Reads the aerial perspective from a volume computed once per frame instead of evaluating it at every pixel (WebGPU only).',
+    type: 'toggle',
+  },
+  {
     key: 'maxPixelRatio',
     tab: 'dev',
     section: 'Resolution',
