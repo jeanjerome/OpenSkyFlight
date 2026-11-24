@@ -12,9 +12,10 @@ import {
   sky,
   skyEnvironment,
 } from '@takram/three-atmosphere/webgpu';
-import { CONFIG, onChange } from '../utils/config.js';
+import { CONFIG, onChange, update as updateConfig } from '../utils/config.js';
 import Logger from '../utils/Logger.js';
 import AerialPerspectiveVolume from './AerialPerspectiveVolume.js';
+import { DAYS_PER_YEAR, sunPosition } from './sunPosition.js';
 import { TONE_MAPPING_EXPOSURE } from '../constants/rendering.js';
 
 const DEG2RAD = Math.PI / 180;
@@ -27,6 +28,13 @@ const VISIBILITY_CONTRAST = Math.log(50);
 
 /** Distance the camera moves before the sky environment map is rendered again (m) */
 const ENVIRONMENT_DISTANCE_THRESHOLD = 5000;
+
+/**
+ * Angle the sun moves before the sky environment map is rendered again: the
+ * map only feeds reflections, and with accelerated time a smaller angle would
+ * render it many times a second
+ */
+const ENVIRONMENT_ANGULAR_THRESHOLD = 0.5 * DEG2RAD;
 
 AtmosphereLight.registerNode(AtmosphereLightNode);
 
@@ -71,8 +79,9 @@ MeshStandardNodeMaterial.prototype.setupEnvironment = function (builder) {
  * scenery further away sits slightly above the curved ground (200 m at 50 km),
  * which only thins the air its light crosses.
  *
- * The sun is set in the world frame (elevation and compass bearing from the
- * settings) and converted to ECEF with the same frame.
+ * The sun is placed in the sky of the ground point below the camera from the
+ * date and the local solar time, which the simulation clock advances at the
+ * chosen speed (see update), and converted to ECEF with the same frame.
  */
 export default class AtmosphericSky {
   /**
@@ -94,6 +103,10 @@ export default class AtmosphericSky {
     this.worldToGeo = worldToGeo;
 
     this.sunDirection = new THREE.Vector3();
+    // Simulation clock: local solar time (hours) and day of the year. CONFIG
+    // follows it minute by minute, for the settings menu (see _advanceClock).
+    this._timeOfDay = CONFIG.timeOfDay;
+    this._dayOfYear = CONFIG.dayOfYear;
     this._aureoleWorld = new THREE.Vector3();
     this._frame = new THREE.Matrix4();
     this._mapToNUE = new THREE.Matrix4().set(0, 0, -1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1);
@@ -126,6 +139,7 @@ export default class AtmosphericSky {
     // with the ground below the horizon (see ReflectionEnvironmentNode)
     this.environmentNode = skyEnvironment();
     this.environmentNode.distanceThreshold = ENVIRONMENT_DISTANCE_THRESHOLD;
+    this.environmentNode.angularThreshold = ENVIRONMENT_ANGULAR_THRESHOLD;
 
     // Direct sun and diffuse sky light, both evaluated at each surface point
     this.sunLight = new AtmosphereLight();
@@ -135,8 +149,10 @@ export default class AtmosphericSky {
     pipeline.setBloomThreshold(this._bloomThresholdNode());
 
     this._applyMode();
-    this._unsub = onChange((key) => {
-      if (['sunElevation', 'sunAzimuth'].includes(key)) this._updateSunDirection();
+    this._unsub = onChange((key, value) => {
+      // Set from the menu or a reference view, not by the clock
+      if (key === 'timeOfDay' && value !== this._publishedTime) this._timeOfDay = value;
+      if (key === 'dayOfYear' && value !== this._publishedDay) this._dayOfYear = value;
       if (['fogEnabled', 'aerialPerspectiveVolume', 'textureMode', 'bloomEnabled', 'autoExposure'].includes(key)) {
         this._applyMode();
       }
@@ -226,7 +242,6 @@ export default class AtmosphericSky {
     this.pipeline.setAtmosphere((color, depth) => this._overScene(color, depth));
     this.pipeline.setBloom(CONFIG.bloomEnabled);
     this.pipeline.setAutoExposure(CONFIG.autoExposure);
-    this._updateSunDirection();
   }
 
   /**
@@ -261,11 +276,38 @@ export default class AtmosphericSky {
     })();
   }
 
-  /** Sun direction in the world frame, from its elevation and compass bearing */
-  _updateSunDirection() {
-    const phi = (90 - CONFIG.sunElevation) * DEG2RAD;
+  /**
+   * Advance the simulation clock by dt seconds at the chosen time speed. The
+   * time and the day are published to CONFIG when the minute changes, for
+   * the settings menu and for the next session.
+   */
+  _advanceClock(dt) {
+    this._timeOfDay += (dt * CONFIG.timeSpeed) / 3600;
+    while (this._timeOfDay >= 24) {
+      this._timeOfDay -= 24;
+      this._dayOfYear = (this._dayOfYear % DAYS_PER_YEAR) + 1;
+    }
+    // (the margin keeps a time set on a whole minute from rounding down to the previous one)
+    const minutes = Math.floor(this._timeOfDay * 60 + 1e-6);
+    if (minutes / 60 !== CONFIG.timeOfDay) {
+      this._publishedTime = minutes / 60;
+      updateConfig('timeOfDay', this._publishedTime);
+    }
+    if (this._dayOfYear !== CONFIG.dayOfYear) {
+      this._publishedDay = this._dayOfYear;
+      updateConfig('dayOfYear', this._dayOfYear);
+    }
+  }
+
+  /**
+   * Sun direction in the world frame
+   * @param {number} elevationDeg - degrees above the horizon
+   * @param {number} azimuthDeg - compass bearing, clockwise from north
+   */
+  _setSunDirection(elevationDeg, azimuthDeg) {
+    const phi = (90 - elevationDeg) * DEG2RAD;
     // Spherical theta = 0 points toward +Z (south), 90° toward +X (east)
-    const theta = (180 - CONFIG.sunAzimuth) * DEG2RAD;
+    const theta = (180 - azimuthDeg) * DEG2RAD;
     this.sunDirection.setFromSphericalCoords(1, phi, theta);
 
     // Just outside the solar disc, toward the zenith (for the bloom threshold)
@@ -280,14 +322,19 @@ export default class AtmosphericSky {
   }
 
   /**
-   * Lay the map on the tangent plane below the camera and convert the sun
-   * direction to ECEF. Call once per frame, before rendering.
+   * Advance the clock, lay the map on the tangent plane below the camera and
+   * place the sun in its sky. Call once per frame, before rendering.
+   * @param {number} [dt=0] - simulated time since the previous frame (s)
    */
-  update() {
+  update(dt = 0) {
+    this._advanceClock(dt);
     if (this._isSarMode()) return;
     this._updateAerosols();
     const { x, z } = this.camera.position;
     const geo = this.worldToGeo(x, z) ?? { lat: CONFIG.lat, lon: CONFIG.lon };
+
+    const sun = sunPosition(geo.lat, this._dayOfYear, this._timeOfDay);
+    this._setSunDirection(sun.elevation, sun.azimuth);
 
     this._geodetic.set(geo.lon * DEG2RAD, geo.lat * DEG2RAD, 0).toECEF(this._groundECEF);
     Ellipsoid.WGS84.getNorthUpEastFrame(this._groundECEF, this._frame);

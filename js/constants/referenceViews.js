@@ -5,8 +5,8 @@
  * - altitude: metres above sea level
  * - heading: compass degrees, clockwise from north
  * - pitch: degrees, negative looks down
- * - sunElevation: degrees above the horizon
- * - sunCompassAzimuth: compass direction of the sun, clockwise from north
+ * - dayOfYear, timeOfDay: date and local solar time (hours), set for the sun
+ *   elevation and compass bearing noted beside them (within 0.15°)
  */
 export const REFERENCE_VIEWS = [
   {
@@ -16,8 +16,8 @@ export const REFERENCE_VIEWS = [
     altitude: 4300,
     heading: 140,
     pitch: -6,
-    sunElevation: 55,
-    sunCompassAzimuth: 170,
+    dayOfYear: 110,
+    timeOfDay: 11.6125, // sun at 55° elevation, bearing 170°
     cameraMode: 'chase',
     showClouds: false,
   },
@@ -28,8 +28,8 @@ export const REFERENCE_VIEWS = [
     altitude: 1700,
     heading: 225,
     pitch: -6,
-    sunElevation: 40,
-    sunCompassAzimuth: 160,
+    dayOfYear: 272,
+    timeOfDay: 10.9875, // sun at 40° elevation, bearing 160°
     cameraMode: 'chase',
     showClouds: false,
   },
@@ -40,8 +40,8 @@ export const REFERENCE_VIEWS = [
     altitude: 1400,
     heading: 160,
     pitch: -10,
-    sunElevation: 35,
-    sunCompassAzimuth: 200,
+    dayOfYear: 62,
+    timeOfDay: 13.0917, // sun at 35° elevation, bearing 200°
     cameraMode: 'chase',
     showClouds: false,
   },
@@ -52,8 +52,8 @@ export const REFERENCE_VIEWS = [
     altitude: 3800,
     heading: 235,
     pitch: -4,
-    sunElevation: 5,
-    sunCompassAzimuth: 290,
+    dayOfYear: 130,
+    timeOfDay: 18.7417, // sun at 5° elevation, bearing 290°
     cameraMode: 'chase',
     showClouds: false,
   },
@@ -64,8 +64,8 @@ export const REFERENCE_VIEWS = [
     altitude: 6500,
     heading: 120,
     pitch: -3,
-    sunElevation: 30,
-    sunCompassAzimuth: 180,
+    dayOfYear: 305,
+    timeOfDay: 12.0, // sun at 30° elevation, bearing 180°
     cameraMode: 'chase',
     showClouds: true,
     cloudAltitude: 4500,
@@ -77,8 +77,8 @@ export const REFERENCE_VIEWS = [
     altitude: 4200,
     heading: 225,
     pitch: -2,
-    sunElevation: 10,
-    sunCompassAzimuth: 245,
+    dayOfYear: 291,
+    timeOfDay: 16.3208, // sun at 10° elevation, bearing 245°
     cameraMode: 'chase',
     showClouds: false,
   },

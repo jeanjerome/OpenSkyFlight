@@ -31,8 +31,9 @@ import { SETTINGS_BY_KEY } from './settingsSchema.js';
  * @property {boolean} bloomEnabled           - Glow around the sun and its specular reflections (default: true)
  *
  * Atmosphere:
- * @property {number}  sunElevation           - Sun elevation angle in degrees, range [0..90] (default: 35)
- * @property {number}  sunAzimuth             - Sun compass bearing in degrees, clockwise from north, range [0..360] (default: 160)
+ * @property {number}  timeOfDay              - Local solar time in hours, 12 when the sun crosses the meridian, range [0..24[ (default: 10.9167, sun at 35° bearing 160° at the default place)
+ * @property {number}  dayOfYear              - Day of the year, range [1..365] (default: 62, 3 March)
+ * @property {number}  timeSpeed              - Simulated seconds per real second, 0 freezes the sun (default: 1)
  * @property {number}  visibility             - Visibility at sea level in km, set by the aerosol density, range [10..280] (default: 220)
  * @property {boolean} showClouds             - Show cloud layer (default: false)
  * @property {number}  cloudAltitude          - Cloud layer altitude in meters, range [500..12000] (default: 3500)
@@ -83,8 +84,9 @@ const CONFIG = {
   interfaceVolume: 0.6,
   engineVolume: 0.8,
   radioVolume: 0.8,
-  sunElevation: 35,
-  sunAzimuth: 160,
+  timeOfDay: 10 + 55 / 60,
+  dayOfYear: 62,
+  timeSpeed: 1,
   visibility: 220,
   showClouds: false,
   cloudAltitude: 3500,

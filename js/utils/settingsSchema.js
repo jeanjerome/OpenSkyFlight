@@ -23,11 +23,26 @@
 
 import { MACH_1_MS } from '../constants/physics.js';
 
-const COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
-
 function formatSpeed(ms) {
   if (ms < MACH_1_MS) return `${Math.round(ms * 3.6)} km/h`;
   return `Mach ${(ms / MACH_1_MS).toFixed(1)}`;
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+/** Hours → 'HH:MM' */
+function formatClock(hours) {
+  const minutes = Math.round(hours * 60) % (24 * 60);
+  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+}
+
+/** Day of the year (1 to 365) → '3 Mar' */
+function formatDate(dayOfYear) {
+  let day = Math.round(dayOfYear);
+  let month = 0;
+  while (month < 11 && day > MONTH_DAYS[month]) day -= MONTH_DAYS[month++];
+  return `${day} ${MONTHS[month]}`;
 }
 
 function formatVisibility(km) {
@@ -147,29 +162,45 @@ export const SETTINGS = [
     persist: true,
   },
   {
-    key: 'sunElevation',
+    key: 'timeOfDay',
     tab: 'world',
     section: 'Sun and sky',
-    label: 'Sun height',
-    help: 'Height of the sun above the horizon: low for sunrise and sunset light, high for midday.',
+    label: 'Time of day',
+    help: 'Local solar time where you fly: the sun is highest at 12:00.',
     type: 'range',
     min: 0,
-    max: 90,
-    step: 1,
-    format: (v) => `${Math.round(v)}°`,
+    max: 24 - 5 / 60,
+    step: 5 / 60,
+    format: formatClock,
     persist: true,
   },
   {
-    key: 'sunAzimuth',
+    key: 'dayOfYear',
     tab: 'world',
     section: 'Sun and sky',
-    label: 'Sun direction',
-    help: 'Compass direction of the sun.',
+    label: 'Date',
+    help: 'Sets how high the sun climbs and where it rises and sets.',
     type: 'range',
-    min: 0,
-    max: 360,
+    min: 1,
+    max: 365,
     step: 1,
-    format: (v) => `${Math.round(v)}° ${COMPASS[Math.round(v / 22.5) % 16]}`,
+    format: formatDate,
+    persist: true,
+  },
+  {
+    key: 'timeSpeed',
+    tab: 'world',
+    section: 'Sun and sky',
+    label: 'Time speed',
+    help: 'How fast the sun moves across the sky while you fly.',
+    type: 'choice',
+    options: [
+      [0, 'Frozen'],
+      [1, 'Real time'],
+      [60, '×60'],
+      [600, '×600'],
+    ],
+    ordered: true,
     persist: true,
   },
   {

@@ -271,8 +271,10 @@ async function initApp() {
 
     if (flightPlanRecorder.autopilotActive) flightPlanRecorder.autopilotActive = false;
     flightController.enabled = true;
-    update('sunElevation', view.sunElevation);
-    update('sunAzimuth', view.sunCompassAzimuth);
+    // Sun fixed for reproducible captures
+    update('timeSpeed', 0);
+    update('dayOfYear', view.dayOfYear);
+    update('timeOfDay', view.timeOfDay);
     update('showClouds', view.showClouds);
     if (view.cloudAltitude !== undefined) update('cloudAltitude', view.cloudAltitude);
     update('cameraMode', view.cameraMode);
@@ -499,7 +501,7 @@ async function initApp() {
     groundElevation = geoTerrainManager.getGroundElevation(camera.position.x, camera.position.z);
 
     // --- Render phase ---
-    atmosphericSky.update();
+    atmosphericSky.update(dt);
     if (timer) timer.begin('render');
     gpuTimer.beginFrame();
     renderer.info.reset();
