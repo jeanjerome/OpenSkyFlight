@@ -39,6 +39,7 @@ export default class GeoTerrainManager {
     this._debugMode = false;
     this._wireframedMeshes = new WeakSet();
     this._syntheticNodes = {};
+    this._emissiveNode = null;
 
     onChange((key, value) => {
       if (key === 'terrainLodThreshold' && this.tileMap) this.tileMap.LODThreshold = value;
@@ -167,6 +168,7 @@ export default class GeoTerrainManager {
       // Only apply to MeshStandardNodeMaterial (TileMaterial clones), not MeshBasicNodeMaterial
       if (!mat.isMeshStandardNodeMaterial) continue;
       applyTerrariumElevation(mat);
+      mat.emissiveNode = this._emissiveNode;
       mat._terrariumApplied = true;
       mat.needsUpdate = true;
     }
@@ -175,6 +177,24 @@ export default class GeoTerrainManager {
     if (this._wireframeMode) {
       this._applyWireframeToMesh(mesh);
     }
+  }
+
+  /**
+   * Light emitted by the ground (city lights), as one node shared by every
+   * tile material, so that they keep a single compiled shader.
+   * @param {?Node} node
+   */
+  setEmissiveNode(node) {
+    this._emissiveNode = node;
+    this.tileMap?.traverse((child) => {
+      if (!child.isMesh || !child.material) return;
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      for (const mat of materials) {
+        if (!mat._terrariumApplied) continue;
+        mat.emissiveNode = node;
+        mat.needsUpdate = true;
+      }
+    });
   }
 
   update(_cameraPosition) {

@@ -161,3 +161,17 @@ export const GLOW_LAYER = 2;
 
 /** Share of the night exposure (in stops) applied to light sources: see AtmosphericSky.emissiveExposure */
 export const EMISSIVE_EXPOSURE_SHARE = 0.5;
+
+/** Night lights (see CityLights): zoom of the Black Marble tiles (its finest) and tiles across the region loaded */
+export const CITY_LIGHTS_ZOOM = 8;
+export const CITY_LIGHTS_REGION_TILES = 8;
+
+/** Mean luminance (scene unit) of the most brightly lit ground seen from above, a town centre: 1.5 cd/m² */
+export const CITY_LIGHTS_LUMINANCE = 1.5 / 72000;
+
+/** Color of the lights: sodium and warm LED street lighting (linear RGB) */
+export const CITY_LIGHTS_COLOR = [1, 0.62, 0.3];
+
+/** Sun elevations (degrees) between which the lights come on at dusk */
+export const CITY_LIGHTS_OFF_ELEVATION = 2;
+export const CITY_LIGHTS_ON_ELEVATION = -4;

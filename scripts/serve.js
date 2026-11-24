@@ -49,6 +49,9 @@ const SOURCES = {
   osm: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
   satellite: (z, x, y) =>
     `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,
+  // NASA Black Marble 2016 (night lights), GIBS WMTS, zoom 0–8
+  nightlights: (z, x, y) =>
+    `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_Black_Marble/default/2016-01-01/GoogleMapsCompatible_Level8/${z}/${y}/${x}.png`,
 };
 
 const MIME = {
@@ -170,5 +173,5 @@ const server = createServer((req, res) => {
 server.listen(PORT, () => {
   console.log(`OpenSkyFlight — http://localhost:${PORT}`);
   console.log(`Tile cache: ${CACHE_DIR}`);
-  console.log(`Tile proxy: /tiles/{terrarium,osm,satellite}/{z}/{x}/{y}.png`);
+  console.log(`Tile proxy: /tiles/{${Object.keys(SOURCES).join(',')}}/{z}/{x}/{y}.png`);
 });

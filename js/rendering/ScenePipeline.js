@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { clamp, log2, luminance, mix, mrt, output, pass, rtt, vec3, vec4, velocity } from 'three/tsl';
+import { clamp, log2, luminance, mix, mrt, output, pass, rtt, smoothstep, vec3, vec4, velocity } from 'three/tsl';
 import { taau } from 'three/addons/tsl/display/TAAUNode.js';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import {
@@ -95,7 +95,12 @@ export default class ScenePipeline {
    * Mesopic vision: the color of a pixel fades toward its luminance, tinted
    * blue, as its absolute luminance falls from NIGHT_VISION_PHOTOPIC_LUMINANCE
    * to NIGHT_VISION_SCOTOPIC_LUMINANCE (cd/m², on a logarithmic scale). Moonlit
-   * snow keeps a trace of color, starlit ground none; lights keep theirs.
+   * snow keeps a trace of color, starlit ground none.
+   *
+   * Light sources take a smaller night exposure than the scene (see
+   * AtmosphericSky.emissiveExposure), so their absolute luminance cannot be
+   * recovered from the pixel: pixels far brighter than the luminance the eye
+   * has adapted to are taken as lights, seen with the cones, in color.
    */
   _nightVision(color) {
     const y = luminance(color);
@@ -109,7 +114,12 @@ export default class ScenePipeline {
       0,
       1,
     );
-    return mix(color, vec3(...NIGHT_VISION_COLOR).mul(y), scotopic);
+    let rods = scotopic;
+    if (this._autoExposureEnabled) {
+      const adapted = this.autoExposureNode.adaptedLuminanceNode;
+      rods = scotopic.mul(smoothstep(adapted.mul(2), adapted.mul(10), y).oneMinus());
+    }
+    return mix(color, vec3(...NIGHT_VISION_COLOR).mul(y), rods);
   }
 
   /**

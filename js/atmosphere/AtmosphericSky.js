@@ -141,6 +141,8 @@ export default class AtmosphericSky {
     this.worldToGeo = worldToGeo;
 
     this.sunDirection = new THREE.Vector3();
+    /** Sun elevation (degrees) below the camera, updated every frame */
+    this.sunElevation = 90;
     this._sunECI = new THREE.Vector3();
     this._moonECI = new THREE.Vector3();
     this._up = new THREE.Vector3();
@@ -462,6 +464,7 @@ export default class AtmosphericSky {
     const geo = this.worldToGeo(x, z) ?? { lat: CONFIG.lat, lon: CONFIG.lon };
 
     const sun = sunPosition(geo.lat, this._dayOfYear, this._timeOfDay);
+    this.sunElevation = sun.elevation;
     this._setSunDirection(sun.elevation, sun.azimuth);
 
     this._geodetic.set(geo.lon * DEG2RAD, geo.lat * DEG2RAD, 0).toECEF(this._groundECEF);

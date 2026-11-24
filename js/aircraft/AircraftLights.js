@@ -174,7 +174,7 @@ export default class AircraftLights {
     const discMaterial = new MeshStandardNodeMaterial({ color: 0x15130f, metalness: 0.8, roughness: 0.5 });
     discMaterial.emissiveNode = Fn(() => {
       const r = uv().sub(0.5).length().mul(2);
-      const core = smoothstep(1, 0.2, r);
+      const core = smoothstep(0.2, 1, r).oneMinus();
       const heat = throttle.mul(0.95).add(0.05).add(afterburner.mul(2));
       const color = mix(vec3(0.9, 0.18, 0.03), vec3(1.0, 0.75, 0.4), afterburner.add(core.mul(0.3)).min(1));
       const glow = mix(float(NOZZLE_GLOW_LUMINANCE), float(AFTERBURNER_LUMINANCE), afterburner);

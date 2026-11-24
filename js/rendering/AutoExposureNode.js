@@ -86,6 +86,11 @@ export default class AutoExposureNode extends Node {
     this._reset.value = 1;
   }
 
+  /** Scene luminance the exposure has adapted to, as a node read from the GPU state */
+  get adaptedLuminanceNode() {
+    return exp2(this._state.element(0));
+  }
+
   /** @returns {Promise<number>} adapted scene luminance (debugging and measurements) */
   async readAdaptedLuminance(renderer) {
     const buffer = await renderer.getArrayBufferAsync(this._state.value);

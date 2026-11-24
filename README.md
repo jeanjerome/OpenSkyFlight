@@ -208,10 +208,11 @@ cache/
 - [Three.js](https://threejs.org/) v0.187 (WebGPU build) — 3D rendering with TSL shaders (loaded via CDN, no install)
 - [three-tile](https://github.com/sxguojf/three-tile) (0.11.8-osf) — geographic tile management with patched concentric LOD
 - Canvas 2D — HUD instrument overlay, hi-res badge, and minimap
-- [three/examples — Sky](https://threejs.org/examples/?q=sky#webgl_shaders_sky) — procedural atmospheric sky and sun
+- [@takram/three-atmosphere](https://github.com/takram-design-engineering/three-geospatial) (WebGPU build, vendored in `vendor/takram/`) — precomputed atmospheric scattering: sky, aerial perspective, sunlight and moonlight, stars
 - [AWS Terrarium Tiles](https://registry.opendata.aws/terrain-tiles/) — elevation data (zoom 0–15, upsampled to 18 in hi-res mode)
 - [OpenStreetMap](https://www.openstreetmap.org/) — road map textures
 - [ESRI World Imagery](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9) — satellite imagery (up to zoom 18+)
+- [NASA Black Marble](https://earthobservatory.nasa.gov/features/NightLights) (VIIRS, 2016, via NASA GIBS) — city lights at night (zoom 0–8)
 - Node.js — dev server with transparent caching tile proxy and offline prefetch script
 - ES modules + import maps — no bundler needed
 - [ESLint](https://eslint.org/) 9 + [Prettier](https://prettier.io/) — code quality and formatting (dev only)
@@ -255,6 +256,13 @@ Satellite tiles are fetched from the [Esri World Imagery](https://www.arcgis.com
 - **License:** proprietary — governed by the [Esri Terms of Use](https://www.esri.com/en-us/legal/terms/full-master-agreement). Non-commercial use is permitted with attribution. Commercial use requires a paid Esri license.
 - **Attribution:** powered by Esri. Sources: Esri, Maxar, Earthstar Geographics, and the GIS User Community.
 - Users consuming this data are responsible for complying with Esri's terms.
+
+### Night lights — NASA Black Marble
+
+City lights at night come from the [Black Marble 2016](https://earthobservatory.nasa.gov/features/NightLights) composite of the VIIRS instrument, fetched as tiles from [NASA GIBS](https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api).
+
+- **License:** NASA imagery is not copyrighted and may be used freely; see the [NASA Earthdata data use policy](https://www.earthdata.nasa.gov/engage/open-data-services-software/data-use-guidance).
+- **Attribution:** imagery courtesy of NASA Earth Observatory / NASA GIBS.
 
 ### 3D model — Dassault Rafale B
 

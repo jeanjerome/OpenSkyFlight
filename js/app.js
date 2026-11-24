@@ -22,6 +22,7 @@ import Minimap from './ui/Minimap.js';
 import Logger from './utils/Logger.js';
 import { showNotification } from './ui/Notification.js';
 import AtmosphericSky from './atmosphere/AtmosphericSky.js';
+import CityLights from './terrain/CityLights.js';
 import { REFERENCE_VIEWS } from './constants/referenceViews.js';
 import CloudLayer from './atmosphere/CloudLayer.js';
 import BenchmarkRunner from './benchmark/BenchmarkRunner.js';
@@ -60,6 +61,8 @@ async function initApp() {
     (x, z) => geoTerrainManager.worldToGeo(x, z),
   );
   scenePipeline.setGlowLayer(scene, camera, GLOW_LAYER);
+  const cityLights = new CityLights(geoTerrainManager, atmosphericSky.preExposure);
+  geoTerrainManager.setEmissiveNode(cityLights.node);
   const cloudLayer = new CloudLayer(scene);
   cloudLayer.mesh.renderOrder = CLOUD_RENDER_ORDER;
 
@@ -512,6 +515,7 @@ async function initApp() {
 
     // --- Render phase ---
     atmosphericSky.update(dt);
+    cityLights.update(camera.position, atmosphericSky.sunElevation, dt);
     if (timer) timer.begin('render');
     gpuTimer.beginFrame();
     renderer.info.reset();
