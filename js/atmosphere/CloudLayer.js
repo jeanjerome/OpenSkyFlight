@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { uniform, texture, uv, smoothstep, float, vec2 } from 'three/tsl';
+import { uniform, texture, uv, smoothstep, float, vec2, vec3, positionLocal } from 'three/tsl';
+import { EARTH_RADIUS } from 'three-tile';
 import { CONFIG, onChange } from '../utils/config.js';
 import Logger from '../utils/Logger.js';
 
@@ -85,7 +86,9 @@ export default class CloudLayer {
 
   _buildMesh() {
     const size = 80000;
-    const geo = new THREE.PlaneGeometry(size, size, 1, 1);
+    // Subdivided to follow the curvature of the Earth, like the terrain: the
+    // layer is centred on the camera, so a point lies (x² + y²) / 2R below it
+    const geo = new THREE.PlaneGeometry(size, size, 16, 16);
 
     const uvOffset = uv().add(this._uTime.mul(vec2(0.0025, 0.00125)));
     const n = texture(this._noiseTexture, uvOffset).r;
@@ -97,6 +100,7 @@ export default class CloudLayer {
     mat.depthWrite = false;
     mat.side = THREE.DoubleSide;
     mat.opacityNode = cloud.mul(this._uOpacity);
+    mat.positionNode = positionLocal.sub(vec3(0, 0, positionLocal.xy.dot(positionLocal.xy).div(2 * EARTH_RADIUS)));
 
     this.mesh = new THREE.Mesh(geo, mat);
     this.mesh.rotation.x = -Math.PI / 2;

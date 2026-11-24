@@ -19,6 +19,7 @@ import {
 import { ITileLoader } from "./ITileLoader";
 import { FrustumEx } from "./FrustumEx";
 import { createChildren, LODAction, LODEvaluate } from "./util";
+import { curvatureDrop } from "./curvature";
 
 /** 最大下载线程数 */
 const MAXTHREADS = 10;
@@ -33,6 +34,7 @@ const frustum = new FrustumEx();
 /** 临时变量 */
 const tempMat4 = new Matrix4();
 const tempVec3 = new Vector3();
+const curvedBox = new Box3();
 
 /** 瓦片更新参数类型 */
 export type TileUpdateParames = {
@@ -117,9 +119,24 @@ export class Tile extends Object3D<TTileEventMap> {
 		return Math.max(0, Math.min(1, 1 - dist / viewCenterRadius));
 	}
 
-	/** 瓦片是否在视锥体内 */
+	/**
+	 * 瓦片是否在视锥体内. The bounds are lowered by the curvature of the Earth
+	 * around the camera, as the GPU lowers the terrain: from the drop at the
+	 * nearest point of the tile for the top to the drop at its farthest corner
+	 * for the bottom.
+	 */
 	public get inFrustum(): boolean {
-		return !!this._bbox && frustum.intersectsBox(this._bbox);
+		if (!this._bbox) return false;
+		const { min, max } = this._bbox;
+		const cx = cameraWorldPosition.x;
+		const cz = cameraWorldPosition.z;
+		const nearX = Math.max(min.x - cx, 0, cx - max.x);
+		const nearZ = Math.max(min.z - cz, 0, cz - max.z);
+		const farX = Math.max(Math.abs(min.x - cx), Math.abs(max.x - cx));
+		const farZ = Math.max(Math.abs(min.z - cz), Math.abs(max.z - cz));
+		curvedBox.min.set(min.x, min.y - curvatureDrop(Math.hypot(farX, farZ)), min.z);
+		curvedBox.max.set(max.x, max.y - curvatureDrop(Math.hypot(nearX, nearZ)), max.z);
+		return frustum.intersectsBox(curvedBox);
 	}
 
 	/** 是否为叶子瓦片 */

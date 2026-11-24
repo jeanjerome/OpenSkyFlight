@@ -5,7 +5,8 @@
  * texture holding one elevation (metres) per grid vertex. The positionNode
  * displaces the tile geometry's Z axis in local space (three-tile convention:
  * X=easting, Y=northing, Z=elevation). After TileMap.rotateX(-PI/2), Y becomes
- * world-up.
+ * world-up. The terrain is lowered by the curvature of the Earth around the
+ * camera (see tile/curvature.ts).
  */
 
 import {
@@ -23,7 +24,11 @@ import {
 	min,
 	max,
 	round,
+	modelWorldMatrix,
+	cameraPosition,
+	vec4,
 } from "three/tsl";
+import { EARTH_RADIUS } from "../tile/curvature";
 import { DataTexture, FloatType, RedFormat } from "three";
 import type { Mesh, Texture } from "three";
 
@@ -87,8 +92,12 @@ function getElevationNodes(): ElevationNodes {
 		const bitangent = vec3(float(0.0), jU.sub(jD).toFloat().mul(step), heightAt(i, jU).sub(heightAt(i, jD)));
 		vNormal.assign(cross(tangent, bitangent).normalize());
 
-		// Displace along Z (tile local elevation axis)
-		pos.z.addAssign(elevation);
+		// Displace along Z (tile local elevation axis), less the curvature of
+		// the Earth around the camera (see tile/curvature.ts). Local Z is world
+		// Y in metres: the map is rotated and scaled horizontally only.
+		const world = modelWorldMatrix.mul(vec4(pos.xy, float(0), float(1))).xyz;
+		const offset = world.xz.sub(cameraPosition.xz);
+		pos.z.addAssign(elevation.sub(offset.dot(offset).div(2 * EARTH_RADIUS)));
 		return pos;
 	})();
 
