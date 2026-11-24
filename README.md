@@ -28,7 +28,7 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 - **Physical atmosphere** — precomputed atmospheric scattering ([takram](https://github.com/takram-design-engineering/three-geospatial)): sky, aerial perspective read from a frustum-aligned volume, sunlight and sky light evaluated at each surface point, all from the same scattering tables; a Visibility setting sets the haze; animated cloud layer
 - **Time of day** — the sun follows the date and the local solar time (NOAA formulas), with time frozen, real time or accelerated up to ×600
 - **Night** — stars turning with the hour, the moon with its phases and moonlight, an exposure that follows the falling light, night vision that fades colors into a bluish grey, and city lights from NASA's Black Marble imagery
-- **Aircraft lights** — position lights, flashing red beacons and white wingtip strobes with their glare, engine glow with thrust and an afterburner flame with shock diamonds
+- **Aircraft lights** — position lights, flashing red beacons and white wingtip strobes (switched with `O`) with their glare, engine glow with thrust and an afterburner flame with shock diamonds
 - **HDR render pipeline** — scene rendered into a HalfFloat buffer with a 32-bit reversed depth buffer, temporal anti-aliasing with upscaling (TAAU), bloom limited to the sun and its specular reflections, automatic exposure metered on the GPU, AgX tone mapping at the end of the pipeline
 - **Dynamic resolution** — the 3D scene is rendered below the screen resolution when the GPU exceeds a 60 FPS budget, and TAAU reconstructs the full-resolution image
 - **Built-in benchmark** — automated camera path with FPS/GPU timing (GPU span of each frame), metrics recording, and baseline comparison
@@ -92,6 +92,7 @@ Available scripts:
 | `A` / `D` or `←` / `→` | Strafe left / right (`Q` / `D` on AZERTY) |
 | `T` | Cycle texture mode (Satellite / Road map / SAR / Elevation) |
 | `V` | Toggle cockpit / chase view |
+| `O` | Toggle anti-collision lights (beacons and strobes) |
 | `H` | Toggle HUD |
 | `M` | Toggle minimap |
 | `I` | Toggle performance figures |

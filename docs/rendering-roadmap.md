@@ -6,7 +6,7 @@ contrainte : l'application doit continuer à fonctionner dans un navigateur (Web
 Ce document est la **source de vérité de l'avancement**. Il est lu en début de session et mis à jour
 en fin de session.
 
-## État courant (mis à jour le 2026-11-24, session 17)
+## État courant (mis à jour le 2026-11-24, session 18)
 
 - **Lots terminés** : 0, 1 et 2, fusionnés dans `main` (lot 2 le 2026-11-24). Lot 2 : toutes les tâches faites sauf le reste optionnel de
   L2.6 (décodage d'altitude dans un worker, `compileAsync`), reporté : p5 et p1 ne le justifient
@@ -61,20 +61,17 @@ en fin de session.
   call) : tout uniforme commun à la frame doit passer en `renderGroup` ; le ray marching de takram lit
   un bruit bleu à `screenCoordinate`, absent d'un compute (`raymarchSampleOffset`) ; comparer
   WebGPU et WebGL2 avec `autoExposure=false` (exposition automatique WebGPU seulement).
-- **Prochaine session** : 1) **décision de l'utilisateur sur le p1 du plan 1** (≈ 54 contre 61,7 au
-  lot 2, −12 %, au-delà du critère ; vol par défaut −4 %) : CPU de rendu en vol 4,1 → 4,6 ms depuis la
-  nuit, dont ≈ 0,2 ms pour les feux de l'avion et le reste réparti (étoiles rendues à chaque frame,
-  lumières des villes, nœuds par objet) ; 2) trait clair ou sombre à l'horizon géométrique, au-delà du terrain (bord du
-  sol dessiné par le ciel de takram, visible vue 4, déjà là avant cette session) ; 3) CPU de rendu
-  encore ≈ +0,8 ms par frame en vol par rapport au lot 2 (9 nœuds `updateBefore` de plus par objet :
-  `EventNode` ×6, LUT, environnement, lumière) ; 4) lumières des villes de près : la donnée Black
-  Marble (≈ 450 m/pixel) reste grossière, une ville survolée à basse altitude sans lune paraît
-  très claire (l'exposition s'adapte à elle) ; 5) clôture du lot : captures versionnées
-  `docs/screenshots/render/lot3/`, bilan. Référence de comparaison du lot 3 :
-  `benchmarks/render/l3-night/` (6 vues) et `l3-flight-inst1/`, `l3-flight-inst2/` (vols). Worktree de `main` prêt dans
+- **Prochaine session** : 1) trait clair ou sombre à l'horizon géométrique, au-delà du terrain (bord du
+  sol dessiné par le ciel de takram, visible vue 4) ; 2) lumières des villes de près : la donnée Black
+  Marble (≈ 450 m/pixel) reste grossière, une ville survolée à basse altitude sans lune paraît très
+  claire (l'exposition s'adapte à elle) ; 3) clôture du lot : captures versionnées
+  `docs/screenshots/render/lot3/`, bilan, fusion dans `main` avec l'accord de l'utilisateur.
+  Régression du p1 réglée (session 18, voir **Décisions**) : plan 1 p1 63,7 / 62,5 et p5 105,3
+  contre 61,7 et 81,3 au lot 2. Référence de comparaison du lot 3 : `benchmarks/render/l3-opaque/`
+  (6 vues) et `l3-opaque-flight1/`, `l3-opaque-flight2/` (vols). Worktree de `main` prêt dans
   `../osf-main` (liens symboliques faits ; `node scripts/serve.js --port 3001` dedans).
 - **Suite** : clôture du lot 3, puis lot 4 (nuages volumétriques). Points ouverts : coût CPU de soumission (≈ 5 µs par
-  draw call) qui limite Ultra à 120 Hz ; minimap OSM bloquée par la politique d'usage des tuiles
+  draw call) qui limitait Ultra à 120 Hz, à remesurer depuis qu’une tuile ne coûte plus qu’un draw call ; minimap OSM bloquée par la politique d'usage des tuiles
   d'OpenStreetMap (hors rendu, voir **Problèmes hors rendu relevés**).
 ---
 
@@ -496,7 +493,9 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       flamme de postcombustion à diamants de choc au-dessus de 300 m/s. Les sources ponctuelles prennent
       la racine de la pré-exposition (`emissiveExposure`) pour ne pas noyer l'image d'éblouissement ;
       les lumières des villes, sources étendues, prennent la pré-exposition complète. 4 draw calls
-      (instanciation, géométries fusionnées).
+      (instanciation, géométries fusionnées). Interrupteur des feux anticollision (gyrophares et
+      éclats ; demande de l'utilisateur) : réglage « Anti-collision lights » de l'onglet Flight,
+      touche O (celle des feux à éclats dans les simulateurs courants) ; les feux de position restent allumés.
 - [x] **L3.7** Vérifier les modes `sar` et `elevation` (ciel désactivé).
       Fait : SAR sans atmosphère (ciel noir, éclairage latéral, sans tone mapping) ; `elevation` avec
       ciel et perspective aérienne, un peu clair (albédo élevé de la palette hypsométrique), accepté.
@@ -613,6 +612,12 @@ Notes de lecture :
 | 2026-11-24 | L3 feux instanciés (4 draw calls) | Vol par défaut | 128 s | 118,6 | 102,0 | 58,8 | 5,2 (6,5) | 0 / 0 | 2,14 M | 558 |
 | 2026-11-24 | L3 feux instanciés, capture 1 | Plan 1 (basse alt.) | 94 s | 115,8 | 71,4 | 52,6 | 6,5 (7,5) | 4 / 0 | 2,69 M | 670 |
 | 2026-11-24 | L3 feux instanciés, capture 2 | Plan 1 (basse alt.) | 94 s | 117,2 | 76,3 | 55,2 | 6,2 (6,8) | 0 / 0 | 2,69 M | 670 |
+| 2026-11-24 | L3 sans fond de tuile three-tile (CPU de rendu 2,8 ms contre 3,8) | Vol par défaut | 128 s | 119,3 | 108,7 | 63,7 | 4,6 (6,3) | 0 / 0 | 1,11 M | 316 |
+| 2026-11-24 | L3 sans fond de tuile three-tile, capture 1 | Plan 1 (basse alt.) | 94 s | 118,7 | 98,0 | 58,1 | 6,5 (7,5) | 0 / 0 | 1,38 M | 372 |
+| 2026-11-24 | L3 sans fond de tuile three-tile, capture 2 | Plan 1 (basse alt.) | 94 s | 119,4 | 104,2 | 62,1 | 6,0 (6,6) | 0 / 0 | 1,38 M | 372 |
+| 2026-11-24 | L3 tuiles opaques | Vol par défaut | 128 s | 119,4 | 108,7 | 63,7 | 4,3 (6,4) | 0 / 0 | 1,11 M | 316 |
+| 2026-11-24 | L3 tuiles opaques, capture 1 | Plan 1 (basse alt.) | 94 s | 119,5 | 105,3 | 63,7 | 4,8 (6,5) | 1 / 0 | 1,38 M | 372 |
+| 2026-11-24 | L3 tuiles opaques, capture 2 | Plan 1 (basse alt.) | 94 s | 119,5 | 105,3 | 62,5 | 4,9 (6,5) | 0 / 0 | 1,38 M | 372 |
 | 2026-11-24 | L2.7 preset Ultra, LODThreshold 1,4 | Vol par défaut | 128 s | 115,6 | 85,5 | 53,5 | 5,0 (6,5) | 1 / 0 | 2,84 M | 714 |
 
 Pour mémoire, la configuration n°4 de `BENCHMARKS.md` (même machine, Chrome 146, ancien moteur
@@ -662,6 +667,9 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 | 2026-11-24 | **Pleine résolution** — L3 atmosphère, perspective aérienne par pixel (visibilité 220 km) | 4,78 | 6,13 | 5,85 | 5,47 | 5,94 | 5,78 |
 | 2026-11-24 | **Pleine résolution** — L3 atmosphère, volume de perspective aérienne | 3,96 | 6,22 | 5,17 | 4,41 | 4,18 | 4,37 |
 | 2026-11-24 | **Pleine résolution** — L3 nuit, feux de l'avion, villes (jour) | 4,93 | 6,28 | 5,52 | 4,89 | 4,63 | 4,77 |
+| 2026-11-24 | **Pleine résolution** — L3 sans fond de tuile three-tile | 4,23 | 5,65 | 5,53 | 4,74 | 4,43 | 4,68 |
+| 2026-11-24 | **Pleine résolution** — L3 tuiles opaques | 3,46 | 3,44 | 3,94 | 3,88 | 4,35 | 4,00 |
+| 2026-11-24 | L3 sans fond de tuile — draw calls (contre 549 / 657 / 663 / 603 / 631 / 603) | 307 | 361 | 364 | 334 | 348 | 334 |
 | 2026-11-24 | L2.7 Low et Medium (LODThreshold 0,9) — draw calls / triangles | 382 / 1,26 M | 412 / 1,53 M | 454 / 1,69 M | 388 / 1,30 M | 384 / 1,21 M | 382 / 1,26 M |
 | 2026-11-24 | L2.7 Ultra 1,4 — draw calls / triangles | 712 / 2,66 M | 790 / 3,36 M | 820 / 3,45 M | 730 / 2,77 M | 768 / 2,78 M | 724 / 2,69 M |
 
@@ -735,11 +743,28 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 | 2026-11-24 | Sources lumineuses de nuit | Racine de la pré-exposition pour les sources ponctuelles (feux, flammes), pré-exposition complète pour les sources étendues (villes) ; vision nocturne épargnant les pixels ≥ 2–10 × la luminance d'adaptation | Avec la pré-exposition complète, un feu de 2 500 cd ou une postcombustion noie l'image d'éblouissement ; l'éclairage public, quelques cd/m², reste physique et coloré |
 | 2026-11-24 | Lumières des villes | Mosaïque régionale Black Marble 2016 (GIBS, zoom 8) dans une seule texture lue par un nœud émissif partagé, plutôt qu'une seconde source d'imagerie de three-tile | three-tile superpose ses sources en matériaux multiples : un draw call de plus par tuile, alors que la soumission CPU limite déjà ; la donnée est au mieux à ≈ 450 m/pixel (zoom 8 maximum), d'où le motif procédural de près |
 | 2026-11-24 | Halos et flammes | Passe dédiée (calque, demi-résolution) ajoutée après le TAAU, test d'occultation dans le shader | Additifs et transparents dans la passe de scène, ils prendraient la perspective aérienne du terrain derrière eux et le TAAU les traînerait (vitesses du fond) |
+| 2026-11-24 | Régression du p1 du plan 1 (−12 % après la nuit) | Réduire le coût plutôt que l'accepter ou réserver des effets aux presets élevés (choix de l'utilisateur) ; cause trouvée dans three-tile, pas dans la nuit | three-tile dessinait chaque tuile deux fois (fond uni à plat au niveau de la mer, invisible sous l'imagerie) : 251 draw calls inutiles en vol, chacun alourdi par l'éclairage de l'atmosphère. Fond masqué (`backgroundMaterial.visible = false`) : CPU de rendu en vol 3,84 → 2,84 ms (`main` : 2,71) |
+| 2026-11-24 | Transparence des tuiles | Sources d'imagerie de three-tile déclarées opaques (`transparent: false`, `true` par défaut dans three-tile) | Tuiles dans la liste transparente : triées du loin vers le près, sans rejet précoce par la profondeur, le shader du terrain tournait sur tous les versants cachés. Images identiques (PSNR ≥ 45 dB), coût GPU −0,1 à −2,2 ms selon la vue |
 | 2026-11-23 | Vitesse par défaut | 560 m/s | Vitesse réelle de l'ancien défaut (800 unités Mercator/s) : benchmarks comparables à la baseline |
 
 ## Journal des sessions
 
 <!-- Entrée la plus récente en haut. -->
+
+### 2026-11-24 (18)
+- Décision de l'utilisateur sur le p1 du plan 1 : réduire le coût. Profil CPU en vol contre `main`
+  (même nombre de draw calls) : le surcoût venait de la mise à jour complète des bindings de chaque
+  objet, alourdie par l'éclairage de l'atmosphère (terrain : 11 nœuds `updateBefore` au lieu de 2,
+  7 textures au lieu de 4).
+- Fait : fond uni de three-tile masqué (deuxième draw call par tuile, invisible) ; sources d'imagerie
+  opaques (three-tile les déclare transparentes par défaut) ; interrupteur des feux anticollision
+  (demande de l'utilisateur, réglage + touche O). Détails dans **Décisions** et sous L3.8.
+- Mesures : draw calls en vol 579 → 326, CPU de rendu 3,84 → 2,84 ms (`main` : 2,71) ; coût GPU des
+  vues 3,46 / 3,44 / 3,94 / 3,88 / 4,35 / 4,00 ms (lot 2 : 3,11 / 5,09 / 4,01 / 3,80 / 3,34 / 3,72) ;
+  plan 1 p1 63,7 et 62,5, p5 105,3 ; vol par défaut p1 63,7, p5 108,7 (lot 2 : 61,3 et 106,4).
+  Images identiques (PSNR ≥ 45 dB), modes `sar` et `elevation` vérifiés.
+- Étoiles rendues à chaque frame : < 0,03 ms de CPU au profil, laissées en l'état.
+- Prochaine étape : voir État courant (« Prochaine session »).
 
 ### 2026-11-24 (17)
 - Fait : L3.6 (nuit : étoiles, lune et clair de lune, pré-exposition, vision nocturne, lumières des
