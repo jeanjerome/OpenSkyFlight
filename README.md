@@ -25,7 +25,10 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 - **OSM minimap** — real-time 2D map overlay with airplane marker and independent zoom
 - **Flight plan system** — record waypoints, save/load flight plans, and engage autopilot to follow a path automatically
 - **Local tile cache** — transparent caching proxy, pre-download tiles for offline flight
-- **Atmospheric sky, lighting, clouds & fog** — Preetham sky with configurable sun position (compass bearing and elevation); sun colour, sky light (prefiltered environment map of the sky) and fog colour derived from the same sky model; animated cloud layer
+- **Physical atmosphere** — precomputed atmospheric scattering ([takram](https://github.com/takram-design-engineering/three-geospatial)): sky, aerial perspective read from a frustum-aligned volume, sunlight and sky light evaluated at each surface point, all from the same scattering tables; a Visibility setting sets the haze; animated cloud layer
+- **Time of day** — the sun follows the date and the local solar time (NOAA formulas), with time frozen, real time or accelerated up to ×600
+- **Night** — stars turning with the hour, the moon with its phases and moonlight, an exposure that follows the falling light, night vision that fades colors into a bluish grey, and city lights from NASA's Black Marble imagery
+- **Aircraft lights** — position lights, flashing red beacons and white wingtip strobes with their glare, engine glow with thrust and an afterburner flame with shock diamonds
 - **HDR render pipeline** — scene rendered into a HalfFloat buffer with a 32-bit reversed depth buffer, temporal anti-aliasing with upscaling (TAAU), bloom limited to the sun and its specular reflections, automatic exposure metered on the GPU, AgX tone mapping at the end of the pipeline
 - **Dynamic resolution** — the 3D scene is rendered below the screen resolution when the GPU exceeds a 60 FPS budget, and TAAU reconstructs the full-resolution image
 - **Built-in benchmark** — automated camera path with FPS/GPU timing (GPU span of each frame), metrics recording, and baseline comparison
@@ -161,6 +164,7 @@ cache/
   terrarium/        ← elevation tiles (AWS Terrarium)
   osm/              ← map textures (OpenStreetMap)
   satellite/        ← satellite imagery (ESRI)
+  nightlights/      ← city lights at night (NASA Black Marble, GIBS)
 ```
 
 > The `cache/` directory is listed in `.gitignore` and should not be committed — it can be regenerated at any time.
@@ -173,17 +177,17 @@ cache/
 ├── css/main.css               Stylesheet (CSS custom properties)
 ├── js/
 │   ├── app.js                 Orchestrator: init, input bindings, render loop
-│   ├── aircraft/              Rafale GLTF model loading & animation
-│   ├── atmosphere/            Sky model, sky lighting & environment map, cloud layer, fog
+│   ├── aircraft/              Rafale GLTF model loading & animation, aircraft lights & engine glow
+│   ├── atmosphere/            Atmospheric scattering, aerial perspective volume, sun & moon ephemerides, night exposure, cloud layer
 │   ├── benchmark/             Automated perf testing & baseline comparison
 │   ├── camera/                Flight controller (6-DOF), chase camera, springs
 │   ├── constants/             Shared constants (camera, HUD, physics, terrain…)
 │   ├── flightplan/            Waypoint recording, flight plan interpolation, autopilot
 │   ├── geo/                   Tile math, elevation provider, fetch limiter
 │   ├── input/                 Keyboard dispatch (e.code for flight, e.key for actions)
-│   ├── rendering/             Render pipeline (HDR scene pass, TAAU, bloom, tone mapping), dynamic resolution
+│   ├── rendering/             Render pipeline (HDR scene pass, TAAU, glow pass, bloom, night vision, tone mapping), dynamic resolution
 │   ├── scene/                 Renderer, scene, camera & lights factory
-│   ├── terrain/               Real-world terrain manager (three-tile integration)
+│   ├── terrain/               Real-world terrain manager (three-tile integration), city lights
 │   ├── ui/                    HUD instruments, flight plan menu, minimap, settings menu
 │   └── utils/                 Reactive config, settings schema, quality presets, stored settings, logger
 ├── assets/
@@ -196,6 +200,7 @@ cache/
 │   ├── render-benchmark.js    In-app flight benchmark runner (Chrome)
 │   └── render-summary.js      Comparable figures from benchmark reports
 ├── vendor/three-tile/         Vendored three-tile (0.11.8-osf) with concentric LOD
+├── vendor/takram/             Vendored takram atmosphere WebGPU builds, with local patches (see its README)
 ├── docs/
 │   ├── rendering-roadmap.md   Rendering overhaul plan, progress, measurements, decisions
 │   └── screenshots/           README screenshots, reference view captures per milestone

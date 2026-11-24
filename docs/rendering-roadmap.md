@@ -73,7 +73,7 @@ en fin de session.
   `docs/screenshots/render/lot3/`, bilan. Référence de comparaison du lot 3 :
   `benchmarks/render/l3-night/` (6 vues) et `l3-flight-inst1/`, `l3-flight-inst2/` (vols). Worktree de `main` prêt dans
   `../osf-main` (liens symboliques faits ; `node scripts/serve.js --port 3001` dedans).
-- **Suite** : lot 3 (atmosphère physique et heure du jour). Points ouverts : coût CPU de soumission (≈ 5 µs par
+- **Suite** : clôture du lot 3, puis lot 4 (nuages volumétriques). Points ouverts : coût CPU de soumission (≈ 5 µs par
   draw call) qui limite Ultra à 120 Hz ; minimap OSM bloquée par la politique d'usage des tuiles
   d'OpenStreetMap (hors rendu, voir **Problèmes hors rendu relevés**).
 ---
