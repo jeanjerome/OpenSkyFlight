@@ -81,6 +81,9 @@ export default class GeoTerrainManager {
       dataType: 'image',
       minLevel: 0,
       maxLevel: effectiveZoom,
+      // three-tile makes sources transparent by default: the tiles would be
+      // sorted far to near and shade every hidden slope
+      transparent: false,
     });
 
     // DEM source — Terrarium PNG tiles, GPU-decoded via TSL
@@ -98,6 +101,7 @@ export default class GeoTerrainManager {
           dataType: 'debug',
           minLevel: 0,
           maxLevel: effectiveZoom,
+          transparent: false,
         })
       : imgSource;
 
