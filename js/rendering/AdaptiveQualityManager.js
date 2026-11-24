@@ -33,7 +33,7 @@ import {
  * queries) the frame interval is used, with thresholds wide enough for vsync.
  *
  * CONFIG.renderScale is the highest scale; with CONFIG.dynamicResolution off the
- * scene pass is rendered at that scale.
+ * scene pass is rendered at that scale. Raising it moves the scale straight to it.
  */
 export default class AdaptiveQualityManager {
   /**
@@ -46,12 +46,20 @@ export default class AdaptiveQualityManager {
     this._window = new Float32Array(ADAPTIVE_WINDOW_FRAMES);
     this._count = 0;
     this._lastChange = performance.now();
+    this._maxScale = CONFIG.renderScale;
     this._apply(CONFIG.renderScale);
   }
 
   /** @param {number} frameTimeMs - interval since the previous frame */
   update(frameTimeMs) {
     const maxScale = CONFIG.renderScale;
+    // A raised ceiling (a higher image sharpness picked in the menu) applies at once,
+    // instead of being reached step by step; the scale drops again if the GPU cannot keep up
+    if (maxScale > this._maxScale) {
+      this._apply(maxScale);
+      this._lastChange = performance.now();
+    }
+    this._maxScale = maxScale;
     const scale = this._pipeline.renderScale;
     if (!CONFIG.dynamicResolution || scale > maxScale) {
       if (scale !== maxScale) this._apply(maxScale);
