@@ -1,18 +1,18 @@
 import * as THREE from 'three';
-import { mrt, output, pass, uniform, vec4, velocity } from 'three/tsl';
+import { mrt, output, pass, rtt, vec4, velocity } from 'three/tsl';
 import { taau } from 'three/addons/tsl/display/TAAUNode.js';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { BLOOM_STRENGTH, BLOOM_RADIUS } from '../constants/rendering.js';
 import AutoExposureNode from './AutoExposureNode.js';
-
-/** Bloom threshold that no HalfFloat value reaches, until the lighting sets one */
-const NO_BLOOM_THRESHOLD = 1e6;
 
 /**
  * Frame rendering through a RenderPipeline: the scene is rendered into a
  * HalfFloat (HDR) target, post-processing effects operate on that linear HDR
  * image, and tone mapping and the output color space conversion are applied
  * once, at the end of the chain.
+ *
+ * The atmosphere (aerial perspective) applies to the scene pass, at its
+ * resolution, before the anti-aliasing (see setAtmosphere).
  *
  * Anti-aliasing is temporal, with upscaling (TAAU): the camera is jittered by a
  * sub-pixel offset every frame and the frames are accumulated, reprojected with
@@ -25,7 +25,7 @@ const NO_BLOOM_THRESHOLD = 1e6;
  * surroundings, as the scattering in a camera lens or in the eye does. It reads
  * the anti-aliased image, so that sub-pixel highlights do not flicker in the
  * glow, and is added to it before tone mapping. The threshold is a scene
- * radiance set by the lighting (see setBloom).
+ * luminance set by the lighting (see setBloomThreshold).
  *
  * Automatic exposure meters the anti-aliased image and scales the result
  * before tone mapping, around the base exposure (see AutoExposureNode). It
@@ -44,17 +44,16 @@ export default class ScenePipeline {
     this.scenePass.renderTarget.depthTexture.type = THREE.FloatType;
     this.scenePass.setMRT(mrt({ output, velocity }));
 
-    this.taauNode = taau(
-      this.scenePass.getTextureNode('output'),
-      this.scenePass.getTextureNode('depth'),
-      this.scenePass.getTextureNode('velocity'),
-      camera,
-    );
+    this._sceneColor = this.scenePass.getTextureNode('output');
+    this._sceneDepth = this.scenePass.getTextureNode('depth');
+    this._atmosphereNode = null;
+
+    this.taauNode = taau(this._sceneColor, this._sceneDepth, this.scenePass.getTextureNode('velocity'), camera);
     this._antiAliased = this.taauNode.getTextureNode();
 
-    this._bloomThreshold = uniform(NO_BLOOM_THRESHOLD);
-    this.bloomNode = bloom(this._antiAliased, BLOOM_STRENGTH, BLOOM_RADIUS, this._bloomThreshold);
-    this._bloomEnabled = true;
+    // No bloom until the lighting sets a threshold (see setBloomThreshold)
+    this.bloomNode = bloom(this._antiAliased, BLOOM_STRENGTH, BLOOM_RADIUS);
+    this._bloomEnabled = false;
 
     this.autoExposureSupported = renderer.backend.isWebGPUBackend === true;
     this.autoExposureNode = this.autoExposureSupported ? new AutoExposureNode(this._antiAliased) : null;
@@ -92,20 +91,47 @@ export default class ScenePipeline {
     return this.autoExposureNode.readAdaptedLuminance(this._renderer);
   }
 
-  /**
-   * @param {boolean} enabled - whether the bloom pass runs
-   * @param {number} [threshold] - luminance of the scene radiance (before
-   *   exposure) above which pixels bloom
-   */
-  setBloom(enabled, threshold = NO_BLOOM_THRESHOLD) {
-    this._bloomThreshold.value = threshold;
-    // A soft knee as wide as the threshold: highlights fade into the bloom
-    // instead of popping in as they cross it
-    this.bloomNode.smoothWidth.value = threshold;
+  /** @param {boolean} enabled - whether the bloom pass runs */
+  setBloom(enabled) {
     if (enabled !== this._bloomEnabled) {
       this._bloomEnabled = enabled;
       this._rebuild();
     }
+  }
+
+  /**
+   * @param {Node} threshold - luminance (before exposure) above which pixels
+   *   bloom, as a node evaluated by the bloom's high-pass filter
+   */
+  setBloomThreshold(threshold) {
+    this.bloomNode.threshold = threshold;
+    // A soft knee as wide as the threshold: highlights fade into the bloom
+    // instead of popping in as they cross it
+    this.bloomNode.smoothWidth = threshold;
+    this._pipeline.needsUpdate = true;
+  }
+
+  /**
+   * @param {?function(TextureNode, TextureNode): Node} apply - builds the
+   *   atmosphere (sky and aerial perspective) over the scene from its color and
+   *   depth, or null for none. The
+   *   result is rendered at the scene pass resolution and fed to the
+   *   anti-aliasing in place of the scene color.
+   */
+  setAtmosphere(apply) {
+    this._atmosphereNode?.dispose();
+    this._atmosphereNode = null;
+    let input = this._sceneColor;
+    if (apply) {
+      const node = apply(this._sceneColor, this._sceneDepth);
+      // The atmosphere covers every pixel (sky included): opaque
+      this._atmosphereNode = rtt(vec4(node.rgb, 1), null, null, {
+        resolutionScale: this.scenePass.getResolutionScale(),
+      });
+      input = this._atmosphereNode;
+    }
+    this.taauNode.beautyNode = input;
+    this._pipeline.needsUpdate = true;
   }
 
   /**
@@ -115,6 +141,7 @@ export default class ScenePipeline {
    */
   setRenderScale(scale) {
     this.scenePass.setResolutionScale(scale);
+    this._atmosphereNode?.setResolutionScale(scale);
   }
 
   /** @returns {number} */
@@ -148,6 +175,7 @@ export default class ScenePipeline {
     this.bloomNode.dispose();
     this.autoExposureNode?.dispose();
     this.taauNode.dispose();
+    this._atmosphereNode?.dispose();
     this.scenePass.dispose();
   }
 }

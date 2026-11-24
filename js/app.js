@@ -41,17 +41,25 @@ async function initApp() {
   const { scene, dirLight, ambientLight } = createScene();
   const camera = createCamera();
 
-  // --- Atmosphere ---
-  // Drives the sky dome, fog, tone mapping and the scene lights
-  // Drives the sky, the sun and the sky light from the configuration
   const scenePipeline = new ScenePipeline(renderer, scene, camera);
-  new AtmosphericSky(scene, renderer, { dirLight, ambientLight }, scenePipeline);
-  const cloudLayer = new CloudLayer(scene);
-  cloudLayer.mesh.renderOrder = CLOUD_RENDER_ORDER;
 
   // --- Terrain ---
   const geoTerrainManager = new GeoTerrainManager(scene, renderer);
   geoTerrainManager.init(CONFIG.lat, CONFIG.lon);
+
+  // --- Atmosphere ---
+  // Drives the sky, the aerial perspective, the sunlight and sky light, the
+  // tone mapping and the bloom threshold from the configuration
+  const atmosphericSky = new AtmosphericSky(
+    scene,
+    renderer,
+    camera,
+    { dirLight, ambientLight },
+    scenePipeline,
+    (x, z) => geoTerrainManager.worldToGeo(x, z),
+  );
+  const cloudLayer = new CloudLayer(scene);
+  cloudLayer.mesh.renderOrder = CLOUD_RENDER_ORDER;
 
   // --- Controllers ---
   const flightController = new FlightController(camera, renderer.domElement);
@@ -491,6 +499,7 @@ async function initApp() {
     groundElevation = geoTerrainManager.getGroundElevation(camera.position.x, camera.position.z);
 
     // --- Render phase ---
+    atmosphericSky.update();
     if (timer) timer.begin('render');
     gpuTimer.beginFrame();
     renderer.info.reset();

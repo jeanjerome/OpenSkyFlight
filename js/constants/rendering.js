@@ -53,22 +53,18 @@ export const AMBIENT_INTENSITY = 0.3;
 export const DIR_LIGHT_INTENSITY = 1.2;
 export const DIR_LIGHT_POSITION = [1, 0.5, 0.8];
 
-// --- Tone mapping and sky-consistent lighting ---
-// Sky, sun and ambient light share the radiance scale of the Preetham sky
-// (three.js SkyMesh), whose horizon reaches about 10 in daylight.
-
-/** Exposure applied before AgX tone mapping */
-export const TONE_MAPPING_EXPOSURE = 0.35;
+// --- Tone mapping ---
+// Sky, sunlight, sky light and aerial perspective come from the atmosphere
+// model (see AtmosphericSky) in its luminance scale: luminance in cd/m² times
+// the model's luminanceScale (about 1/75 700, so that the sun's illuminance
+// above the atmosphere is about 1.7).
 
 /**
- * Sun illuminance at normal incidence for a fully transmitted Preetham sun.
- * Gives a direct-sun to sky-dome irradiance ratio of about 5:1 on flat ground
- * with the sun 55° high, as measured under a clear sky.
+ * Exposure applied before AgX tone mapping. Gives the daytime reference views
+ * the average brightness they had with the previous sky model (exposure 0.35
+ * on a scale 24.3 times brighter).
  */
-export const SUN_ILLUMINANCE_SCALE = 57;
-
-/** Average albedo of the ground seen from the air (forest, meadows, rock), for bounced light */
-export const GROUND_ALBEDO = 0.15;
+export const TONE_MAPPING_EXPOSURE = 8.5;
 
 // --- Bloom ---
 // Only pixels brighter than any lit diffuse surface and than the sky itself
@@ -87,8 +83,8 @@ export const BLOOM_RADIUS = 0.8;
 export const AUTO_EXPOSURE_BINS = 64;
 
 /** log2 luminance range of the histogram: deep shadow to well above the brightest sky */
-export const AUTO_EXPOSURE_LOG_MIN = -8;
-export const AUTO_EXPOSURE_LOG_MAX = 10;
+export const AUTO_EXPOSURE_LOG_MIN = -13;
+export const AUTO_EXPOSURE_LOG_MAX = 5;
 
 /** Metering grid (samples across, down), whatever the resolution */
 export const AUTO_EXPOSURE_GRID = [256, 144];
@@ -101,7 +97,7 @@ export const AUTO_EXPOSURE_HIGH_PERCENTILE = 0.9;
  * Scene luminance (before exposure) for which the base exposure (TONE_MAPPING_EXPOSURE)
  * is right: the geometric mean of the metered luminance of the daytime reference views
  */
-export const AUTO_EXPOSURE_REFERENCE_LUMINANCE = 1.32;
+export const AUTO_EXPOSURE_REFERENCE_LUMINANCE = 0.0541;
 
 /**
  * Share of the deviation from the reference luminance that the exposure compensates,

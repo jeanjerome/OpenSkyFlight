@@ -14,6 +14,10 @@ export async function createRenderer() {
     reversedDepthBuffer: true,
   });
   await renderer.init();
+  // The frame loop resets the statistics before rendering (draw calls per
+  // frame); the renderer's own reset runs on its animation frame, whose order
+  // relative to the app's frame is not fixed
+  renderer.info.autoReset = false;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, CONFIG.maxPixelRatio));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setClearColor(CLEAR_COLOR);
@@ -23,12 +27,12 @@ export async function createRenderer() {
 
 export function createScene() {
   const scene = new THREE.Scene();
+  // Lighting of the SAR mode; AtmosphericSky lights the other modes
   const ambientLight = new THREE.AmbientLight(0xffffff, AMBIENT_INTENSITY);
   scene.add(ambientLight);
   const dirLight = new THREE.DirectionalLight(0xffffff, DIR_LIGHT_INTENSITY);
   dirLight.position.set(...DIR_LIGHT_POSITION);
   scene.add(dirLight);
-  // Sky light comes from scene.environment, set by AtmosphericSky
   return { scene, ambientLight, dirLight };
 }
 

@@ -33,13 +33,10 @@ import { SETTINGS_BY_KEY } from './settingsSchema.js';
  * Atmosphere:
  * @property {number}  sunElevation           - Sun elevation angle in degrees, range [0..90] (default: 35)
  * @property {number}  sunAzimuth             - Sun compass bearing in degrees, clockwise from north, range [0..360] (default: 160)
- * @property {number}  skyTurbidity           - Atmospheric turbidity, range [1..10] (default: 2.0)
- * @property {number}  skyRayleigh            - Rayleigh scattering coefficient (default: 1.0)
  * @property {boolean} showClouds             - Show cloud layer (default: false)
  * @property {number}  cloudAltitude          - Cloud layer altitude in meters, range [500..12000] (default: 3500)
  * @property {number}  cloudOpacity           - Cloud opacity (default: 0.7)
- * @property {boolean} fogEnabled             - Enable atmospheric fog (default: true)
- * @property {number}  fogDensity             - Fog density per metre (default: 0.000021)
+ * @property {boolean} fogEnabled             - Aerial perspective: light scattered and absorbed by the air between the camera and the scenery (default: true)
  *
  * UI:
  * @property {boolean} showHud                - Show HUD overlay (default: true)
@@ -86,13 +83,10 @@ const CONFIG = {
   radioVolume: 0.8,
   sunElevation: 35,
   sunAzimuth: 160,
-  skyTurbidity: 2.0,
-  skyRayleigh: 1.0,
   showClouds: false,
   cloudAltitude: 3500,
   cloudOpacity: 0.7,
   fogEnabled: true,
-  fogDensity: 0.000021,
   hiResMode: false,
 };
 

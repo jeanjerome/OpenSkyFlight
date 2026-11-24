@@ -30,13 +30,6 @@ function formatSpeed(ms) {
   return `Mach ${(ms / MACH_1_MS).toFixed(1)}`;
 }
 
-function formatClarity(turbidity) {
-  if (turbidity <= 2) return 'Crystal clear';
-  if (turbidity <= 4) return 'Clear';
-  if (turbidity <= 7) return 'Hazy';
-  return 'Very hazy';
-}
-
 const percent = (v) => `${Math.round(v * 100)} %`;
 
 export const SETTINGS = [
@@ -172,24 +165,11 @@ export const SETTINGS = [
     persist: true,
   },
   {
-    key: 'skyTurbidity',
-    tab: 'world',
-    section: 'Sun and sky',
-    label: 'Air clarity',
-    help: 'Amount of haze and dust in the air, which whitens the sky and reddens the sun.',
-    type: 'range',
-    min: 1,
-    max: 10,
-    step: 0.5,
-    format: formatClarity,
-    persist: true,
-  },
-  {
     key: 'fogEnabled',
     tab: 'world',
     section: 'Sun and sky',
-    label: 'Distance fog',
-    help: 'Fades distant terrain into the colour of the sky.',
+    label: 'Distance haze',
+    help: 'Light scattered by the air between you and the scenery: distant mountains fade into blue, sunsets into orange.',
     type: 'toggle',
     persist: true,
   },
@@ -429,28 +409,6 @@ export const SETTINGS = [
     max: 1,
     step: 0.05,
     format: percent,
-  },
-  {
-    key: 'skyRayleigh',
-    tab: 'dev',
-    section: 'Atmosphere',
-    label: 'Rayleigh coefficient',
-    type: 'range',
-    min: 0,
-    max: 4,
-    step: 0.1,
-    format: (v) => v.toFixed(1),
-  },
-  {
-    key: 'fogDensity',
-    tab: 'dev',
-    section: 'Atmosphere',
-    label: 'Fog density',
-    type: 'range',
-    min: 0,
-    max: 0.0001,
-    step: 0.000001,
-    format: (v) => `${(v * 1e6).toFixed(0)} ×10⁻⁶ /m`,
   },
 ];
 

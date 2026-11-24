@@ -341,6 +341,17 @@ export default class GeoTerrainManager {
     return world;
   }
 
+  /**
+   * Geographic position below a world position.
+   * @returns {{lat: number, lon: number}|null} null until the tile map exists
+   */
+  worldToGeo(x, z) {
+    if (!this.tileMap) return null;
+    const geo = this.tileMap.world2geo(new THREE.Vector3(x, 0, z));
+    if (isNaN(geo.x) || isNaN(geo.y)) return null;
+    return { lat: geo.y, lon: geo.x };
+  }
+
   /** Number of tile downloads in flight (0 once the visible terrain has loaded). */
   get pendingDownloads() {
     return this.tileMap ? this.tileMap.downloading : 0;
