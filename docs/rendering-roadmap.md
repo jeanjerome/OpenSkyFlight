@@ -8,13 +8,12 @@ en fin de session.
 
 ## État courant (mis à jour le 2026-11-24)
 
-- **Lots terminés** : 0 et 1 (fusionnés dans `main`), 2 (clos le 2026-11-24, **fusion dans `main` en
-  attente de l'accord de l'utilisateur**). Lot 2 : toutes les tâches faites sauf le reste optionnel de
+- **Lots terminés** : 0, 1 et 2, fusionnés dans `main` (lot 2 le 2026-11-24). Lot 2 : toutes les tâches faites sauf le reste optionnel de
   L2.6 (décodage d'altitude dans un worker, `compileAsync`), reporté : p5 et p1 ne le justifient
   plus. Bilan dans **Mesures** (lignes « Clôture du lot 2 ») et constats visuels sous les tableaux.
 - **three.js** : r187 (import map d'`index.html`), mis à jour depuis r183 pour le TRAA compatible avec
   la profondeur inversée.
-- **Git** : branche `feat/render-hdr-pipeline` (depuis `main`), non poussée.
+- **Git** : tout est dans `main`, poussé ; créer une branche de lot depuis `main` pour le lot 3.
 - **Environnement local** : bundle three-tile construit, `npm install` fait (racine et
   `vendor/three-tile`), cache `cache/` chaud pour les vues de référence et les deux vols. Lancer
   `npm run dev` en tâche de fond avant toute mesure. Mesurer **sur l'écran intégré 120 Hz** : sur un
@@ -40,8 +39,7 @@ en fin de session.
   `js/utils/settingsStore.js`. `render:capture` et `render:benchmark` ouvrent l'app avec `?dev=1`
   (et HUD / mini-carte masqués par l'URL pour les captures), dans un profil vierge : preset High,
   identique à l'état d'avant L2.10, donc les mesures de référence restent comparables.
-- **Suite** : fusion de `feat/render-hdr-pipeline` dans `main` après accord de l'utilisateur, puis
-  lot 3 (atmosphère physique et heure du jour). Points ouverts : coût CPU de soumission (≈ 5 µs par
+- **Suite** : lot 3 (atmosphère physique et heure du jour). Points ouverts : coût CPU de soumission (≈ 5 µs par
   draw call) qui limite Ultra à 120 Hz ; minimap OSM bloquée par la politique d'usage des tuiles
   d'OpenStreetMap (hors rendu, voir **Problèmes hors rendu relevés**).
 ---
@@ -616,7 +614,9 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 ### 2026-11-24 (14)
 - Fait : clôture du lot 2 — captures des 6 vues (`docs/screenshots/render/lot2/`), mesures finales
   (`benchmarks/render/lot2/`, non versionné), bilan et constats visuels, lint sans erreur.
-- Prochaine étape : fusion dans `main` après accord explicite de l'utilisateur, puis lot 3.
+- Fait ensuite, avec l'accord de l'utilisateur : `feat/render-hdr-pipeline` fusionnée dans `main`
+  (avance rapide) et poussée ; branche de lot supprimée.
+- Prochaine étape : lot 3.
 
 ### 2026-11-24 (13)
 - Fait : L2.10 (conception validée avec l'utilisateur, voir les décisions sous L2.10) et la partie
