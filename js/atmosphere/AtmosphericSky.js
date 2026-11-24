@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { EnvironmentNode, MeshStandardNodeMaterial, NodeMaterial } from 'three/webgpu';
 import { Fn, If, context, luminance, max, uniform, vec2, vec3 } from 'three/tsl';
 import { Ellipsoid, Geodetic } from '@takram/three-geospatial';
 import {
@@ -24,6 +25,34 @@ const SUN_AUREOLE_ANGLE = 0.5 * DEG2RAD;
 const ENVIRONMENT_DISTANCE_THRESHOLD = 5000;
 
 AtmosphereLight.registerNode(AtmosphereLightNode);
+
+/**
+ * Image-based lighting reduced to its reflections: the diffuse sky light comes
+ * from AtmosphereLight, evaluated at each surface point from the irradiance
+ * table (it accounts for the altitude of the point, where the environment map
+ * is the sky seen from the camera only). The irradiance three's EnvironmentNode
+ * computes goes into a variable nothing reads, which the shader compiler drops.
+ */
+class ReflectionEnvironmentNode extends EnvironmentNode {
+  static get type() {
+    return 'ReflectionEnvironmentNode';
+  }
+
+  setup(builder) {
+    const { context } = builder;
+    const iblIrradiance = context.iblIrradiance;
+    context.iblIrradiance = vec3().toVar();
+    super.setup(builder);
+    context.iblIrradiance = iblIrradiance;
+  }
+}
+
+// Every PBR material (the physical material extends the standard one), glTF
+// materials converted by the renderer included
+MeshStandardNodeMaterial.prototype.setupEnvironment = function (builder) {
+  const envNode = NodeMaterial.prototype.setupEnvironment.call(this, builder) ?? builder.environmentNode;
+  return envNode ? new ReflectionEnvironmentNode(envNode) : null;
+};
 
 /**
  * Physically based atmosphere (Bruneton's precomputed scattering with Hillaire's
@@ -85,14 +114,13 @@ export default class AtmosphericSky {
     this.skyNode.showMoon = false;
     this.skyNode.showStars = false;
 
-    // Sky light and reflections: prefiltered environment map of the sky seen
-    // from the camera, with the ground below the horizon. It includes the sky
-    // light, so the sunlight only adds the direct sun.
+    // Reflections: prefiltered environment map of the sky seen from the camera,
+    // with the ground below the horizon (see ReflectionEnvironmentNode)
     this.environmentNode = skyEnvironment();
     this.environmentNode.distanceThreshold = ENVIRONMENT_DISTANCE_THRESHOLD;
 
+    // Direct sun and diffuse sky light, both evaluated at each surface point
     this.sunLight = new AtmosphereLight();
-    this.sunLight.indirect.value = false;
     scene.add(this.sunLight, this.sunLight.target);
 
     this._aureoleECEF = uniform(new THREE.Vector3());
