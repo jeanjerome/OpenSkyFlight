@@ -26,8 +26,8 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 - **Flight plan system** — record waypoints, save/load flight plans, and engage autopilot to follow a path automatically
 - **Local tile cache** — transparent caching proxy, pre-download tiles for offline flight
 - **Atmospheric sky, lighting, clouds & fog** — Preetham sky with configurable sun position (compass bearing and elevation); sun colour, sky light (prefiltered environment map of the sky) and fog colour derived from the same sky model; animated cloud layer
-- **HDR render pipeline** — scene rendered into a HalfFloat buffer with a 32-bit reversed depth buffer, temporal anti-aliasing (TRAA), bloom limited to the sun and its specular reflections, AgX tone mapping at the end of the pipeline
-- **Dynamic resolution scaling** — adaptive pixel ratio based on frame time to maintain smooth performance
+- **HDR render pipeline** — scene rendered into a HalfFloat buffer with a 32-bit reversed depth buffer, temporal anti-aliasing with upscaling (TAAU), bloom limited to the sun and its specular reflections, AgX tone mapping at the end of the pipeline
+- **Dynamic resolution** — the 3D scene is rendered below the screen resolution when the GPU exceeds a 60 FPS budget, and TAAU reconstructs the full-resolution image
 - **Built-in benchmark** — automated camera path with FPS/GPU timing (GPU span of each frame), metrics recording, and baseline comparison
 - **Toast notifications** — non-blocking user feedback for search results and errors
 - **Centralized logging** — in-app log panel with level control (DEBUG/INFO/WARN/ERROR)
@@ -179,7 +179,7 @@ cache/
 │   ├── flightplan/            Waypoint recording, flight plan interpolation, autopilot
 │   ├── geo/                   Tile math, elevation provider, fetch limiter
 │   ├── input/                 Keyboard dispatch (e.code for flight, e.key for actions)
-│   ├── rendering/             Render pipeline (HDR scene pass, TRAA, bloom, tone mapping), adaptive resolution
+│   ├── rendering/             Render pipeline (HDR scene pass, TAAU, bloom, tone mapping), dynamic resolution
 │   ├── scene/                 Renderer, scene, camera & lights factory
 │   ├── terrain/               Real-world terrain manager (three-tile integration)
 │   ├── ui/                    HUD instruments, flight plan menu, minimap, MFD panel
