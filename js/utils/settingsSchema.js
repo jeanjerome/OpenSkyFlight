@@ -103,8 +103,8 @@ export const SETTINGS = [
     ordered: true,
     impact: {
       cost: 3,
-      gain: 2,
-      note: 'Normal draws a third fewer terrain tiles than High; Maximum draws a third more and can stutter at 120 Hz.',
+      gain: 3,
+      note: 'Normal shows less than half as many of the finest terrain tiles as High. Maximum shows about a third more, and can stutter at 120 Hz.',
     },
     persist: true,
   },

@@ -346,6 +346,21 @@ export default class GeoTerrainManager {
     return this.tileMap ? this.tileMap.downloading : 0;
   }
 
+  /**
+   * Number of displayed terrain tiles in the view, by zoom level
+   * @returns {{ total: number, byLevel: Object<number, number> }}
+   */
+  tileLevels() {
+    const byLevel = {};
+    let total = 0;
+    this.tileMap?.rootTile.traverse((tile) => {
+      if (!tile.isTile || !tile.isLeaf || !tile.showing || !tile.inFrustum) return;
+      byLevel[tile.z] = (byLevel[tile.z] || 0) + 1;
+      total++;
+    });
+    return { total, byLevel };
+  }
+
   getMeshes() {
     return this.tileMap ? [this.tileMap] : [];
   }

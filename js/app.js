@@ -322,10 +322,21 @@ async function initApp() {
           'Draw calls': String(info.drawCalls),
           Triangles: info.triangles.toLocaleString('en-US'),
           'Tile downloads': String(geoTerrainManager.pendingDownloads),
+          'Tiles in view': formatTileLevels(geoTerrainManager.tileLevels()),
         };
       },
     },
   });
+
+  /** "212 — z15 48 · z14 61 · z13 52 · z12 30": the finest levels first */
+  function formatTileLevels({ total, byLevel }) {
+    const levels = Object.keys(byLevel)
+      .map(Number)
+      .sort((a, b) => b - a)
+      .slice(0, 4)
+      .map((z) => `z${z} ${byLevel[z]}`);
+    return `${total} — ${levels.join(' · ')}`;
+  }
 
   const flyHint = document.getElementById('fly-hint');
   document.getElementById('menu-button').addEventListener('click', () => panel.open());
@@ -356,6 +367,8 @@ async function initApp() {
     adaptedLuminance: () => scenePipeline.readAdaptedLuminance(),
     setRenderScale: (scale) => scenePipeline.setRenderScale(scale),
     pendingTileDownloads: () => geoTerrainManager.pendingDownloads,
+    // Displayed terrain tiles in the view, by zoom level
+    tileLevels: () => geoTerrainManager.tileLevels(),
     lastGpuTimeMs: () => gpuTimer.getLastGPUTimeMs(),
     // Draw calls and triangles of the last frame
     renderInfo: () => ({ drawCalls: renderer.info.render.drawCalls, triangles: renderer.info.render.triangles }),
