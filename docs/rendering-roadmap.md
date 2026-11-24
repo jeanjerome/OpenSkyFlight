@@ -292,6 +292,13 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       le p95 du temps de frame de 9,4 à 11,7 ms ; au-delà de 8,3 ms à 120 Hz, mais dans le budget de
       60 Hz. Ultra reste un preset optionnel pour machines puissantes ; à revoir si le coût CPU par
       draw call baisse (regroupement des tuiles, décodage d'altitude en worker de L2.6).
+      Révision après retour de l'utilisateur (« tuiles toutes de qualité moyenne ») : en profil
+      vierge, High rend les mêmes tuiles que `main` (vue 2 comparée en pleine résolution, `main`
+      servi depuis un worktree) ; mais Terrain detail Normal (LODThreshold 0,9) affiche bien moins
+      de tuiles fines que ne le disait la note du menu — tuiles affichées dans la vue 2, z15 / z14 :
+      High 16 / 17, Medium 6 / 7, Ultra 22 / 15 (`window.osf.tileLevels()`, aussi dans l'onglet
+      Developer). Medium garde donc Terrain detail High (seule l'échelle baisse : −5 à −28 % de
+      coût GPU, 85 % de High en moyenne ; vol p1 63,3) ; seul Low utilise Normal.
       La résolution dynamique applique désormais tout de suite un plafond relevé (changement de
       Image sharpness dans le menu) au lieu de remonter par pas de 0,05 toutes les 2 s.
 - [x] **L2.8** Exposition automatique : histogramme de luminance en compute shader, adaptation temporelle.
@@ -366,8 +373,9 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       presets en cartes avec leur coût GPU relatif à High (`PRESET_GPU_COST`), sélecteurs ◀ ▶ à
       niveaux, fiche du réglage sélectionné avec jauges coût / gain (`impact` du schéma, tirés des
       mesures), barre de raccourcis. Clavier : ↑ ↓, ← →, Q / E, R (valeur par défaut), Échap ; les
-      raccourcis de vol sont bloqués menu ouvert. Sons synthétisés en Web Audio (`uiSounds.js`,
-      réglage Menu sounds). Police Rajdhani (OFL) dans `assets/fonts/rajdhani/`. HUD, réticule et
+      raccourcis de vol sont bloqués menu ouvert. Sons synthétisés en Web Audio (`uiSounds.js`) sur
+      le canal interface d'un mixeur (`js/audio/AudioMixer.js` : volume général et canaux
+      interface, moteurs, radio ; onglet Audio ; moteurs et radio prêts pour des sons à venir). Police Rajdhani (OFL) dans `assets/fonts/rajdhani/`. HUD, réticule et
       mini-carte masqués pendant la pause.
 - [x] **L2.9** Fiabiliser les mesures : `GPUTimer` avec une mesure par frame (horodatages de passe
       attribués à la frame) exportée par sous-système (terrain, ciel, post-traitement) ; `summary.fps.avg`
@@ -489,6 +497,7 @@ Notes de lecture :
 | 2026-11-24 | L2.7 preset Medium (échelle 0,8) | Vol par défaut | 128 s | 119,9 | 108,7 | 78,7 | 4,5 (6,0) | 1 / 0 | 1,28 M | 394 |
 | 2026-11-24 | L2.7 preset High (défaut) | Vol par défaut | 128 s | 119,3 | 106,4 | 62,5 | 3,9 (6,3) | 0 / 0 | 2,12 M | 552 |
 | 2026-11-24 | L2.7 preset Ultra, LODThreshold 1,6 (écarté) | Vol par défaut | 128 s | 112,5 | 76,3 | 48,5 | 5,5 (6,7) | 4 / 0 | 3,50 M | 846 |
+| 2026-11-24 | L2.7 preset Medium révisé (échelle 0,8, Terrain detail High) | Vol par défaut | 128 s | 119,3 | 105,3 | 63,3 | 4,0 (6,4) | 3 / 0 | 2,12 M | 552 |
 | 2026-11-24 | L2.7 preset Ultra, LODThreshold 1,4 | Vol par défaut | 128 s | 115,6 | 85,5 | 53,5 | 5,0 (6,5) | 1 / 0 | 2,84 M | 714 |
 
 Pour mémoire, la configuration n°4 de `BENCHMARKS.md` (même machine, Chrome 146, ancien moteur
@@ -530,6 +539,7 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 | 2026-11-24 | **Pleine résolution** — L2.8, capture 2 | 3,12 | 4,49 | 3,66 | 3,37 | 3,16 | 3,30 |
 | 2026-11-24 | **Pleine résolution** — L2.7 preset Low (échelle 0,6, sans bloom) | 1,75 | 2,21 | 2,26 | 2,06 | 1,76 | 1,84 |
 | 2026-11-24 | **Pleine résolution** — L2.7 preset Medium (échelle 0,8) | 2,35 | 3,02 | 3,07 | 2,63 | 2,48 | 2,59 |
+| 2026-11-24 | **Pleine résolution** — L2.7 preset Medium révisé (échelle 0,8, Terrain detail High) | 2,66 | 3,65 | 3,10 | 3,19 | 2,76 | 3,14 |
 | 2026-11-24 | **Pleine résolution** — L2.7 preset High | 3,10 | 5,08 | 3,65 | 3,36 | 3,15 | 3,36 |
 | 2026-11-24 | **Pleine résolution** — L2.7 preset Ultra, LODThreshold 1,6 (écarté) | 3,64 | 5,92 | 4,97 | 4,75 | 4,03 | 4,20 |
 | 2026-11-24 | **Pleine résolution** — L2.7 preset Ultra, LODThreshold 1,4 | 3,88 | 4,83 | 4,31 | 4,09 | 3,49 | 3,73 |
@@ -595,6 +605,9 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
   la résolution dynamique relevé appliqué immédiatement ; `render:capture` passe `--set` dans l'URL.
 - Fait ensuite : refonte visuelle du menu de réglages en style « Hangar » (maquettes A / B / C
   proposées, A retenue), navigation clavier, jauges d'impact, sons, animations.
+- Retour de l'utilisateur : tuiles moins détaillées qu'avant. Vérifié contre `main` : identiques en
+  High ; c'était Terrain detail Normal, trop agressif pour Medium, qui garde désormais High.
+  Volumes ajoutés (mixeur audio, onglet Audio).
 - Prochaine étape : clôture du lot 2.
 
 ### 2026-11-24 (12)
