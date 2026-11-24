@@ -14,8 +14,10 @@ en fin de session.
   plus. Bilan dans **Mesures** (lignes « Clôture du lot 2 ») et constats visuels sous les tableaux.
 - **three.js** : r187 (import map d'`index.html`), mis à jour depuis r183 pour le TRAA compatible avec
   la profondeur inversée.
-- **Git** : lots 0 à 3 dans `main` (branche `feat/render-atmosphere` fusionnée puis supprimée). Le
-  lot 4 commence sur une nouvelle branche `feat/render-clouds` créée depuis `main`.
+- **Git** : lots 0 à 3 dans `main`, poussée ; `main` est la seule branche, en local comme sur
+  `origin` (branche de lot et branches Dependabot supprimées, leurs PR fermées : `main` contenait déjà
+  ces mises à jour). Le lot 4 commence sur une nouvelle branche `feat/render-clouds` créée depuis `main`.
+  Plus de worktree de comparaison : en recréer un si besoin (voir Outillage).
 - **Environnement local** : bundle three-tile construit, `npm install` fait (racine et
   `vendor/three-tile`), cache `cache/` chaud pour les vues de référence et les deux vols. Lancer
   `npm run dev` en tâche de fond avant toute mesure. Mesurer **sur l'écran intégré 120 Hz** : sur un
@@ -198,6 +200,10 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
 - `--views` (sous-ensemble de vues) change la séquence de chargement des tuiles : triangles et coût
   diffèrent de la capture complète (vue 2 : 2,36 M contre 2,60 M). Ne comparer que des séquences
   identiques.
+- Comparer avec un état antérieur : `git worktree add ../osf-<nom> <commit>`, liens symboliques vers
+  `cache/` et `node_modules/` du dépôt, `cd vendor/three-tile && npm run build:lib` dans le worktree,
+  puis `node scripts/serve.js --port 3001` et `--url http://localhost:3001/` pour les scripts de mesure.
+  Faire les mesures sur un port autre que 3000 (serveur de l'utilisateur).
 
 ## Lot 1 — Gains rapides
 
@@ -807,7 +813,9 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
   sous les tâches et dans **Décisions**.
 - Clôture du lot 3 : captures `docs/screenshots/render/lot3/`, mesures « Clôture du lot 3 » (vues 3,40
   à 3,80 ms ; plan 1 p1 64,1 deux fois ; vol par défaut p1 63,3), bilan et constats visuels, lint
-  sans erreur ; branche fusionnée dans `main` avec l'accord de l'utilisateur.
+  sans erreur ; branche fusionnée dans `main` (avance rapide), poussée par l'utilisateur ; branches
+  distantes autres que `main` supprimées à sa demande (lot 3 et Dependabot, PR #6, #8, #9 fermées,
+  mises à jour déjà présentes dans `main`) ; worktree `../osf-main` supprimé.
 - Prochaine étape : lot 4, L4.1 (voir État courant).
 
 ### 2026-11-24 (17)
