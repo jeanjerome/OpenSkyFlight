@@ -32,16 +32,15 @@ en fin de session.
   (`AutoExposureNode`, histogramme mesuré sur l'image TAAU) → tone mapping et espace couleur en sortie.
   Seuil du bloom fixé par `AtmosphericSky` (voir L2.3) ; échelle de la passe de scène pilotée par
   `AdaptiveQualityManager` (voir L2.4), plafonnée par `CONFIG.renderScale`.
-- **Ordre conseillé pour la suite du lot 2** : L2.7, puis clôture du lot (captures dans
-  `docs/screenshots/render/lot2/`, fusion dans `main` après accord de l'utilisateur) ; reste de L2.6
-  (décodage d'altitude dans un worker, `compileAsync`) seulement si p5 ou p1 le justifient.
-- **Prochaine tâche, L2.7 (presets de qualité) — points d'entrée** : réglages déjà dans `config.js` :
-  `maxPixelRatio` (résolution de sortie), `renderScale` et `dynamicResolution` (`AdaptiveQualityManager`),
-  `bloomEnabled`, `autoExposure`, `maxTotalTiles`, `lodRingRadius` ; dans three-tile : `LODThreshold`
-  et l'anisotropie des textures (fixés dans `GeoTerrainManager.js`). Un preset = un jeu de valeurs
-  appliqué par `update()` ; le panneau MFD n'expose aujourd'hui que des cases (brouillard, bloom,
-  exposition automatique) : ajouter un sélecteur de preset et mémoriser le choix (`localStorage`).
-  Mesurer chaque preset sur les vues de référence (coût GPU) et en vol (p1).
+- **Ordre conseillé pour la suite du lot 2** : L2.10 (définition du panneau de configuration, **à
+  décider avec l'utilisateur avant de coder**) → L2.7 (presets, qui s'y intègrent) → clôture du lot
+  (captures dans `docs/screenshots/render/lot2/`, fusion dans `main` après accord de l'utilisateur) ;
+  reste de L2.6 (décodage d'altitude dans un worker, `compileAsync`) seulement si p5 ou p1 le
+  justifient.
+- **Prochaine session — commencer par L2.10** : les presets de qualité (L2.7) obligent à revoir le
+  panneau, qui a grandi par ajouts successifs. Présenter à l'utilisateur l'état des lieux de L2.10 et
+  les questions qui y sont listées, proposer une conception (rôle, intégration, design, maquette),
+  la faire valider, puis implémenter L2.10 et L2.7 ensemble.
 ---
 
 ## Comment reprendre le travail (début de session)
@@ -264,6 +263,12 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       les saccades. Reste, optionnel : décodage d'altitude dans un worker (≈ 1,1 ms par tuile sur le
       thread principal), `compileAsync`.
 - [ ] **L2.7** Presets de qualité (Low / Medium / High / Ultra) dans `config.js` et le panneau MFD.
+      Réglages disponibles dans `config.js` : `maxPixelRatio` (résolution de sortie), `renderScale` et
+      `dynamicResolution` (`AdaptiveQualityManager`), `bloomEnabled`, `autoExposure`, `maxTotalTiles`,
+      `lodRingRadius` ; dans three-tile : `LODThreshold` (1,2) et l'anisotropie des textures, fixés
+      dans `GeoTerrainManager.js`. Un preset = un jeu de valeurs appliqué par `update()`, un réglage
+      modifié à la main fait passer en « Custom ». Mesurer chaque preset sur les vues de référence
+      (coût GPU, vues 1 et 6 pour les petits écarts) et en vol (p1). Dépend de L2.10.
 - [x] **L2.8** Exposition automatique : histogramme de luminance en compute shader, adaptation temporelle.
       Fait : `AutoExposureNode` — passe compute sur une grille fixe de 256×144 points de l'image TAAU
       (avant bloom), histogramme de 64 classes de log₂ luminance sur [−8, 10], moyenne entre les
@@ -274,6 +279,44 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       (vues 1 à 6), soit −0,5 / +0,5 / 0 / +1 (borne) / −0,3 / +0,3 EV. Compensation totale (100 %)
       essayée d'abord : vallées de la vue 1 trop sombres, coucher de soleil de la vue 4 sans ambiance.
       Coût ≈ +0,03 ms. Coupée en SAR et sur WebGL2 (pas d'atomiques) ; case du panneau.
+- [ ] **L2.10** Panneau de configuration : définir son rôle, son intégration à l'application et son
+      design, puis le reconstruire (préalable à L2.7). **Conception à valider avec l'utilisateur.**
+      État des lieux (2026-11-24) :
+      - `index.html` (balisage écrit à la main, contrôle par contrôle) + `js/ui/ControlPanel.js`
+        (liaison de chaque contrôle à `CONFIG` via `update()` / `onChange()`) + `css/main.css`
+        (`#control-panel`, `.mfd-*`). Thème « MFD » militaire : vert sur fond sombre, lignes de
+        balayage, en-tête « MFD-01 / TERRAIN SYS ».
+      - Ouverture au survol d'une bande de 20 px au bord droit (`#panel-trigger`), fermeture 300 ms
+        après la sortie. Incompatible avec le vol : la souris est capturée (pointer lock) pour
+        piloter, il faut la libérer pour atteindre le panneau ; aucune touche ne l'ouvre.
+      - Sections : SIMULATION (vitesse, logs, niveau de log), CONFIGURATION (recherche de lieu,
+        lat/lon, mode de texture, chargement), ATMOSPHERE (soleil, turbidité, nuages, brouillard) ;
+        les réglages de rendu ajoutés par le lot 2 (bloom, exposition automatique) sont rangés
+        faute de mieux sous ATMOSPHERE. Réglages de développement (logs) mêlés aux réglages
+        utilisateur.
+      - Réglages de `CONFIG` absents du panneau : `maxPixelRatio`, `renderScale`,
+        `dynamicResolution`, `skyRayleigh`, `cloudOpacity`, `fogDensity`, `mouseSensitivity`,
+        `maxTotalTiles`, `lodRingRadius`, `minimapZoom` ; d'autres ne sont accessibles qu'au clavier
+        (`cameraMode` V, `showHud` H, `showMinimap` M, `hiResMode` R, texture T).
+      - Aucune persistance : tout réglage est perdu au rechargement (seule la baseline de benchmark
+        est en `localStorage`) ; pas de paramètres d'URL hors `?view=N`.
+      - Une quinzaine de raccourcis (X, H, M, R, T, V, I, L, N, P, G, B, K…), listés dans l'aide
+        `#help` (touche I), sans lien avec le panneau. Menu des plans de vol séparé
+        (`#flightplan-menu`).
+      Questions à trancher :
+      - Rôle : réglages rapides en vol, menu d'options complet façon jeu (onglets Graphismes /
+        Simulation / Lieu / Commandes…), outil de développement, ou une séparation explicite entre
+        réglages utilisateur et outils de mise au point (logs, vues de référence, benchmark,
+        mesures GPU) ?
+      - Intégration : ouverture par une touche (Échap, F1, Tab ?) qui libère la souris et met ou non
+        la simulation en pause ; place des infos en direct (FPS, coût GPU, échelle de rendu,
+        exposition) ; persistance (`localStorage`) et paramètres d'URL ; place de l'aide des
+        raccourcis et du menu des plans de vol.
+      - Architecture : générer le panneau depuis un schéma des réglages (libellé, type, plage, pas,
+        groupe, appartenance aux presets, besoin de recharger le terrain) plutôt que du HTML écrit
+        à la main, avec `CONFIG_VALIDATION` dans le même schéma.
+      - Design : garder l'esthétique MFD (cohérente avec le HUD) ou une interface plus sobre ;
+        lisibilité, densité, sélecteur de preset, comportement sur petit écran.
 - [x] **L2.9** Fiabiliser les mesures : `GPUTimer` avec une mesure par frame (horodatages de passe
       attribués à la frame) exportée par sous-système (terrain, ciel, post-traitement) ; `summary.fps.avg`
       calculé comme frames / durée au lieu de la moyenne des FPS instantanés.
@@ -486,7 +529,9 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
   en ≈ 2,3 s, retour en ≈ 1 s ; coût ≈ +0,03 ms ; vols p1 62,9 / 61,0 ; SAR sans correction,
   `elevation` avec.
 - Problème ouvert : dispersion du coût GPU des vues 2 à 5 (±0,5 ms entre captures identiques).
-- Prochaine étape : L2.7 (voir État courant), puis clôture du lot 2.
+- Prochaine étape : L2.10 puis L2.7 (voir État courant), puis clôture du lot 2. À la demande de
+  l'utilisateur, la conception du panneau de configuration devient une tâche à part entière (L2.10),
+  à définir avec lui avant tout code ; état des lieux et questions consignés sous L2.10.
 
 ### 2026-11-24 (11)
 - Fait : L2.4. Trois commits : TAAU à la place de TRAA, résolution dynamique pilotée par le temps GPU
