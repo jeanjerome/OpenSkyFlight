@@ -142,7 +142,11 @@ class gs {
         minCosLight: P(g),
         sunRadianceToLuminance: E(S),
         skyRadianceToLuminance: E(x),
-        luminanceScale: P(T),
+        // OSF: uniform, so the output luminance can be scaled at runtime
+        // (exposure applied before the HDR targets) without recompiling
+        luminanceScale: O(T).setGroup(OSF_renderGroup).onRenderUpdate((OSF_f, OSF_u) => {
+          OSF_u.value = t.luminanceScale;
+        }),
         transmittanceTextureSize: ue(C),
         irradianceTextureSize: ue(f),
         multipleScatteringTextureSize: Mt(M),

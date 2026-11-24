@@ -43,6 +43,12 @@ changing `parameters.mieScattering` and `parameters.mieExtinction`, setting
 `lutNode.needsUpdate = true` computes the tables again, and the shaders pick up
 the new values without recompiling. Lines marked `OSF:`.
 
+**Luminance scale at runtime** — `luminanceScale`, which converts every output
+of the library to luminance (sky, sun and moon, stars, aerial perspective,
+`AtmosphereLight`), is a uniform in three's render group read from the
+`AtmosphereParameters` object on each render, so that an exposure can be applied
+before the HDR targets at night without recompiling. Line marked `OSF:`.
+
 **Ray-march sample position** — the ray-marched scattering places one sample in
 each segment at a position given by spatio-temporal blue noise read at the
 fragment's screen coordinate, which a compute shader does not have. In

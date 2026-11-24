@@ -1,8 +1,15 @@
 import * as THREE from 'three';
-import { mrt, output, pass, rtt, vec4, velocity } from 'three/tsl';
+import { clamp, log2, luminance, mix, mrt, output, pass, rtt, vec3, vec4, velocity } from 'three/tsl';
 import { taau } from 'three/addons/tsl/display/TAAUNode.js';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
-import { BLOOM_STRENGTH, BLOOM_RADIUS } from '../constants/rendering.js';
+import {
+  BLOOM_STRENGTH,
+  BLOOM_RADIUS,
+  NIGHT_VISION_COLOR,
+  NIGHT_VISION_PHOTOPIC_LUMINANCE,
+  NIGHT_VISION_SCOTOPIC_LUMINANCE,
+  SCENE_UNIT_LUMINANCE,
+} from '../constants/rendering.js';
 import AutoExposureNode from './AutoExposureNode.js';
 
 /**
@@ -31,6 +38,9 @@ import AutoExposureNode from './AutoExposureNode.js';
  * before tone mapping, around the base exposure (see AutoExposureNode). It
  * needs compute shaders with atomics, so it stays off on the WebGL2 backend.
  *
+ * Night vision: below a few candelas per square metre the eye's rods take
+ * over from its cones, and colors fade into a bluish grey (see setNightVision).
+ *
  * Tone mapping is read from renderer.toneMapping (set by AtmosphericSky, none in
  * SAR mode); the pipeline rebuilds its output node when it changes. The exposure
  * is read live from renderer.toneMappingExposure.
@@ -58,6 +68,7 @@ export default class ScenePipeline {
     this.autoExposureSupported = renderer.backend.isWebGPUBackend === true;
     this.autoExposureNode = this.autoExposureSupported ? new AutoExposureNode(this._antiAliased) : null;
     this._autoExposureEnabled = false;
+    this._preExposure = null;
 
     this._pipeline = new THREE.RenderPipeline(renderer);
     this._pipeline.outputNode = this._buildOutput();
@@ -67,8 +78,40 @@ export default class ScenePipeline {
   _buildOutput() {
     let color = this._antiAliased.rgb;
     if (this._bloomEnabled) color = color.add(this.bloomNode.rgb);
+    if (this._preExposure) color = this._nightVision(color);
     if (this._autoExposureEnabled) color = color.mul(this.autoExposureNode);
     return vec4(color, this._antiAliased.a);
+  }
+
+  /**
+   * Mesopic vision: the color of a pixel fades toward its luminance, tinted
+   * blue, as its absolute luminance falls from NIGHT_VISION_PHOTOPIC_LUMINANCE
+   * to NIGHT_VISION_SCOTOPIC_LUMINANCE (cd/m², on a logarithmic scale). Moonlit
+   * snow keeps a trace of color, starlit ground none; lights keep theirs.
+   */
+  _nightVision(color) {
+    const y = luminance(color);
+    const absolute = y.div(this._preExposure).mul(SCENE_UNIT_LUMINANCE).max(1e-12);
+    const top = Math.log2(NIGHT_VISION_PHOTOPIC_LUMINANCE);
+    const bottom = Math.log2(NIGHT_VISION_SCOTOPIC_LUMINANCE);
+    const scotopic = clamp(
+      log2(absolute)
+        .sub(top)
+        .div(bottom - top),
+      0,
+      1,
+    );
+    return mix(color, vec3(...NIGHT_VISION_COLOR).mul(y), scotopic);
+  }
+
+  /**
+   * @param {?Node} preExposure - exposure applied to the scene before the HDR
+   *   targets, to recover absolute luminance; null disables night vision
+   */
+  setNightVision(preExposure) {
+    if (preExposure === this._preExposure) return;
+    this._preExposure = preExposure;
+    this._rebuild();
   }
 
   _rebuild() {

@@ -77,13 +77,16 @@ export default class AerialPerspectiveVolume extends Node {
    * @param {Node} depthNode - scene depth (reversed or not, as the renderer)
    * @param {import('@takram/three-atmosphere/webgpu').AtmosphereContext} atmosphere
    * @param {THREE.Camera} camera
+   * @param {{directionECEF: Node, scale: Node}} light - direction of the sun or the moon, and its
+   *   brightness relative to the sun
    */
-  constructor(colorNode, depthNode, atmosphere, camera) {
+  constructor(colorNode, depthNode, atmosphere, camera, light) {
     super('vec3');
     this.colorNode = colorNode;
     this.depthNode = depthNode;
     this.atmosphere = atmosphere;
     this.camera = camera;
+    this.light = light;
     this.updateBeforeType = NodeUpdateType.FRAME;
 
     this._luminance = createVolume('aerialPerspectiveLuminance');
@@ -104,7 +107,7 @@ export default class AerialPerspectiveVolume extends Node {
   _buildCompute() {
     const { atmosphere } = this;
     const { worldToUnit } = atmosphere.parameters;
-    const { matrixWorldToECEF, sunDirectionECEF, cameraPositionUnit, altitudeCorrectionUnit } = atmosphere;
+    const { matrixWorldToECEF, cameraPositionUnit, altitudeCorrectionUnit } = atmosphere;
     const radii = vec3(atmosphere.ellipsoid.radii).mul(worldToUnit);
     // The ray march places its samples by spatio-temporal blue noise at the
     // pixel's screen position, which a compute pass has not: mid-segment here
@@ -143,9 +146,9 @@ export default class AerialPerspectiveVolume extends Node {
         cameraPositionUnit.add(altitudeCorrectionUnit),
         point.add(altitudeCorrectionUnit),
         vec2(0),
-        sunDirectionECEF,
+        this.light.directionECEF,
       ).toConst();
-      textureStore(this._luminance, globalId, vec4(scattering.get('luminance'), 1));
+      textureStore(this._luminance, globalId, vec4(scattering.get('luminance').mul(this.light.scale), 1));
       textureStore(this._transmittance, globalId, vec4(scattering.get('transmittance'), 1));
     })()
       .context({ getAtmosphere: () => context })

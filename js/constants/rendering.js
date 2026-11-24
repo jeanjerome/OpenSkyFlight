@@ -120,3 +120,35 @@ export const AUTO_EXPOSURE_SPEED_TO_DARK = 1;
  */
 export const AERIAL_PERSPECTIVE_VOLUME_SIZE = [128, 64, 64];
 export const AERIAL_PERSPECTIVE_VOLUME_DISTANCE = 1000e3;
+
+/**
+ * Night exposure (see AtmosphericSky): below this sun elevation (degrees), the
+ * exposure before the scene follows the falling light level of the ground...
+ */
+export const NIGHT_EXPOSURE_START_ELEVATION = 4;
+
+/** ...so that this share of its drop, in stops, remains visible: night looks darker than day without being black */
+export const NIGHT_EXPOSURE_VISIBLE_SHARE = 0.25;
+
+/**
+ * Lowest bloom threshold (scene luminance after the night exposure, before the
+ * tone mapping exposure): at night only lights and the moon bloom
+ */
+export const BLOOM_THRESHOLD_FLOOR = 2 * AUTO_EXPOSURE_REFERENCE_LUMINANCE;
+
+/**
+ * Luminance (cd/m²) of one unit of scene luminance before the night exposure:
+ * a white diffuse surface under the extraterrestrial sun (128 000 lux, 1.77
+ * units of illuminance in the atmosphere library) is 0.56 units, 41 000 cd/m²
+ */
+export const SCENE_UNIT_LUMINANCE = 72000;
+
+/**
+ * Night vision (see ScenePipeline): colors are fully seen above the first
+ * luminance (cd/m², cones) and fade into NIGHT_VISION_COLOR below the second (rods)
+ */
+export const NIGHT_VISION_PHOTOPIC_LUMINANCE = 3;
+export const NIGHT_VISION_SCOTOPIC_LUMINANCE = 0.003;
+
+/** Tint of night vision, luminance 1 (linear RGB) */
+export const NIGHT_VISION_COLOR = [0.85, 1.0, 1.38];
