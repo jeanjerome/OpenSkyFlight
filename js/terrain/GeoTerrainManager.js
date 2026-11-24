@@ -109,6 +109,11 @@ export default class GeoTerrainManager {
       maxLevel: effectiveZoom,
     });
     this.mapView = this.tileMap; // Alias for backwards compat
+    // three-tile draws every tile twice: first with a flat background material
+    // at sea level, then with its imagery, which covers every tile. The
+    // background stays hidden below the terrain and only adds a draw call per
+    // tile, so it is not drawn.
+    this.tileMap.loader.backgroundMaterial.visible = false;
 
     // Z-up → Y-up (matches Three.js convention)
     this.tileMap.rotateX(-Math.PI / 2);
