@@ -37,7 +37,8 @@ that name, which lacks the WebGL classes, and does not map `three/src/`.
 the shaders as constants, so changing them means building every material again.
 In `three-atmosphere/build/webgpu.js` (`AtmosphereContextBase` constructor), the
 Mie scattering and extinction coefficients of the parameter struct are uniforms
-read from the `AtmosphereParameters` object on each render instead: after
+(in three's render group) read from the `AtmosphereParameters` object on each
+render instead: after
 changing `parameters.mieScattering` and `parameters.mieExtinction`, setting
 `lutNode.needsUpdate = true` computes the tables again, and the shaders pick up
 the new values without recompiling. Lines marked `OSF:`.

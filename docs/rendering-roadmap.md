@@ -6,7 +6,7 @@ contrainte : l'application doit continuer à fonctionner dans un navigateur (Web
 Ce document est la **source de vérité de l'avancement**. Il est lu en début de session et mis à jour
 en fin de session.
 
-## État courant (mis à jour le 2026-11-24)
+## État courant (mis à jour le 2026-11-24, session 16)
 
 - **Lots terminés** : 0, 1 et 2, fusionnés dans `main` (lot 2 le 2026-11-24). Lot 2 : toutes les tâches faites sauf le reste optionnel de
   L2.6 (décodage d'altitude dans un worker, `compileAsync`), reporté : p5 et p1 ne le justifient
@@ -44,27 +44,31 @@ en fin de session.
   `js/utils/settingsStore.js`. `render:capture` et `render:benchmark` ouvrent l'app avec `?dev=1`
   (et HUD / mini-carte masqués par l'URL pour les captures), dans un profil vierge : preset High,
   identique à l'état d'avant L2.10, donc les mesures de référence restent comparables.
-- **Lot 3 en cours** sur `feat/render-atmosphere` (non poussée) : L3.1 fait (bibliothèque takram
-  copiée et corrigée dans `vendor/takram/`), L3.2 à L3.4 en partie. Code : `js/atmosphere/AtmosphericSky.js`
-  (contexte d'atmosphère dans `renderer.contextNode`, repère ECEF recalé chaque frame sous la caméra,
-  soleil réglé dans le repère du monde puis converti, ciel + perspective aérienne via
-  `ScenePipeline.setAtmosphere`, seuil du bloom en nœud TSL), `js/rendering/ScenePipeline.js`.
+- **Lot 3 en cours** sur `feat/render-atmosphere` (non poussée) : L3.1 à L3.5 et L3.7 faits, reste
+  L3.6 (nuit). Code : `js/atmosphere/AtmosphericSky.js` (contexte d'atmosphère dans
+  `renderer.contextNode`, uniformes dans le groupe `render`, repère ECEF recalé chaque frame sous la
+  caméra, horloge et soleil, aérosols tirés de la visibilité), `AerialPerspectiveVolume.js` (froxels
+  par compute), `sunPosition.js`, `js/rendering/ScenePipeline.js`. Correctifs du vendor listés dans
+  `vendor/takram/README.md` (lignes `OSF:` dans `three-atmosphere/build/webgpu.js`).
   Pièges rencontrés : la direction de la lune doit être un vecteur unitaire même sans lune (sinon la
   PMREM du ciel se régénère à chaque frame, +2 ms) ; `renderer.info.autoReset` coupé (la remise à zéro
   de three tournait parfois après la frame de l'app : draw calls à 0) ; le ciel en `scene.backgroundNode`
-  coûtait ≈ 0,5 ms (évalué sous tout le terrain), d'où son calcul dans la passe d'atmosphère.
-- **Prochaine session** : 1) rétablir « Air clarity » (densité des aérosols : les paramètres sont
-  figés dans les shaders, il faut recréer le contexte d'atmosphère et recompiler), qui règle aussi le
-  voile du terrain vu d'altitude et donc la lisibilité de l'avion ; 2) volume de perspective aérienne
-  (L3.2) pour revenir dans le budget de 1 ms ; 3) L3.5 (heure du jour, position astronomique du soleil :
-  `astronomy-engine` ou les fonctions de la bibliothèque, l'entrée principale de takram tire
-  `postprocessing`, à éviter). Comparaisons de la session : `benchmarks/render/l3-cal/` (option A),
-  `l3-b-uncal/` (option B retenue, exposition identique) ; images côte à côte avec
-  `ffmpeg -i a.png -i b.png -filter_complex "[0]scale=1000:-1[a];[1]scale=1000:-1[b];[a][b]hstack"`.
-  Pour comparer à `main` dans les mêmes conditions : `git worktree add <dir> main`, liens symboliques
-  vers `cache/`, `node_modules/` et `vendor/three-tile/packages/lib/dist`, `node scripts/serve.js
-  --port 3001` dans le worktree, puis `render:capture -- --url http://localhost:3001/`. Le coût GPU
-  d'une vue varie de ± 0,4 ms d'un passage à l'autre : alterner les variantes et répéter.
+  coûtait ≈ 0,5 ms (évalué sous tout le terrain), d'où son calcul dans la passe d'atmosphère ;
+  `uniform()` de three tombe par défaut dans le groupe par objet (comparé et téléversé à chaque draw
+  call) : tout uniforme commun à la frame doit passer en `renderGroup` ; le ray marching de takram lit
+  un bruit bleu à `screenCoordinate`, absent d'un compute (`raymarchSampleOffset`) ; comparer
+  WebGPU et WebGL2 avec `autoExposure=false` (exposition automatique WebGPU seulement).
+- **Prochaine session** : 1) L3.6, la nuit : la scène devient noire dès que le soleil est à ≈ 8° sous
+  l'horizon (exposition automatique bornée à +1 EV) ; il faut étoiles et lune (`StarsNode`, `MoonNode`
+  de takram, direction de la lune depuis une date absolue : la date du jeu n'a pas d'année ni de
+  longitude, en déduire un UTC), une plage d'exposition de nuit, puis les lumières des villes (Black
+  Marble via le proxy) ; 2) trait clair ou sombre à l'horizon géométrique, au-delà du terrain (bord du
+  sol dessiné par le ciel de takram, visible vue 4, déjà là avant cette session) ; 3) CPU de rendu
+  encore ≈ +0,8 ms par frame en vol par rapport au lot 2 (9 nœuds `updateBefore` de plus par objet :
+  `EventNode` ×6, LUT, environnement, lumière) ; 4) clôture du lot : captures versionnées
+  `docs/screenshots/render/lot3/`, bilan. Référence de comparaison du lot 3 :
+  `benchmarks/render/l3-rg/` (6 vues) et `l3-flight-rg/` (vols). Worktree de `main` prêt dans
+  `../osf-main` (liens symboliques faits ; `node scripts/serve.js --port 3001` dedans).
 - **Suite** : lot 3 (atmosphère physique et heure du jour). Points ouverts : coût CPU de soumission (≈ 5 µs par
   draw call) qui limite Ultra à 120 Hz ; minimap OSM bloquée par la politique d'usage des tuiles
   d'OpenStreetMap (hors rendu, voir **Problèmes hors rendu relevés**).
@@ -417,31 +421,54 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       0.9.1 copiés et corrigés dans `vendor/takram/` (correctifs listés dans son `README.md`), servis
       par l'import map. Prototype validé sur three r187 : WebGPU et repli WebGL2, profondeur inversée,
       ciel, perspective aérienne et `AtmosphereLight`.
-- [~] **L3.2** LUT : transmittance, diffusion multiple, vue du ciel, volume de perspective aérienne.
+- [x] **L3.2** LUT : transmittance, diffusion multiple, vue du ciel, volume de perspective aérienne.
       Fait : LUT de la bibliothèque (transmittance, diffusion multiple de Hillaire, diffusion 4D de
-      Bruneton, irradiance), calculées une fois par compute shader. Reste : **volume de perspective
-      aérienne** (froxels, Hillaire 2020) calculé par compute à partir des fonctions de la bibliothèque,
-      pour remplacer la perspective aérienne évaluée par pixel (≈ 1 ms à pleine résolution, voir
-      **Mesures**) ; repli sur l'évaluation par pixel en WebGL2.
-- [~] **L3.3** Perspective aérienne appliquée au terrain, à l'avion et à l'eau ; suppression de `FogExp2`.
+      Bruneton, irradiance), calculées par compute shader au démarrage et à chaque changement de
+      visibilité. Volume de perspective aérienne (`js/atmosphere/AerialPerspectiveVolume.js`) :
+      128 × 64 × 64 cellules alignées sur le frustum, espacement quadratique jusqu'à 1 000 km, calculé
+      à chaque frame par compute avec `getIndirectLuminanceToPoint` (ray marching, échantillon au
+      milieu de chaque segment : correctif `raymarchSampleOffset` du vendor), lu par chaque pixel en
+      deux lectures 3D trilinéaires. Images identiques à l'évaluation par pixel (PSNR 47–51 dB, de 20 à
+      220 km de visibilité), −0,6 à −1,4 ms par vue ; le volume coûte ≈ 0,2–0,5 ms. Repli par pixel en
+      WebGL2 et via la case « Aerial perspective volume » de l'onglet Developer.
+- [x] **L3.3** Perspective aérienne appliquée au terrain, à l'avion et à l'eau ; suppression de `FogExp2`.
       Fait : `aerialPerspective` après la passe de scène, avant TAAU, à la résolution de la passe
       (`ScenePipeline.setAtmosphere`) ; ciel évalué dans la même passe sur les seuls pixels sans
       profondeur, derrière la couche de nuages transparente ; `FogExp2`, `SkyMesh`, `SkyEnvironment`
       et `preethamSky.js` supprimés ; le réglage « Distance haze » (`fogEnabled`) active la
-      perspective aérienne. Reste : coût (L3.2), réglage « Air clarity » à rétablir (voir État courant).
-- [~] **L3.4** Couleur et intensité du soleil et de l'ambiance dérivées de l'atmosphère.
+      perspective aérienne. Réglage « Visibility » (onglet World, 10 à 280 km au niveau de la mer,
+      curseur logarithmique, défaut 220 km ≈ aérosols de Hillaire d'avant) : extinction des aérosols
+      tirée de la visibilité météorologique (Koschmieder, seuil de contraste 2 %, moins l'extinction
+      de Rayleigh) ; coefficients de Mie passés en uniformes dans le vendor (correctif décrit dans son
+      `README.md`), LUT recalculées sur quelques frames sans recompiler les matériaux ni saccade
+      (curseur glissé en continu : aucune frame > 33 ms, WebGPU comme WebGL2).
+- [x] **L3.4** Couleur et intensité du soleil et de l'ambiance dérivées de l'atmosphère.
       Fait : `AtmosphereLight` (soleil direct avec sa transmittance et lumière diffuse du ciel, toutes
       deux évaluées en chaque point), PMREM du ciel (`skyEnvironment`) pour les seuls reflets
       (`ReflectionEnvironmentNode`, appliqué à tous les matériaux PBR), seuil du bloom calculé sur le GPU depuis
       les LUT, exposition et plage de mesure recalées (×24,3, moyenne géométrique des vues de jour).
       Choix de l'utilisateur : lumière du ciel en chaque point (option « B ») ; il préfère la nouvelle
       atmosphère, surtout en altitude, mais l'avion se détache moins du terrain voilé en vue rapprochée.
-- [ ] **L3.5** Position astronomique du soleil (date, heure, lat/lon) ; curseur d'heure et accélération
+      Uniformes du contexte d'atmosphère (matrices ECEF, correction d'altitude, soleil, aérosols) dans
+      le groupe `render` de three au lieu du groupe par objet : voir **Décisions** et **Mesures**.
+- [x] **L3.5** Position astronomique du soleil (date, heure, lat/lon) ; curseur d'heure et accélération
       du temps dans l'onglet World du menu de réglages (entrées du schéma `settingsSchema.js`, réglages
       compréhensibles par l'utilisateur, voir les décisions sous L2.10).
+      Fait : `js/atmosphere/sunPosition.js` (déclinaison par la série de Fourier du calculateur NOAA,
+      angle horaire depuis le temps solaire vrai, sans réfraction, sans dépendance) ; réglages « Time of
+      day » (temps solaire local, pas de 5 min), « Date » (jour de l'année, « 3 Mar ») et « Time speed »
+      (Frozen, Real time, ×60, ×600 ; défaut Real time) à la place de « Sun height » / « Sun direction ».
+      Horloge dans `AtmosphericSky` : avance avec la simulation (arrêtée menu ouvert), soleil placé à la
+      latitude sous la caméra, heure publiée dans CONFIG à chaque minute. Défaut 3 mars 10 h 55 (soleil
+      35,1° / 160,2°, ≈ l'ancien défaut) ; vues de référence converties en date + heure qui redonnent
+      leur soleil à 0,15° près, horloge figée (captures identiques, PSNR 50–64 dB). PMREM du ciel
+      régénérée après 0,5° de course du soleil au lieu de 0,1° : ×600 sans saccade.
 - [ ] **L3.6** Nuit : ciel étoilé, lune, lumières des villes (tuiles NASA Black Marble via le proxy de
       `scripts/serve.js`) en émissif sur le terrain.
-- [ ] **L3.7** Vérifier les modes `sar` et `elevation` (ciel désactivé).
+- [x] **L3.7** Vérifier les modes `sar` et `elevation` (ciel désactivé).
+      Fait : SAR sans atmosphère (ciel noir, éclairage latéral, sans tone mapping) ; `elevation` avec
+      ciel et perspective aérienne, un peu clair (albédo élevé de la palette hypsométrique), accepté.
+      Captures `benchmarks/render/l3-sar/` et `l3-elevation/`.
 
 ## Lot 4 — Nuages volumétriques
 
@@ -544,6 +571,10 @@ Notes de lecture :
 | 2026-11-24 | L2.7 preset Medium révisé (échelle 0,8, Terrain detail High) | Vol par défaut | 128 s | 119,3 | 105,3 | 63,3 | 4,0 (6,4) | 3 / 0 | 2,12 M | 552 |
 | 2026-11-24 | **Clôture du lot 2** (preset High) | Vol par défaut | 128 s | 119,3 | 106,4 | 61,3 | 4,0 (6,3) | 4 / 0 | 2,12 M | 552 |
 | 2026-11-24 | **Clôture du lot 2** (preset High) | Plan 1 (basse alt.) | 94 s | 119,4 | 81,3 | 61,7 | 5,1 (6,2) | 0 / 0 | 2,67 M | 664 |
+| 2026-11-24 | L3 atmosphère, uniformes par objet (CPU de rendu méd. 3,7 ms contre 2,6) | Vol par défaut | 128 s | 116,0 | 90,9 | 55,6 | 4,8 (6,1) | 4 / 0 | 2,11 M | 552 |
+| 2026-11-24 | L3 atmosphère, uniformes par objet (CPU de rendu méd. 4,6 ms contre 3,4) | Plan 1 (basse alt.) | 94 s | 111,2 | 69,9 | 53,5 | 5,7 (6,5) | 2 / 0 | 2,66 M | 664 |
+| 2026-11-24 | L3 atmosphère, uniformes dans le groupe `render` (CPU méd. 3,4 ms) | Vol par défaut | 128 s | 118,7 | 103,1 | 59,2 | 4,8 (6,4) | 4 / 0 | 2,12 M | 552 |
+| 2026-11-24 | L3 atmosphère, uniformes dans le groupe `render` (CPU méd. 4,1 ms) | Plan 1 (basse alt.) | 94 s | 118,0 | 76,9 | 57,1 | 5,9 (6,8) | 2 / 0 | 2,67 M | 664 |
 | 2026-11-24 | L2.7 preset Ultra, LODThreshold 1,4 | Vol par défaut | 128 s | 115,6 | 85,5 | 53,5 | 5,0 (6,5) | 1 / 0 | 2,84 M | 714 |
 
 Pour mémoire, la configuration n°4 de `BENCHMARKS.md` (même machine, Chrome 146, ancien moteur
@@ -590,6 +621,8 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 | 2026-11-24 | **Pleine résolution** — L2.7 preset Ultra, LODThreshold 1,6 (écarté) | 3,64 | 5,92 | 4,97 | 4,75 | 4,03 | 4,20 |
 | 2026-11-24 | **Pleine résolution** — L2.7 preset Ultra, LODThreshold 1,4 | 3,88 | 4,83 | 4,31 | 4,09 | 3,49 | 3,73 |
 | 2026-11-24 | **Pleine résolution** — **Clôture du lot 2** (preset High) | 3,11 | 5,09 | 4,01 | 3,80 | 3,34 | 3,72 |
+| 2026-11-24 | **Pleine résolution** — L3 atmosphère, perspective aérienne par pixel (visibilité 220 km) | 4,78 | 6,13 | 5,85 | 5,47 | 5,94 | 5,78 |
+| 2026-11-24 | **Pleine résolution** — L3 atmosphère, volume de perspective aérienne | 3,96 | 6,22 | 5,17 | 4,41 | 4,18 | 4,37 |
 | 2026-11-24 | L2.7 Low et Medium (LODThreshold 0,9) — draw calls / triangles | 382 / 1,26 M | 412 / 1,53 M | 454 / 1,69 M | 388 / 1,30 M | 384 / 1,21 M | 382 / 1,26 M |
 | 2026-11-24 | L2.7 Ultra 1,4 — draw calls / triangles | 712 / 2,66 M | 790 / 3,36 M | 820 / 3,45 M | 730 / 2,77 M | 768 / 2,78 M | 724 / 2,69 M |
 
@@ -655,11 +688,27 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 | 2026-11-24 | three-tile | Garder la copie 0.11.8 modifiée (`vendor/three-tile`), sans reprendre la branche `dev` de `sxguojf/three-tile` | Aucune version publiée depuis la 0.11.8 (`master` : README seulement) ; `dev` (future 0.11.10, inachevée, inactive depuis mars 2026) apporte des formats inutilisés ici (ArcGIS, TIFF, DEM, VirtualEarth) et refond `Tile`, `TileLoader` et `TileMap`, là où portent nos modifications, avec des choix contraires à nos mesures (LOD au point le plus haut, allocations par tuile et par frame) ; toujours WebGL seulement. À revoir si une version publiée apporte le WebGPU |
 | 2026-11-24 | Atmosphère | `@takram/three-atmosphere` 0.19.1 (WebGPU/TSL), copie corrigée dans `vendor/takram/`, plutôt qu'un modèle de Hillaire écrit en TSL ou un chargement depuis le CDN | Modèle de Bruneton (LUT 4D) avec la LUT de diffusion multiple de Hillaire, perspective aérienne par ray marching, `AtmosphereLight` compatible avec les matériaux standard, environnement PMREM, étoiles, lune et light shafts sur CSM (utiles à L4.7 et L5.3), repli WebGL2, licence MIT ; un modèle maison demanderait plusieurs sessions pour moins. La version publiée ne se charge pas avec three ≥ r185 (`struct()`, issue #111, PR #118 non fusionnée, dépôt inactif depuis mai 2026) et suppose `three` = build WebGL : correctifs locaux, à reprendre à chaque mise à jour |
 | 2026-11-24 | Lumière du ciel | Diffuse évaluée en chaque point par `AtmosphereLight` (table d'irradiance) ; PMREM du ciel réduite aux reflets pour tous les matériaux PBR (`ReflectionEnvironmentNode`) | Choix de l'utilisateur sur captures (option « B ») : ombres des versants plus contrastées ; la PMREM est le ciel vu depuis la caméra et ignore l'altitude de la surface. L'avion garde ses reflets sans recevoir deux fois la lumière du ciel |
+| 2026-11-24 | Densité des aérosols | Réglage « Visibility » en km (visibilité météorologique au niveau de la mer, 10–280 km, défaut 220 km) plutôt qu'une turbidité | Grandeur parlante pour un pilote (METAR) ; l'extinction de Mie s'en déduit (Koschmieder, moins l'extinction de Rayleigh) ; le défaut redonne les aérosols de Hillaire que l'utilisateur a validés |
+| 2026-11-24 | Perspective aérienne | Volume de froxels 128 × 64 × 64 calculé par compute (WebGPU), évaluation par pixel en WebGL2 | Images identiques (PSNR ≥ 47 dB même à 20 km de visibilité face au soleil) pour 0,6 à 1,4 ms de moins par vue ; la bibliothèque n'a pas de volume, il est construit avec ses fonctions (`getIndirectLuminanceToPoint`) |
+| 2026-11-24 | Heure du jour | Temps solaire local à la position de l'avion, date en jour de l'année, formules NOAA sans dépendance | Midi = soleil au plus haut, compréhensible sans fuseau horaire ; voler vers l'est ne décale pas l'heure (écart avec un temps UTC fixe : 4 min par degré de longitude, négligeable sur un vol) ; `astronomy-engine` inutile pour le soleil, à reconsidérer pour la lune (L3.6) |
+| 2026-11-24 | Uniformes de l'atmosphère | Groupe `render` de three pour les uniformes du contexte takram (et ceux des aérosols) | Dans le groupe par objet (défaut de `uniform()`), les matrices ECEF changées à chaque frame en vol étaient comparées et téléversées à chaque draw call : p1 −10 à −13 % en vol. Après : p1 −3 et −7 % (critère de 10 % respecté) |
 | 2026-11-23 | Vitesse par défaut | 560 m/s | Vitesse réelle de l'ancien défaut (800 unités Mercator/s) : benchmarks comparables à la baseline |
 
 ## Journal des sessions
 
 <!-- Entrée la plus récente en haut. -->
+
+### 2026-11-24 (16)
+- Fait : « Visibility » (aérosols, L3.3) ; volume de perspective aérienne (L3.2) ; heure du jour, date
+  et vitesse du temps (L3.5) ; modes `sar` et `elevation` vérifiés (L3.7) ; uniformes de l'atmosphère
+  dans le groupe `render`. Détails sous chaque tâche, chiffres dans **Mesures**, choix dans **Décisions**.
+- Mesures : 6 vues 3,96 / 6,22 / 5,17 / 4,41 / 4,18 / 4,37 ms avec le volume (contre 4,78 / 6,13 /
+  5,85 / 5,47 / 5,94 / 5,78 par pixel ; lot 2 : 3,11 / 5,09 / 4,01 / 3,80 / 3,34 / 3,72). Vols : p1
+  59,2 et 57,1 (lot 2 : 61,3 et 61,7) après correction des uniformes (55,6 et 53,5 avant).
+- Constats visuels : à 20 km de visibilité, vallées voilées sous la couche d'aérosols, soleil bas
+  rougi, halo autour du soleil ; coucher de soleil et alpenglow corrects en temps accéléré ; nuit noire
+  (L3.6).
+- Problèmes ouverts : voir État courant (« Prochaine session »).
 
 ### 2026-11-24 (15)
 - Fait : branche `feat/render-atmosphere`. L3.1 : prototype de `@takram/three-atmosphere` 0.19.1
