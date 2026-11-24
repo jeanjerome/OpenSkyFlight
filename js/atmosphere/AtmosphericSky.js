@@ -20,6 +20,7 @@ import { eciToEcefMatrix, julianDate, moonDirectionECI, sunDirectionECI } from '
 import { NIGHT_SKY_ILLUMINANCE, moonIlluminance, moonPhaseFactor, sunIlluminance } from './skyIlluminance.js';
 import {
   BLOOM_THRESHOLD_FLOOR,
+  EMISSIVE_EXPOSURE_SHARE,
   SCENE_UNIT_LUMINANCE,
   NIGHT_EXPOSURE_START_ELEVATION,
   NIGHT_EXPOSURE_VISIBLE_SHARE,
@@ -180,6 +181,12 @@ export default class AtmosphericSky {
      * emissive materials (lights) multiply their luminance by this node.
      */
     this.preExposure = uniform(1).setGroup(renderGroup);
+    /**
+     * Exposure of light sources (lamps, flames): a share of preExposure only,
+     * so that at night they stay bright points without flooding the image
+     * with glare, as the eye adapted to the dark scene still sees them
+     */
+    this.emissiveExposure = uniform(1).setGroup(renderGroup);
     this._environmentExposure = 1;
 
     // The light of the scene: the sun, or the moon on a moonlit night. Its
@@ -413,6 +420,7 @@ export default class AtmosphericSky {
     const drop = Math.max(0, Math.log2(sunIlluminance(NIGHT_EXPOSURE_START_ELEVATION) / total));
     const preExposure = 2 ** ((1 - NIGHT_EXPOSURE_VISIBLE_SHARE) * drop);
     this.preExposure.value = preExposure;
+    this.emissiveExposure.value = preExposure ** EMISSIVE_EXPOSURE_SHARE;
     atmosphere.parameters.luminanceScale = this._baseLuminanceScale * preExposure;
     const change = preExposure / this._environmentExposure;
     if (change > ENVIRONMENT_EXPOSURE_THRESHOLD || change < 1 / ENVIRONMENT_EXPOSURE_THRESHOLD) {

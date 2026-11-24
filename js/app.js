@@ -4,6 +4,7 @@ import { loadSettings, isDevMode } from './utils/settingsStore.js';
 import { bindQualitySettings } from './utils/qualityPresets.js';
 import {
   CLOUD_RENDER_ORDER,
+  GLOW_LAYER,
   REALWORLD_FAR_PLANE,
   CLIP_PLANE_EPSILON,
 } from './constants/rendering.js';
@@ -58,6 +59,7 @@ async function initApp() {
     scenePipeline,
     (x, z) => geoTerrainManager.worldToGeo(x, z),
   );
+  scenePipeline.setGlowLayer(scene, camera, GLOW_LAYER);
   const cloudLayer = new CloudLayer(scene);
   cloudLayer.mesh.renderOrder = CLOUD_RENDER_ORDER;
 
@@ -68,7 +70,12 @@ async function initApp() {
   const _axisZ = new THREE.Vector3(0, 0, 1);
   const _autopilotEuler = new THREE.Euler(0, 0, 0, 'YXZ');
   const _autopilotQuat = new THREE.Quaternion();
-  const aircraftManager = new AircraftManager(scene);
+  const aircraftManager = new AircraftManager(scene, {
+    emissiveExposure: atmosphericSky.emissiveExposure,
+    sceneDepth: scenePipeline.sceneDepth,
+    camera,
+    renderer,
+  });
   aircraftManager
     .load('assets/models/rafale/Rafale.gltf')
     .catch((err) => {
@@ -432,6 +439,7 @@ async function initApp() {
           yawRate: plan.yawRate,
           pitchRate: plan.pitchRate,
           quaternion: _autopilotQuat,
+          thrust: true,
         };
       }
     } else if (benchmarkRunner.isRunning() && !benchmarkRunner.isWarmup() && benchmarkRunner.cameraPath) {
@@ -445,6 +453,7 @@ async function initApp() {
         yawRate: path.yawRate,
         pitchRate: path.pitchRate,
         quaternion: _autopilotQuat,
+        thrust: true,
       };
     } else if (!benchmarkRunner.isRunning()) {
       aircraftState = {
@@ -454,6 +463,7 @@ async function initApp() {
         yawRate: flightController.yawRate,
         pitchRate: flightController.pitchRate,
         quaternion: flightController.quaternion,
+        thrust: flightController.thrusting,
       };
     }
 

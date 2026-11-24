@@ -1,9 +1,6 @@
 import * as THREE from 'three';
 import { CONFIG } from '../utils/config.js';
-import {
-  RATE_DAMP_FACTOR,
-  INITIAL_PITCH,
-} from '../constants/camera.js';
+import { RATE_DAMP_FACTOR, INITIAL_PITCH } from '../constants/camera.js';
 
 export default class FlightController {
   constructor(camera, domElement) {
@@ -151,6 +148,11 @@ export default class FlightController {
 
     this.yawRate *= Math.max(0, 1 - RATE_DAMP_FACTOR * dt);
     this.pitchRate *= Math.max(0, 1 - RATE_DAMP_FACTOR * dt);
+  }
+
+  /** Whether the aircraft is pushed forward (forward key held) */
+  get thrusting() {
+    return this.enabled && Boolean(this.keys['ArrowUp'] || this.keys['KeyW']);
   }
 
   dispose() {

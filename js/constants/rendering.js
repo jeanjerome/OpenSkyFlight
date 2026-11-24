@@ -152,3 +152,12 @@ export const NIGHT_VISION_SCOTOPIC_LUMINANCE = 0.003;
 
 /** Tint of night vision, luminance 1 (linear RGB) */
 export const NIGHT_VISION_COLOR = [0.85, 1.0, 1.38];
+
+/** Resolution of the glow pass (halos of lights, flames) relative to the output */
+export const GLOW_RESOLUTION_SCALE = 0.5;
+
+/** Layer of the objects rendered by the glow pass only */
+export const GLOW_LAYER = 2;
+
+/** Share of the night exposure (in stops) applied to light sources: see AtmosphericSky.emissiveExposure */
+export const EMISSIVE_EXPOSURE_SHARE = 0.5;

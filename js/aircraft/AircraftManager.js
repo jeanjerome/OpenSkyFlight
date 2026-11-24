@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import Logger from '../utils/Logger.js';
+import { CONFIG } from '../utils/config.js';
+import AircraftLights from './AircraftLights.js';
 import {
   AIRCRAFT_TARGET_LENGTH,
   VISUAL_ROLL_FACTOR,
@@ -8,11 +10,20 @@ import {
   VISUAL_PITCH_FACTOR,
   VISUAL_PITCH_MAX,
   VISUAL_SMOOTH,
+  AFTERBURNER_SPEED,
 } from '../constants/aircraft.js';
 
 export default class AircraftManager {
-  constructor(scene) {
+  /**
+   * @param {THREE.Scene} scene
+   * @param {{emissiveExposure: Node, sceneDepth: Node, camera: THREE.Camera, renderer: THREE.WebGPURenderer}} rendering -
+   *   what the aircraft's lights need (see AircraftLights)
+   */
+  constructor(scene, rendering) {
     this.scene = scene;
+    this.rendering = rendering;
+    this.lights = null;
+    this._bufferSize = new THREE.Vector2();
     this.mesh = null;
     this.ready = false;
 
@@ -87,6 +98,8 @@ export default class AircraftManager {
       if (hiddenGearParts.has(child.name)) child.visible = false;
     });
 
+    this.lights = new AircraftLights(this.mesh, this.rendering);
+
     this.group.traverse((child) => {
       child.frustumCulled = false;
     });
@@ -122,6 +135,16 @@ export default class AircraftManager {
     // Apply visual pitch around local X axis
     this._qVisualPitch.setFromAxisAngle(this._axisX, this._visualPitch);
     this.group.quaternion.multiply(this._qVisualPitch);
+    this.group.updateMatrixWorld();
+
+    const { camera, renderer } = this.rendering;
+    renderer.getDrawingBufferSize(this._bufferSize);
+    this.lights.update(
+      dt,
+      { thrust: Boolean(state.thrust), afterburner: CONFIG.cameraSpeed >= AFTERBURNER_SPEED },
+      camera,
+      this._bufferSize.y,
+    );
   }
 
   setVisible(visible) {

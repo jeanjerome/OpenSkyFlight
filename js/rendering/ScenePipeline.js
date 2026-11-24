@@ -5,6 +5,7 @@ import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import {
   BLOOM_STRENGTH,
   BLOOM_RADIUS,
+  GLOW_RESOLUTION_SCALE,
   NIGHT_VISION_COLOR,
   NIGHT_VISION_PHOTOPIC_LUMINANCE,
   NIGHT_VISION_SCOTOPIC_LUMINANCE,
@@ -38,6 +39,11 @@ import AutoExposureNode from './AutoExposureNode.js';
  * before tone mapping, around the base exposure (see AutoExposureNode). It
  * needs compute shaders with atomics, so it stays off on the WebGL2 backend.
  *
+ * Glows (halos of lights, afterburner flames) are rendered by a pass of their
+ * own, at half the output resolution, and added after the anti-aliasing (see
+ * setGlowLayer): additive and transparent, they would otherwise take the
+ * aerial perspective and the motion of the scenery behind them.
+ *
  * Night vision: below a few candelas per square metre the eye's rods take
  * over from its cones, and colors fade into a bluish grey (see setNightVision).
  *
@@ -69,6 +75,7 @@ export default class ScenePipeline {
     this.autoExposureNode = this.autoExposureSupported ? new AutoExposureNode(this._antiAliased) : null;
     this._autoExposureEnabled = false;
     this._preExposure = null;
+    this._glowPass = null;
 
     this._pipeline = new THREE.RenderPipeline(renderer);
     this._pipeline.outputNode = this._buildOutput();
@@ -78,6 +85,7 @@ export default class ScenePipeline {
   _buildOutput() {
     let color = this._antiAliased.rgb;
     if (this._bloomEnabled) color = color.add(this.bloomNode.rgb);
+    if (this._glowPass) color = color.add(this._glowPass.getTextureNode().rgb);
     if (this._preExposure) color = this._nightVision(color);
     if (this._autoExposureEnabled) color = color.mul(this.autoExposureNode);
     return vec4(color, this._antiAliased.a);
@@ -102,6 +110,25 @@ export default class ScenePipeline {
       1,
     );
     return mix(color, vec3(...NIGHT_VISION_COLOR).mul(y), scotopic);
+  }
+
+  /**
+   * Render the objects of a layer (and only them) in the glow pass.
+   * @param {THREE.Scene} scene
+   * @param {THREE.Camera} camera
+   * @param {number} layer
+   */
+  setGlowLayer(scene, camera, layer) {
+    this._glowPass = pass(scene, camera, { samples: 0 });
+    this._glowPass.setLayers(new THREE.Layers());
+    this._glowPass.getLayers().set(layer);
+    this._glowPass.setResolutionScale(GLOW_RESOLUTION_SCALE);
+    this._rebuild();
+  }
+
+  /** Scene depth, for the glow materials' own occlusion test */
+  get sceneDepth() {
+    return this._sceneDepth;
   }
 
   /**
@@ -219,6 +246,7 @@ export default class ScenePipeline {
     this.autoExposureNode?.dispose();
     this.taauNode.dispose();
     this._atmosphereNode?.dispose();
+    this._glowPass?.dispose();
     this.scenePass.dispose();
   }
 }
