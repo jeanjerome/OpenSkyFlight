@@ -67,7 +67,7 @@ export default class AtmosphericSky {
 
     // React to config changes
     this._unsub = onChange((key) => {
-      if (['sunElevation', 'sunAzimuth', 'skyTurbidity', 'skyRayleigh', 'fogEnabled', 'fogDensity', 'textureMode', 'bloomEnabled'].includes(key)) {
+      if (['sunElevation', 'sunAzimuth', 'skyTurbidity', 'skyRayleigh', 'fogEnabled', 'fogDensity', 'textureMode', 'bloomEnabled', 'autoExposure'].includes(key)) {
         this._updateSky();
       }
     });
@@ -100,6 +100,7 @@ export default class AtmosphericSky {
       this.ambientLight.color.set(0xffffff);
       this.scene.environment = null;
       this.pipeline.setBloom(false);
+      this.pipeline.setAutoExposure(false);
 
       Logger.debug('AtmosphericSky', 'SAR mode — black sky, side-looking light');
       return;
@@ -152,6 +153,7 @@ export default class AtmosphericSky {
     this.scene.environment = this.environment.update(this.sunDirection, skyParams, this._groundIrradiance);
 
     this._updateBloomThreshold(skyParams, kr, kg, kb);
+    this.pipeline.setAutoExposure(CONFIG.autoExposure);
 
     // Fog: tinted with the sky radiance at the horizon so distant terrain fades into the sky
     if (CONFIG.fogEnabled) {

@@ -80,3 +80,40 @@ export const BLOOM_STRENGTH = 0.015;
 
 /** Weight of the wide blur levels against the narrow ones, in [0, 1] */
 export const BLOOM_RADIUS = 0.8;
+
+// --- Automatic exposure (see AutoExposureNode) ---
+
+/** Histogram bins of log2 luminance */
+export const AUTO_EXPOSURE_BINS = 64;
+
+/** log2 luminance range of the histogram: deep shadow to well above the brightest sky */
+export const AUTO_EXPOSURE_LOG_MIN = -8;
+export const AUTO_EXPOSURE_LOG_MAX = 10;
+
+/** Metering grid (samples across, down), whatever the resolution */
+export const AUTO_EXPOSURE_GRID = [256, 144];
+
+/** Share of the darkest and of the brightest samples left out of the average */
+export const AUTO_EXPOSURE_LOW_PERCENTILE = 0.4;
+export const AUTO_EXPOSURE_HIGH_PERCENTILE = 0.9;
+
+/**
+ * Scene luminance (before exposure) for which the base exposure (TONE_MAPPING_EXPOSURE)
+ * is right: the geometric mean of the metered luminance of the daytime reference views
+ */
+export const AUTO_EXPOSURE_REFERENCE_LUMINANCE = 1.32;
+
+/**
+ * Share of the deviation from the reference luminance that the exposure compensates,
+ * in stops. Below 1, as with the eye, snow in full sun still looks brighter than a
+ * valley and a dusk scene darker than noon.
+ */
+export const AUTO_EXPOSURE_COMPENSATION = 0.6;
+
+/** Limits of the correction around the base exposure, in stops */
+export const AUTO_EXPOSURE_MIN_EV = -1.5;
+export const AUTO_EXPOSURE_MAX_EV = 1;
+
+/** Adaptation rates (1/s): toward a brighter scene, toward a darker one */
+export const AUTO_EXPOSURE_SPEED_TO_BRIGHT = 3;
+export const AUTO_EXPOSURE_SPEED_TO_DARK = 1;

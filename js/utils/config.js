@@ -20,6 +20,7 @@
  * @property {number}  maxPixelRatio          - Maximum device pixel ratio (default: 2)
  * @property {number}  renderScale            - Highest resolution of the 3D scene relative to the screen, range [0.5..1] (default: 1)
  * @property {boolean} dynamicResolution      - Lower the scene resolution when the GPU exceeds the 60 FPS budget (default: true)
+ * @property {boolean} autoExposure           - Adapt the exposure to the scene brightness (default: true)
  * @property {boolean} bloomEnabled           - Glow around the sun and its specular reflections (default: true)
  *
  * Atmosphere:
@@ -64,6 +65,7 @@ const CONFIG = {
   maxPixelRatio: 2,
   renderScale: 1,
   dynamicResolution: true,
+  autoExposure: true,
   bloomEnabled: true,
   lat: 45.8326, // Mont Blanc default
   lon: 6.8652,

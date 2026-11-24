@@ -3,6 +3,7 @@ import { mrt, output, pass, uniform, vec4, velocity } from 'three/tsl';
 import { taau } from 'three/addons/tsl/display/TAAUNode.js';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { BLOOM_STRENGTH, BLOOM_RADIUS } from '../constants/rendering.js';
+import AutoExposureNode from './AutoExposureNode.js';
 
 /** Bloom threshold that no HalfFloat value reaches, until the lighting sets one */
 const NO_BLOOM_THRESHOLD = 1e6;
@@ -25,6 +26,10 @@ const NO_BLOOM_THRESHOLD = 1e6;
  * the anti-aliased image, so that sub-pixel highlights do not flicker in the
  * glow, and is added to it before tone mapping. The threshold is a scene
  * radiance set by the lighting (see setBloom).
+ *
+ * Automatic exposure meters the anti-aliased image and scales the result
+ * before tone mapping, around the base exposure (see AutoExposureNode). It
+ * needs compute shaders with atomics, so it stays off on the WebGL2 backend.
  *
  * Tone mapping is read from renderer.toneMapping (set by AtmosphericSky, none in
  * SAR mode); the pipeline rebuilds its output node when it changes. The exposure
@@ -51,14 +56,40 @@ export default class ScenePipeline {
     this.bloomNode = bloom(this._antiAliased, BLOOM_STRENGTH, BLOOM_RADIUS, this._bloomThreshold);
     this._bloomEnabled = true;
 
+    this.autoExposureSupported = renderer.backend.isWebGPUBackend === true;
+    this.autoExposureNode = this.autoExposureSupported ? new AutoExposureNode(this._antiAliased) : null;
+    this._autoExposureEnabled = false;
+
     this._pipeline = new THREE.RenderPipeline(renderer);
     this._pipeline.outputNode = this._buildOutput();
     this._toneMapping = renderer.toneMapping;
   }
 
   _buildOutput() {
-    if (!this._bloomEnabled) return this._antiAliased;
-    return vec4(this._antiAliased.rgb.add(this.bloomNode.rgb), this._antiAliased.a);
+    let color = this._antiAliased.rgb;
+    if (this._bloomEnabled) color = color.add(this.bloomNode.rgb);
+    if (this._autoExposureEnabled) color = color.mul(this.autoExposureNode);
+    return vec4(color, this._antiAliased.a);
+  }
+
+  _rebuild() {
+    this._pipeline.outputNode = this._buildOutput();
+    this._pipeline.needsUpdate = true;
+  }
+
+  /** @param {boolean} enabled - ignored without compute support (WebGL2 backend) */
+  setAutoExposure(enabled) {
+    enabled = enabled && this.autoExposureSupported;
+    if (enabled === this._autoExposureEnabled) return;
+    this._autoExposureEnabled = enabled;
+    if (enabled) this.autoExposureNode.reset();
+    this._rebuild();
+  }
+
+  /** @returns {Promise<number|null>} adapted scene luminance, null when automatic exposure is off */
+  async readAdaptedLuminance() {
+    if (!this._autoExposureEnabled) return null;
+    return this.autoExposureNode.readAdaptedLuminance(this._renderer);
   }
 
   /**
@@ -73,8 +104,7 @@ export default class ScenePipeline {
     this.bloomNode.smoothWidth.value = threshold;
     if (enabled !== this._bloomEnabled) {
       this._bloomEnabled = enabled;
-      this._pipeline.outputNode = this._buildOutput();
-      this._pipeline.needsUpdate = true;
+      this._rebuild();
     }
   }
 
@@ -116,6 +146,7 @@ export default class ScenePipeline {
   dispose() {
     this._pipeline.dispose();
     this.bloomNode.dispose();
+    this.autoExposureNode?.dispose();
     this.taauNode.dispose();
     this.scenePass.dispose();
   }

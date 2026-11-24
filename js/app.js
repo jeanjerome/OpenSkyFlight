@@ -280,6 +280,8 @@ async function initApp() {
     // Resolution of the scene pass relative to the output (dynamic resolution)
     renderScale: () => scenePipeline.renderScale,
     memory: () => ({ ...renderer.info.memory }),
+    // Scene luminance the automatic exposure has adapted to (null when off)
+    adaptedLuminance: () => scenePipeline.readAdaptedLuminance(),
     setRenderScale: (scale) => scenePipeline.setRenderScale(scale),
     pendingTileDownloads: () => geoTerrainManager.pendingDownloads,
     lastGpuTimeMs: () => gpuTimer.getLastGPUTimeMs(),
