@@ -9,7 +9,7 @@ en fin de session.
 ## État courant (mis à jour le 2026-11-24)
 
 - **Lots terminés** : 0 et 1 (L1.4 achevée pendant le lot 2). **Lot en cours** : lot 2 ; L2.9, L2.5,
-  L2.1 et L2.2 terminées, L2.6 en grande partie (graphe d'élévation partagé, PMREM sur toute la scène).
+  L2.1, L2.2 et L2.3 terminées, L2.6 en grande partie (graphe d'élévation partagé, PMREM sur toute la scène).
 - **three.js** : r187 (import map d'`index.html`), mis à jour depuis r183 pour le TRAA compatible avec
   la profondeur inversée.
 - **Git** : branche `feat/render-hdr-pipeline` (depuis `main`), non poussée.
@@ -17,21 +17,25 @@ en fin de session.
   `vendor/three-tile`), cache `cache/` chaud pour les vues de référence et les deux vols. Lancer
   `npm run dev` en tâche de fond avant toute mesure. Mesurer **sur l'écran intégré 120 Hz** : sur un
   écran 60 Hz, Chrome plafonne à 60 FPS et la qualité adaptative dégrade la résolution pour de bon.
-- **Référence de comparaison** : `benchmarks/render/traa/` (captures avec coût GPU, draw calls et
-  triangles par vue, deux benchmarks de vol, non versionnés). Chiffres dans **Mesures**, lignes « L2.2 ».
+- **Référence de comparaison** : `benchmarks/render/bloom/` (captures des **6** vues avec coût GPU,
+  draw calls et triangles, deux benchmarks de vol, non versionnés). Chiffres dans **Mesures**, lignes
+  « L2.3 ». Sans bloom, même méthode de mesure : `benchmarks/render/traa-frames/` (captures seules).
+- **Vue 6** (face au soleil bas, massif en contre-jour) ajoutée pour le bloom, et plus tard les rayons
+  crépusculaires et le reflet d'objectif (L4.7).
 - **Lire les temps GPU** (voir Outillage) : seul le « coût GPU » de `render:capture` (`gpuMedianMs`,
   mesuré GPU saturé) compare deux états du code ; la colonne GPU des vols indique la charge, pas le coût.
 - **Rendu** : `js/rendering/ScenePipeline.js` — `RenderPipeline` : passe de scène HalfFloat (profondeur
-  float32, MRT couleur + vitesse, sans MSAA) → `traa()` → tone mapping et espace couleur en sortie.
-  Les effets suivants s'insèrent entre la passe de scène et la sortie.
-- **Ordre conseillé pour la suite du lot 2** : L2.3 → L2.4 → L2.8 → L2.7 ; reste de L2.6 (décodage
+  float32, MRT couleur + vitesse, sans MSAA) → `traa()` → `bloom()` ajouté à l'image TRAA → tone
+  mapping et espace couleur en sortie. Seuil du bloom fixé par `AtmosphericSky` (voir L2.3).
+- **Ordre conseillé pour la suite du lot 2** : L2.4 → L2.8 → L2.7 ; reste de L2.6 (décodage
   d'altitude dans un worker, `compileAsync`) seulement si p5 ou p1 le justifient.
-- **Prochaine tâche, L2.3 (bloom) — points d'entrée** : `bloom()` de
-  `three/addons/tsl/display/BloomNode.js` sur la couleur HDR, avant ou après TRAA (après : moins de
-  scintillement ; à comparer). Seuil physique : le soleil n'est pas dans la PMREM et le disque de
-  `SkyMesh` est la seule source très lumineuse ; vérifier sa radiance après exposition (0,35) pour
-  caler `threshold` (≈ 1 en sortie linéaire pré-tone mapping) et `strength`. Vérifier qu'aucun bloom
-  n'apparaît sur la neige au soleil (vue 1) et mesurer le coût (`render:capture`, budget post 2 ms).
+- **Prochaine tâche, L2.4 (résolution dynamique) — points d'entrée** : `AdaptiveQualityManager` baisse
+  `renderer.setPixelRatio` d'après l'intervalle entre frames (CPU), ce qui redimensionne toute la
+  chaîne et, sur un écran 60 Hz, se déclenche à tort pour de bon (voir Outillage). Piloter plutôt
+  l'échelle de la passe de scène (`PassNode.setResolutionScale`) et laisser TRAA reconstruire à la
+  résolution de sortie ; vérifier d'abord que le `TRAANode` r187 accepte une entrée plus petite que
+  sa sortie (taille de l'historique prise sur la cible de la passe de scène). Décider du signal :
+  temps GPU de la frame (`GPUTimer`) plutôt que l'intervalle rAF, borné par vsync.
 
 ---
 
@@ -110,7 +114,7 @@ Cible : 60 FPS sur M4 Pro / Chrome, preset High, résolution native ×2 avec mis
 Prérequis : `npm install`, serveur lancé (`npm run dev`), Google Chrome installé.
 
 ```bash
-# Captures + FPS + coût GPU des 5 vues de référence (--renders 12 par défaut)
+# Captures + FPS + coût GPU des vues de référence (--renders 12 par défaut ; --views 1,6 ; --set clé=valeur)
 npm run render:capture -- --out benchmarks/render/<label>
 # Benchmark de vol (sans --plan : vol par défaut ; --plan 1 : flight-over-the-Alps-01)
 npm run render:benchmark -- --out benchmarks/render/<label> [--plan 1]
@@ -138,7 +142,14 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
   `--renders` entre deux mesures comparées : le coût par rendu baisse de ≈ 15 % entre 4 et 16 rendus
   (chevauchement entre rendus successifs).
 - Découpage par sous-système : les passes se chevauchant, leurs durées ne s'additionnent pas.
-  Mesurer le coût d'un effet par différence, coût GPU avec et sans l'effet.
+  Mesurer le coût d'un effet par différence, coût GPU avec et sans l'effet (`--set <clé>=false`).
+- Les répétitions avancent la frame de nœuds de three : chaque répétition rend toute la frame (scène,
+  TRAA, bloom, sortie). Avant L2.3, la passe de scène passait en mise à jour « par rendu » et TRAA
+  ne se résolvait qu'une fois ; three comptant chaque rendu de quad comme un rendu, la scène était
+  aussi re-rendue dans la résolution TRAA (13 scènes pour 12 rendus) : coûts surestimés de ≈ 5–9 %.
+- `--views` (sous-ensemble de vues) change la séquence de chargement des tuiles : triangles et coût
+  diffèrent de la capture complète (vue 2 : 2,36 M contre 2,60 M). Ne comparer que des séquences
+  identiques.
 
 ## Lot 1 — Gains rapides
 
@@ -191,7 +202,15 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       `depth32float`) ; corrigé à partir de r184. Comparé au MSAA sur captures fixes et en vol (plan 1,
       25/45/65 s, recadrages pleine résolution) : bords et détails lointains équivalents, avion à peine
       plus doux, pas de traînées. Coût +0,3–0,5 ms GPU.
-- [ ] **L2.3** Bloom (`BloomNode`) à seuil physique (soleil, reflets spéculaires).
+- [x] **L2.3** Bloom (`BloomNode`) à seuil physique (soleil, reflets spéculaires).
+      Fait : `bloom()` sur l'image TRAA (pas de scintillement des reflets sous-pixel), ajouté avant
+      tone mapping. Seuil = max(radiance d'une surface diffuse blanche face au soleil,
+      (E_soleil + E_ciel)/π ; radiance du ciel à 0,5° du centre du soleil) : à soleil bas, l'auréole de
+      Preetham (≈ 14 à 10° d'élévation) dépasse de loin toute surface diffuse (1,6) et aurait voilé le
+      ciel. Genou de la largeur du seuil. Disque de `SkyMesh` ≈ 6·10⁴, donc seuls le disque et les
+      reflets spéculaires du soleil passent. Strength 0,015, radius 0,8 (comparé à 0,03/0,4, cœur
+      saturé trop large, et 0,008/1, soleil trop petit). Vue 1 inchangée (écart moyen 0,17 %, bruit
+      TRAA). Coût +0,26–0,33 ms ; désactivable (panneau, `bloomEnabled`), coupé en SAR.
 - [ ] **L2.4** Résolution dynamique : `AdaptiveQualityManager` pilote l'échelle de rendu interne
       reconstruite par TRAA, au lieu du `pixelRatio`.
 - [x] **L2.5** Rétablir le frustum culling des tuiles (`GeoTerrainManager.js:154`) avec des boîtes
@@ -327,14 +346,16 @@ Notes de lecture :
 | 2026-11-24 | three r187 | Plan 1 (basse alt.) | 94 s | 119,6 | 83,3 | 62,5 | 4,4 (6,3) | 0 / 0 | 2,67 M | 651 |
 | 2026-11-24 | L2.2 (TRAA) | Vol par défaut | 128 s | 119,5 | 106,4 | 64,9 | 4,1 (6,3) | 2 / 0 | 2,12 M | 540 |
 | 2026-11-24 | L2.2 (TRAA) | Plan 1 (basse alt.) | 94 s | 119,4 | 83,3 | 62,1 | 4,7 (6,3) | 0 / 0 | 2,67 M | 652 |
+| 2026-11-24 | L2.3 (bloom) | Vol par défaut | 128 s | 119,3 | 106,4 | 61,3 | 4,0 (6,3) | 1 / 0 | 2,12 M | 552 |
+| 2026-11-24 | L2.3 (bloom) | Plan 1 (basse alt.) | 94 s | 119,3 | 81,3 | 61,3 | 5,0 (6,3) | 1 / 0 | 2,67 M | 664 |
 
 Pour mémoire, la configuration n°4 de `BENCHMARKS.md` (même machine, Chrome 146, ancien moteur
 geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,7 / 76,3 / 35,2).
 
 ### Vues de référence
 
-| Date | État | Vue 1 | Vue 2 | Vue 3 | Vue 4 | Vue 5 |
-|---|---|---|---|---|---|---|
+| Date | État | Vue 1 | Vue 2 | Vue 3 | Vue 4 | Vue 5 | Vue 6 |
+|---|---|---|---|---|---|---|---|
 | 2026-11-23 | Baseline — GPU ms méd. | 7,7 | 6,8 | 6,4 | 6,6 | 10,3 |
 | 2026-11-23 | Baseline — FPS moy / p1 | 120 / 109 | 120 / 108 | 120 / 111 | 120 / 106 | 120 / 109 |
 | 2026-11-23 | Lot 1 — GPU ms méd. | 9,8 | 9,7 | 9,7 | 9,6 | 10,3 |
@@ -351,7 +372,10 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 | 2026-11-23 | Essai LOD mesuré au point le plus haut (écarté) — draw calls / triangles | 561 / 2,28 M | 633 / 2,60 M | 639 / 2,61 M | 639 / 2,57 M | 665 / 2,74 M |
 | 2026-11-24 | L2.1 (RenderPipeline, r183) — coût GPU ms | 1,32 | 1,42 | 1,44 | 1,33 | 1,39 |
 | 2026-11-24 | three r187 — coût GPU ms | 1,04 | 1,20 | 1,22 | 1,09 | 1,22 |
-| 2026-11-24 | L2.2 (TRAA) — coût GPU ms | 1,32 | 1,68 | 1,69 | 1,50 | 1,65 |
+| 2026-11-24 | L2.2 (TRAA) — coût GPU ms | 1,32 | 1,68 | 1,69 | 1,50 | 1,65 | |
+| 2026-11-24 | L2.2, mesure corrigée (frame entière répétée) — coût GPU ms | 1,19 | 1,59 | 1,62 | 1,42 | 1,52 | 1,46 |
+| 2026-11-24 | L2.3 (bloom) — coût GPU ms | 1,52 | 1,90 | 1,92 | 1,73 | 1,82 | 1,72 |
+| 2026-11-24 | L2.3 (bloom) — draw calls / triangles | 538 / 1,93 M | 646 / 2,60 M | 652 / 2,61 M | 592 / 2,03 M | 618 / 2,19 M | 592 / 2,05 M |
 
 Les lignes « GPU ms méd. » antérieures à L2.9 ne sont pas exploitables (somme des passes, fréquence
 du GPU fixée par le régulateur). Le coût GPU réel d'une frame est ≈ 1,3–1,5 ms à 4112×2580 sur M4 Max
@@ -390,11 +414,24 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 | 2026-11-23 | Point de mesure du LOD des tuiles | Centre de la tuile au niveau de la mer (comportement inchangé) | Avec des bornes justes, three-tile mesurerait la distance au point le plus haut : +7 à +10 % de draw calls et +0,1–0,2 ms GPU sur les vues de montagne, sans différence visible (tuiles concernées à mi-distance, sous le brouillard), et `LODThreshold` 1,2 a été réglé pour le niveau de la mer |
 | 2026-11-24 | Version de three.js | r187 (au lieu de r183) | TRAA compatible profondeur inversée depuis r184 ; internes lus par `GPUTimer` inchangés ; images, modes et cadence identiques, coût GPU −18 %. Plutôt que r184 : dernière version, publiée il y a plus de trois semaines |
 | 2026-11-24 | Anti-crénelage | TRAA, MSAA désactivé | Exigé par TRAA ; qualité équivalente au MSAA sur captures fixes et en vol, stabilité temporelle en plus, +0,3–0,5 ms |
+| 2026-11-24 | Bloom | Après TRAA, seuil = radiance la plus forte hors soleil (surface diffuse blanche au soleil ou ciel au bord du disque) | Ordre des moteurs AAA : les reflets sous-pixel, stabilisés par TRAA, ne scintillent pas dans le halo (pas de comparaison en vol : aucun reflet ne dépasse le seuil sur les vols de référence). Seuil dérivé de l'éclairage plutôt que fixe : pas de bloom sur la neige ni sur l'auréole, quelle que soit la hauteur du soleil |
+| 2026-11-24 | Mesure du coût GPU | Répétitions = frames de nœuds successives | Mise à jour « par rendu » impossible pour TRAA et bloom : three compte chaque rendu de quad comme un rendu, d'où des rendus imbriqués de la scène |
 | 2026-11-23 | Vitesse par défaut | 560 m/s | Vitesse réelle de l'ancien défaut (800 unités Mercator/s) : benchmarks comparables à la baseline |
 
 ## Journal des sessions
 
 <!-- Entrée la plus récente en haut. -->
+
+### 2026-11-24 (10)
+- Fait : L2.3. Trois commits : mesure GPU répétant la frame entière, vue de référence 6 (face au soleil
+  bas) et options `--views` / `--set` de `render:capture`, bloom à seuil dérivé de l'éclairage.
+- Découvert : l'ancienne mesure saturée re-rendait la scène dans la résolution TRAA et ne comptait
+  TRAA qu'une fois par frame (coûts L2.2 surestimés de 5–9 %) ; l'auréole de Preetham dépasse toute
+  surface diffuse à soleil bas ; le disque solaire de `SkyMesh` vaut ≈ 6·10⁴ (proche du maximum
+  HalfFloat, 65 504).
+- Vérifié : vue 1 sans bloom sur la neige, vue 6 avec halo, modes `sar` (sans bloom) et `elevation` ;
+  vols p1 61,3 / 61,3 (contre 64,9 / 62,1, dans la dispersion 61–65 des sessions précédentes).
+- Prochaine étape : L2.4 (voir État courant).
 
 ### 2026-11-24 (9)
 - Fait : L2.1 et L2.2. Commits : `RenderPipeline` avec passe de scène HDR, three r183 → r187, TRAA à la
