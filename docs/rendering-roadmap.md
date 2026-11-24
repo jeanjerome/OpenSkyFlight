@@ -8,8 +8,10 @@ en fin de session.
 
 ## État courant (mis à jour le 2026-11-24)
 
-- **Lots terminés** : 0 et 1 (L1.4 achevée pendant le lot 2). **Lot en cours** : lot 2 ; L2.9, L2.5,
-  L2.1, L2.2, L2.3, L2.4, L2.7, L2.8 et L2.10 terminées, L2.6 en grande partie (graphe d'élévation partagé, PMREM sur toute la scène).
+- **Lots terminés** : 0 et 1 (fusionnés dans `main`), 2 (clos le 2026-11-24, **fusion dans `main` en
+  attente de l'accord de l'utilisateur**). Lot 2 : toutes les tâches faites sauf le reste optionnel de
+  L2.6 (décodage d'altitude dans un worker, `compileAsync`), reporté : p5 et p1 ne le justifient
+  plus. Bilan dans **Mesures** (lignes « Clôture du lot 2 ») et constats visuels sous les tableaux.
 - **three.js** : r187 (import map d'`index.html`), mis à jour depuis r183 pour le TRAA compatible avec
   la profondeur inversée.
 - **Git** : branche `feat/render-hdr-pipeline` (depuis `main`), non poussée.
@@ -38,13 +40,10 @@ en fin de session.
   `js/utils/settingsStore.js`. `render:capture` et `render:benchmark` ouvrent l'app avec `?dev=1`
   (et HUD / mini-carte masqués par l'URL pour les captures), dans un profil vierge : preset High,
   identique à l'état d'avant L2.10, donc les mesures de référence restent comparables.
-- **Ordre conseillé pour la suite du lot 2** : clôture du lot (captures dans `docs/screenshots/render/lot2/`, fusion dans `main` après
-  accord de l'utilisateur) ; reste de L2.6 (décodage d'altitude dans un worker, `compileAsync`)
-  seulement si p5 ou p1 le justifient.
-- **Prochaine session — clôture du lot 2** : captures des 6 vues dans `docs/screenshots/render/lot2/`
-  (preset High), constats visuels, bilan du lot, puis fusion dans `main` **après accord de
-  l'utilisateur**. Point ouvert pour plus tard : le coût CPU de soumission (≈ 5 µs par draw call)
-  limite Ultra à 120 Hz.
+- **Suite** : fusion de `feat/render-hdr-pipeline` dans `main` après accord de l'utilisateur, puis
+  lot 3 (atmosphère physique et heure du jour). Points ouverts : coût CPU de soumission (≈ 5 µs par
+  draw call) qui limite Ultra à 120 Hz ; minimap OSM bloquée par la politique d'usage des tuiles
+  d'OpenStreetMap (hors rendu, voir **Problèmes hors rendu relevés**).
 ---
 
 ## Comment reprendre le travail (début de session)
@@ -498,6 +497,8 @@ Notes de lecture :
 | 2026-11-24 | L2.7 preset High (défaut) | Vol par défaut | 128 s | 119,3 | 106,4 | 62,5 | 3,9 (6,3) | 0 / 0 | 2,12 M | 552 |
 | 2026-11-24 | L2.7 preset Ultra, LODThreshold 1,6 (écarté) | Vol par défaut | 128 s | 112,5 | 76,3 | 48,5 | 5,5 (6,7) | 4 / 0 | 3,50 M | 846 |
 | 2026-11-24 | L2.7 preset Medium révisé (échelle 0,8, Terrain detail High) | Vol par défaut | 128 s | 119,3 | 105,3 | 63,3 | 4,0 (6,4) | 3 / 0 | 2,12 M | 552 |
+| 2026-11-24 | **Clôture du lot 2** (preset High) | Vol par défaut | 128 s | 119,3 | 106,4 | 61,3 | 4,0 (6,3) | 4 / 0 | 2,12 M | 552 |
+| 2026-11-24 | **Clôture du lot 2** (preset High) | Plan 1 (basse alt.) | 94 s | 119,4 | 81,3 | 61,7 | 5,1 (6,2) | 0 / 0 | 2,67 M | 664 |
 | 2026-11-24 | L2.7 preset Ultra, LODThreshold 1,4 | Vol par défaut | 128 s | 115,6 | 85,5 | 53,5 | 5,0 (6,5) | 1 / 0 | 2,84 M | 714 |
 
 Pour mémoire, la configuration n°4 de `BENCHMARKS.md` (même machine, Chrome 146, ancien moteur
@@ -543,6 +544,7 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 | 2026-11-24 | **Pleine résolution** — L2.7 preset High | 3,10 | 5,08 | 3,65 | 3,36 | 3,15 | 3,36 |
 | 2026-11-24 | **Pleine résolution** — L2.7 preset Ultra, LODThreshold 1,6 (écarté) | 3,64 | 5,92 | 4,97 | 4,75 | 4,03 | 4,20 |
 | 2026-11-24 | **Pleine résolution** — L2.7 preset Ultra, LODThreshold 1,4 | 3,88 | 4,83 | 4,31 | 4,09 | 3,49 | 3,73 |
+| 2026-11-24 | **Pleine résolution** — **Clôture du lot 2** (preset High) | 3,11 | 5,09 | 4,01 | 3,80 | 3,34 | 3,72 |
 | 2026-11-24 | L2.7 Low et Medium (LODThreshold 0,9) — draw calls / triangles | 382 / 1,26 M | 412 / 1,53 M | 454 / 1,69 M | 388 / 1,30 M | 384 / 1,21 M | 382 / 1,26 M |
 | 2026-11-24 | L2.7 Ultra 1,4 — draw calls / triangles | 712 / 2,66 M | 790 / 3,36 M | 820 / 3,45 M | 730 / 2,77 M | 768 / 2,78 M | 724 / 2,69 M |
 
@@ -551,6 +553,21 @@ du GPU fixée par le régulateur). Les lignes « coût GPU » de L2.9 à L2.3 on
 (résolution abaissée par l'ancienne qualité adaptative, voir Outillage) : comparables entre elles
 pour la géométrie seulement. Le coût GPU réel d'une frame est ≈ 3–5 ms à 4112×2580 sur M4 Max (lignes
 « Pleine résolution »), loin du budget de 16,6 ms.
+
+Bilan du lot 2 (état de clôture contre lot 1 + altitude CPU) : vol par défaut p5 73,0 → 106,4 et
+p1 33,6 → 61,3 (frames > 33 ms 50 → 4), plan 1 p5 62,5 → 81,3 et p1 43,1 → 61,7 ; coût GPU d'une frame
+3,1 à 5,1 ms à 4112×2580, loin du budget de 16,6 ms. Critère de sortie respecté (p1 en hausse).
+
+Constats visuels après le lot 2 (`docs/screenshots/render/lot2/`, preset High, 6 vues) :
+- Image HDR stable : TAAU sans crénelage ni scintillement, bords et détails lointains comme avec MSAA.
+- Soleil avec halo (bloom) sur la vue 6, sans voile sur la neige ni sur l'auréole du ciel ; avion
+  éclairé par la carte d'environnement du ciel.
+- Exposition automatique : vue de coucher de soleil (4) éclaircie d'≈ 1 EV, ciel plus clair et faces à
+  l'ombre moins bouchées qu'au lot 1, au prix d'une ambiance de crépuscule un peu moins marquée.
+- Détail des tuiles identique au lot 1 en High (vérifié contre `main` en pleine résolution).
+- Restent : premier plan flou en vue rasante (imagerie z15), lac plat sans reflet (L5.7), nappe
+  nuageuse plane (lot 4), aucune ombre portée du relief ni de l'avion (lot 5), image un peu terne
+  (étalonnage L6.3).
 
 Constats visuels après le lot 1 (`docs/screenshots/render/lot1/`, état avec l'altitude décodée sur CPU) :
 - Ciel de Preetham visible, dégradé zénith/horizon, lueur solaire au couchant ; terrain et ciel se
@@ -595,6 +612,11 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 ## Journal des sessions
 
 <!-- Entrée la plus récente en haut. -->
+
+### 2026-11-24 (14)
+- Fait : clôture du lot 2 — captures des 6 vues (`docs/screenshots/render/lot2/`), mesures finales
+  (`benchmarks/render/lot2/`, non versionné), bilan et constats visuels, lint sans erreur.
+- Prochaine étape : fusion dans `main` après accord explicite de l'utilisateur, puis lot 3.
 
 ### 2026-11-24 (13)
 - Fait : L2.10 (conception validée avec l'utilisateur, voir les décisions sous L2.10) et la partie
