@@ -6,7 +6,7 @@ contrainte : l'application doit continuer à fonctionner dans un navigateur (Web
 Ce document est la **source de vérité de l'avancement**. Il est lu en début de session et mis à jour
 en fin de session.
 
-## État courant (mis à jour le 2026-11-24, session 16)
+## État courant (mis à jour le 2026-11-24, session 17)
 
 - **Lots terminés** : 0, 1 et 2, fusionnés dans `main` (lot 2 le 2026-11-24). Lot 2 : toutes les tâches faites sauf le reste optionnel de
   L2.6 (décodage d'altitude dans un worker, `compileAsync`), reporté : p5 et p1 ne le justifient
@@ -44,11 +44,14 @@ en fin de session.
   `js/utils/settingsStore.js`. `render:capture` et `render:benchmark` ouvrent l'app avec `?dev=1`
   (et HUD / mini-carte masqués par l'URL pour les captures), dans un profil vierge : preset High,
   identique à l'état d'avant L2.10, donc les mesures de référence restent comparables.
-- **Lot 3 en cours** sur `feat/render-atmosphere` (non poussée) : L3.1 à L3.5 et L3.7 faits, reste
-  L3.6 (nuit). Code : `js/atmosphere/AtmosphericSky.js` (contexte d'atmosphère dans
-  `renderer.contextNode`, uniformes dans le groupe `render`, repère ECEF recalé chaque frame sous la
-  caméra, horloge et soleil, aérosols tirés de la visibilité), `AerialPerspectiveVolume.js` (froxels
-  par compute), `sunPosition.js`, `js/rendering/ScenePipeline.js`. Correctifs du vendor listés dans
+- **Lot 3 en cours** sur `feat/render-atmosphere` (non poussée) : toutes les tâches faites (L3.1 à
+  L3.8), reste la clôture (voir « Prochaine session »). Code : `js/atmosphere/AtmosphericSky.js`
+  (contexte d'atmosphère dans `renderer.contextNode`, uniformes dans le groupe `render`, repère ECEF
+  recalé chaque frame sous la caméra, horloge, soleil, lune, pré-exposition de nuit, aérosols tirés de
+  la visibilité), `AerialPerspectiveVolume.js` (froxels par compute), `sunPosition.js`,
+  `ephemeris.js`, `skyIlluminance.js`, `js/terrain/CityLights.js`, `js/aircraft/AircraftLights.js`,
+  `js/rendering/ScenePipeline.js` (passe de halos, vision nocturne). Le proxy sert une nouvelle source
+  `nightlights` : **redémarrer `npm run dev`** après la mise à jour. Correctifs du vendor listés dans
   `vendor/takram/README.md` (lignes `OSF:` dans `three-atmosphere/build/webgpu.js`).
   Pièges rencontrés : la direction de la lune doit être un vecteur unitaire même sans lune (sinon la
   PMREM du ciel se régénère à chaque frame, +2 ms) ; `renderer.info.autoReset` coupé (la remise à zéro
@@ -58,16 +61,17 @@ en fin de session.
   call) : tout uniforme commun à la frame doit passer en `renderGroup` ; le ray marching de takram lit
   un bruit bleu à `screenCoordinate`, absent d'un compute (`raymarchSampleOffset`) ; comparer
   WebGPU et WebGL2 avec `autoExposure=false` (exposition automatique WebGPU seulement).
-- **Prochaine session** : 1) L3.6, la nuit : la scène devient noire dès que le soleil est à ≈ 8° sous
-  l'horizon (exposition automatique bornée à +1 EV) ; il faut étoiles et lune (`StarsNode`, `MoonNode`
-  de takram, direction de la lune depuis une date absolue : la date du jeu n'a pas d'année ni de
-  longitude, en déduire un UTC), une plage d'exposition de nuit, puis les lumières des villes (Black
-  Marble via le proxy) ; 2) trait clair ou sombre à l'horizon géométrique, au-delà du terrain (bord du
+- **Prochaine session** : 1) **décision de l'utilisateur sur le p1 du plan 1** (≈ 54 contre 61,7 au
+  lot 2, −12 %, au-delà du critère ; vol par défaut −4 %) : CPU de rendu en vol 4,1 → 4,6 ms depuis la
+  nuit, dont ≈ 0,2 ms pour les feux de l'avion et le reste réparti (étoiles rendues à chaque frame,
+  lumières des villes, nœuds par objet) ; 2) trait clair ou sombre à l'horizon géométrique, au-delà du terrain (bord du
   sol dessiné par le ciel de takram, visible vue 4, déjà là avant cette session) ; 3) CPU de rendu
   encore ≈ +0,8 ms par frame en vol par rapport au lot 2 (9 nœuds `updateBefore` de plus par objet :
-  `EventNode` ×6, LUT, environnement, lumière) ; 4) clôture du lot : captures versionnées
+  `EventNode` ×6, LUT, environnement, lumière) ; 4) lumières des villes de près : la donnée Black
+  Marble (≈ 450 m/pixel) reste grossière, une ville survolée à basse altitude sans lune paraît
+  très claire (l'exposition s'adapte à elle) ; 5) clôture du lot : captures versionnées
   `docs/screenshots/render/lot3/`, bilan. Référence de comparaison du lot 3 :
-  `benchmarks/render/l3-rg/` (6 vues) et `l3-flight-rg/` (vols). Worktree de `main` prêt dans
+  `benchmarks/render/l3-night/` (6 vues) et `l3-flight-inst1/`, `l3-flight-inst2/` (vols). Worktree de `main` prêt dans
   `../osf-main` (liens symboliques faits ; `node scripts/serve.js --port 3001` dedans).
 - **Suite** : lot 3 (atmosphère physique et heure du jour). Points ouverts : coût CPU de soumission (≈ 5 µs par
   draw call) qui limite Ultra à 120 Hz ; minimap OSM bloquée par la politique d'usage des tuiles
@@ -463,8 +467,36 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       35,1° / 160,2°, ≈ l'ancien défaut) ; vues de référence converties en date + heure qui redonnent
       leur soleil à 0,15° près, horloge figée (captures identiques, PSNR 50–64 dB). PMREM du ciel
       régénérée après 0,5° de course du soleil au lieu de 0,1° : ×600 sans saccade.
-- [ ] **L3.6** Nuit : ciel étoilé, lune, lumières des villes (tuiles NASA Black Marble via le proxy de
+- [x] **L3.6** Nuit : ciel étoilé, lune, lumières des villes (tuiles NASA Black Marble via le proxy de
       `scripts/serve.js`) en émissif sur le terrain.
+      Fait : éphémérides basse précision (`js/atmosphere/ephemeris.js` : lune à 0,3°, rotation
+      terrestre pour les étoiles, année 2026, UTC déduit du temps solaire et de la longitude) ;
+      `StarsNode` et `MoonNode` de takram dans le ciel, diffusion lunaire du ciel ; la lune devient la
+      lumière de la scène (`AtmosphereLight` en corps « moon », phase d'Allen) quand elle éclaire 4 fois
+      plus que le crépuscule, et la source de la perspective aérienne et du seuil du bloom (plancher à
+      2 × la luminance de référence). **Pré-exposition** (`AtmosphericSky.preExposure`) : éclairement
+      du sol (table du crépuscule, lune, ciel nocturne 0,008 lux) → exposition appliquée avant les
+      cibles HDR sous 4° de hauteur du soleil, 25 % de la baisse restant visible (`luminanceScale` de
+      takram passé en uniforme) ; sans elle, le sol au clair de lune est sous la précision du
+      HalfFloat. Lumière ambiante et lueur du ciel nocturnes (étoiles, lueur atmosphérique, halo des
+      villes). **Vision nocturne** par pixel (`ScenePipeline._nightVision`) : désaturation bleutée sous
+      3 cd/m², totale sous 0,003, sauf pour les pixels ≥ 2–10 × la luminance d'adaptation (sources).
+      Lumières des villes (`js/terrain/CityLights.js`) : mosaïque Black Marble 2016 de 8 × 8 tuiles
+      (zoom 8, ≈ 450 m/pixel) autour de la caméra, lumières isolées par leur teinte chaude, lissée,
+      lue par un nœud émissif partagé par toutes les tuiles (aucune compilation ni draw call de plus),
+      motif procédural de lampes (cellules de 30 m, hameaux dans les campagnes) fondu dans la moyenne
+      au loin, allumage entre 2° et −4° de hauteur du soleil, sauté le jour (branche sur uniforme).
+- [x] **L3.8** (ajoutée à la demande de l'utilisateur) Feux de l'avion et lueur des réacteurs.
+      Fait : `js/aircraft/AircraftLights.js` : feux de position (rouge gauche, vert droit, blanc de
+      queue, avec leurs secteurs de visibilité), gyrophares rouges (dérive, ventre) et éclats blancs
+      doubles (saumons) ; lentilles ajoutées au modèle (verre coloré le jour, émissives) et halos dans
+      une **passe de halos** (`ScenePipeline.setGlowLayer` : calque dédié, demi-résolution, ajoutée
+      après le TAAU, test d'occultation contre la profondeur de la scène). Tuyères du modèle repeintes
+      en métal nu, fond de tuyère lumineux selon la poussée (touche avant ou pilote automatique),
+      flamme de postcombustion à diamants de choc au-dessus de 300 m/s. Les sources ponctuelles prennent
+      la racine de la pré-exposition (`emissiveExposure`) pour ne pas noyer l'image d'éblouissement ;
+      les lumières des villes, sources étendues, prennent la pré-exposition complète. 4 draw calls
+      (instanciation, géométries fusionnées).
 - [x] **L3.7** Vérifier les modes `sar` et `elevation` (ciel désactivé).
       Fait : SAR sans atmosphère (ciel noir, éclairage latéral, sans tone mapping) ; `elevation` avec
       ciel et perspective aérienne, un peu clair (albédo élevé de la palette hypsométrique), accepté.
@@ -575,6 +607,12 @@ Notes de lecture :
 | 2026-11-24 | L3 atmosphère, uniformes par objet (CPU de rendu méd. 4,6 ms contre 3,4) | Plan 1 (basse alt.) | 94 s | 111,2 | 69,9 | 53,5 | 5,7 (6,5) | 2 / 0 | 2,66 M | 664 |
 | 2026-11-24 | L3 atmosphère, uniformes dans le groupe `render` (CPU méd. 3,4 ms) | Vol par défaut | 128 s | 118,7 | 103,1 | 59,2 | 4,8 (6,4) | 4 / 0 | 2,12 M | 552 |
 | 2026-11-24 | L3 atmosphère, uniformes dans le groupe `render` (CPU méd. 4,1 ms) | Plan 1 (basse alt.) | 94 s | 118,0 | 76,9 | 57,1 | 5,9 (6,8) | 2 / 0 | 2,67 M | 664 |
+| 2026-11-24 | L3 nuit, feux de l'avion, villes | Vol par défaut | 128 s | 118,4 | 101,0 | 58,5 | 5,2 (6,5) | 2 / 0 | 2,14 M | 567 |
+| 2026-11-24 | L3 nuit, feux de l'avion, villes (CPU méd. 4,6 ms), capture 1 | Plan 1 (basse alt.) | 94 s | 117,0 | 75,8 | 54,6 | 6,2 (6,8) | 2 / 0 | 2,69 M | 679 |
+| 2026-11-24 | L3 nuit, feux de l'avion, villes, capture 2 | Plan 1 (basse alt.) | 94 s | 116,8 | 74,6 | 55,2 | 6,2 (6,8) | 3 / 0 | 2,69 M | 679 |
+| 2026-11-24 | L3 feux instanciés (4 draw calls) | Vol par défaut | 128 s | 118,6 | 102,0 | 58,8 | 5,2 (6,5) | 0 / 0 | 2,14 M | 558 |
+| 2026-11-24 | L3 feux instanciés, capture 1 | Plan 1 (basse alt.) | 94 s | 115,8 | 71,4 | 52,6 | 6,5 (7,5) | 4 / 0 | 2,69 M | 670 |
+| 2026-11-24 | L3 feux instanciés, capture 2 | Plan 1 (basse alt.) | 94 s | 117,2 | 76,3 | 55,2 | 6,2 (6,8) | 0 / 0 | 2,69 M | 670 |
 | 2026-11-24 | L2.7 preset Ultra, LODThreshold 1,4 | Vol par défaut | 128 s | 115,6 | 85,5 | 53,5 | 5,0 (6,5) | 1 / 0 | 2,84 M | 714 |
 
 Pour mémoire, la configuration n°4 de `BENCHMARKS.md` (même machine, Chrome 146, ancien moteur
@@ -623,6 +661,7 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 | 2026-11-24 | **Pleine résolution** — **Clôture du lot 2** (preset High) | 3,11 | 5,09 | 4,01 | 3,80 | 3,34 | 3,72 |
 | 2026-11-24 | **Pleine résolution** — L3 atmosphère, perspective aérienne par pixel (visibilité 220 km) | 4,78 | 6,13 | 5,85 | 5,47 | 5,94 | 5,78 |
 | 2026-11-24 | **Pleine résolution** — L3 atmosphère, volume de perspective aérienne | 3,96 | 6,22 | 5,17 | 4,41 | 4,18 | 4,37 |
+| 2026-11-24 | **Pleine résolution** — L3 nuit, feux de l'avion, villes (jour) | 4,93 | 6,28 | 5,52 | 4,89 | 4,63 | 4,77 |
 | 2026-11-24 | L2.7 Low et Medium (LODThreshold 0,9) — draw calls / triangles | 382 / 1,26 M | 412 / 1,53 M | 454 / 1,69 M | 388 / 1,30 M | 384 / 1,21 M | 382 / 1,26 M |
 | 2026-11-24 | L2.7 Ultra 1,4 — draw calls / triangles | 712 / 2,66 M | 790 / 3,36 M | 820 / 3,45 M | 730 / 2,77 M | 768 / 2,78 M | 724 / 2,69 M |
 
@@ -692,11 +731,29 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 | 2026-11-24 | Perspective aérienne | Volume de froxels 128 × 64 × 64 calculé par compute (WebGPU), évaluation par pixel en WebGL2 | Images identiques (PSNR ≥ 47 dB même à 20 km de visibilité face au soleil) pour 0,6 à 1,4 ms de moins par vue ; la bibliothèque n'a pas de volume, il est construit avec ses fonctions (`getIndirectLuminanceToPoint`) |
 | 2026-11-24 | Heure du jour | Temps solaire local à la position de l'avion, date en jour de l'année, formules NOAA sans dépendance | Midi = soleil au plus haut, compréhensible sans fuseau horaire ; voler vers l'est ne décale pas l'heure (écart avec un temps UTC fixe : 4 min par degré de longitude, négligeable sur un vol) ; `astronomy-engine` inutile pour le soleil, à reconsidérer pour la lune (L3.6) |
 | 2026-11-24 | Uniformes de l'atmosphère | Groupe `render` de three pour les uniformes du contexte takram (et ceux des aérosols) | Dans le groupe par objet (défaut de `uniform()`), les matrices ECEF changées à chaque frame en vol étaient comparées et téléversées à chaque draw call : p1 −10 à −13 % en vol. Après : p1 −3 et −7 % (critère de 10 % respecté) |
+| 2026-11-24 | Exposition de nuit | Pré-exposition calculée sur le CPU depuis l'éclairement du sol (soleil, crépuscule, lune, ciel nocturne), 25 % de la baisse visible, plutôt que l'exposition automatique seule | Le sol au clair de lune (10⁻⁶ du plein jour) tombe sous la précision du HalfFloat : l'exposition doit précéder les cibles HDR ; un calcul déterministe n'a ni latence ni boucle de rétroaction, et les vues de jour restent identiques |
+| 2026-11-24 | Sources lumineuses de nuit | Racine de la pré-exposition pour les sources ponctuelles (feux, flammes), pré-exposition complète pour les sources étendues (villes) ; vision nocturne épargnant les pixels ≥ 2–10 × la luminance d'adaptation | Avec la pré-exposition complète, un feu de 2 500 cd ou une postcombustion noie l'image d'éblouissement ; l'éclairage public, quelques cd/m², reste physique et coloré |
+| 2026-11-24 | Lumières des villes | Mosaïque régionale Black Marble 2016 (GIBS, zoom 8) dans une seule texture lue par un nœud émissif partagé, plutôt qu'une seconde source d'imagerie de three-tile | three-tile superpose ses sources en matériaux multiples : un draw call de plus par tuile, alors que la soumission CPU limite déjà ; la donnée est au mieux à ≈ 450 m/pixel (zoom 8 maximum), d'où le motif procédural de près |
+| 2026-11-24 | Halos et flammes | Passe dédiée (calque, demi-résolution) ajoutée après le TAAU, test d'occultation dans le shader | Additifs et transparents dans la passe de scène, ils prendraient la perspective aérienne du terrain derrière eux et le TAAU les traînerait (vitesses du fond) |
 | 2026-11-23 | Vitesse par défaut | 560 m/s | Vitesse réelle de l'ancien défaut (800 unités Mercator/s) : benchmarks comparables à la baseline |
 
 ## Journal des sessions
 
 <!-- Entrée la plus récente en haut. -->
+
+### 2026-11-24 (17)
+- Fait : L3.6 (nuit : étoiles, lune et clair de lune, pré-exposition, vision nocturne, lumières des
+  villes Black Marble) et, à la demande de l'utilisateur, feux de l'avion et lueur des réacteurs (L3.8).
+  Détails sous les tâches, choix dans **Décisions**.
+- Mesures : vues de jour inchangées (PSNR ≥ 42 dB, l'écart restant vient de l'intérieur des tuyères
+  désormais en métal sombre) ; coût GPU de jour dans le bruit. Vols : défaut p1 58,8 (−4 % contre le
+  lot 2), plan 1 p1 ≈ 54 (−12 %) : CPU de rendu +0,5 ms en vol depuis la nuit, à arbitrer.
+- Constats visuels : crépuscule et alpenglow, clair de lune désaturé et bleuté, nuit sans lune où la
+  neige et les crêtes se devinent, villes orangées vues d'altitude ; feux à éclats et postcombustion
+  convaincants de jour comme de nuit. Restent : villes survolées de près sans lune trop claires,
+  donnée Black Marble grossière.
+- Environnement : le proxy sert `nightlights` (NASA GIBS) ; le serveur de l'utilisateur sur le port
+  3000 doit être redémarré. Worktree temporaire `../osf-prev` (état d'avant la nuit, `d5b8ee4`) supprimé.
 
 ### 2026-11-24 (16)
 - Fait : « Visibility » (aérosols, L3.3) ; volume de perspective aérienne (L3.2) ; heure du jour, date
