@@ -73,6 +73,11 @@ export default class GPUTimer {
     return this._available || this._isWebGPU;
   }
 
+  /** Whether getLastGPUTimeMs() is a GPU measurement rather than the CPU time of the render call */
+  get measuresGpu() {
+    return this._isWebGPU ? this._hasTimestampQuery : this._available;
+  }
+
   /** Call before renderer.render() */
   beginFrame() {
     if (this._isWebGPU) {

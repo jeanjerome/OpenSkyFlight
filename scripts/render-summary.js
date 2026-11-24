@@ -47,6 +47,8 @@ for (const file of files) {
     `slow ${frameTimes.filter((t) => t > 33.3).length}/${frameTimes.filter((t) => t > 50).length}`,
     `tri ${(report.summary.triangles.avg / 1e6).toFixed(2)}M`,
     `dc ${median(frames.map((f) => f.dc))}`,
+    // Scene resolution (dynamic resolution), when the report records it
+    ...(report.summary.renderScale ? [`scale ${report.summary.renderScale.avg} (min ${report.summary.renderScale.min})`] : []),
   ];
   console.log(fields.join('  '));
 }

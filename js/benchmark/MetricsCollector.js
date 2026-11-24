@@ -39,7 +39,8 @@ export default class MetricsCollector {
     this.subsystemTimer = new SubsystemTimer();
   }
 
-  record(renderer, gpuTimer) {
+  /** @param {number} [renderScale] - scene resolution relative to the output (dynamic resolution) */
+  record(renderer, gpuTimer, renderScale = 1) {
     const now = performance.now();
     const timestamp = now - this.startTime;
     const info = renderer.info;
@@ -71,6 +72,7 @@ export default class MetricsCollector {
       subs,
       mem,
       gpu: gpuMs > 0 ? Math.round(gpuMs * 100) / 100 : undefined,
+      rs: renderScale,
     });
   }
 
@@ -203,6 +205,10 @@ export default class MetricsCollector {
       subs: subsAgg,
       mem: memSummary,
       gpuTime: gpuSummary,
+      renderScale: {
+        avg: Math.round(avg(measured.map((f) => f.rs ?? 1)) * 100) / 100,
+        min: Math.min(...measured.map((f) => f.rs ?? 1)),
+      },
     };
   }
 
@@ -254,6 +260,8 @@ export default class MetricsCollector {
       bloomEnabled: CONFIG.bloomEnabled,
       showClouds: CONFIG.showClouds,
       maxPixelRatio: CONFIG.maxPixelRatio,
+      renderScale: CONFIG.renderScale,
+      dynamicResolution: CONFIG.dynamicResolution,
     };
   }
 

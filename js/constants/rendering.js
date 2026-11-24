@@ -7,31 +7,37 @@ export const MAX_CONCURRENT_FETCHES = 6;
 /** Render order for cloud layer (above water) */
 export const CLOUD_RENDER_ORDER = 100;
 
-// --- Adaptive quality (dynamic resolution scaling) ---
+// --- Dynamic resolution (see AdaptiveQualityManager) ---
 
-/** Ring buffer size for frame time averaging */
-export const FRAME_TIME_RING_SIZE = 30;
+/** Frames per decision; the decision uses their median */
+export const ADAPTIVE_WINDOW_FRAMES = 30;
 
-/** Minimum samples before adaptive quality kicks in */
-export const ADAPTIVE_MIN_SAMPLES = 10;
+/** GPU time budget of a frame (60 FPS) */
+export const ADAPTIVE_TARGET_FRAME_MS = 1000 / 60;
 
-/** Frame time threshold (ms) above which resolution scales down */
-export const ADAPTIVE_HIGH_FRAME_TIME = 20;
+/** Share of the budget above which the scene resolution drops */
+export const ADAPTIVE_DOWN_LOAD = 0.9;
 
-/** Frame time threshold (ms) below which resolution scales up */
-export const ADAPTIVE_LOW_FRAME_TIME = 12;
+/** Share of the budget below which the scene resolution may rise, and that a drop aims for */
+export const ADAPTIVE_UP_LOAD = 0.8;
 
-/** Resolution scale-down step per evaluation */
-export const ADAPTIVE_SCALE_DOWN_STEP = 0.05;
+/** Time without change before the scene resolution rises (ms) */
+export const ADAPTIVE_UP_HOLD_MS = 2000;
 
-/** Resolution scale-up step per evaluation */
-export const ADAPTIVE_SCALE_UP_STEP = 0.02;
+/** Scene resolution rise per decision */
+export const ADAPTIVE_SCALE_UP_STEP = 0.05;
 
-/** Minimum pixel ratio floor */
-export const ADAPTIVE_MIN_PIXEL_RATIO = 0.5;
+/** Smallest change of the scene resolution */
+export const ADAPTIVE_MIN_SCALE_STEP = 0.05;
 
-/** Minimum delta to apply pixel ratio change */
-export const ADAPTIVE_RATIO_EPSILON = 0.01;
+/** Lowest scene resolution relative to the output (a quarter of the pixels) */
+export const ADAPTIVE_MIN_RENDER_SCALE = 0.5;
+
+/** Without GPU timing: frame interval above which the scene resolution drops (below 50 FPS) */
+export const ADAPTIVE_FALLBACK_HIGH_FRAME_MS = 20;
+
+/** Without GPU timing: frame interval below which the scene resolution may rise */
+export const ADAPTIVE_FALLBACK_LOW_FRAME_MS = 12;
 
 // --- Clip planes ---
 

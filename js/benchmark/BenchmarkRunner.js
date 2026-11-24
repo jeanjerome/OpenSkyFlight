@@ -113,9 +113,9 @@ export default class BenchmarkRunner {
    * Record metrics for the current frame.
    * Call AFTER renderer.render() so renderer.info reflects the current frame.
    */
-  recordMetrics(renderer) {
+  recordMetrics(renderer, renderScale) {
     if (!this.running || this.warmup || !this.metrics) return;
-    this.metrics.record(renderer, this.gpuTimer);
+    this.metrics.record(renderer, this.gpuTimer, renderScale);
   }
 
   _downloadJSON(report) {

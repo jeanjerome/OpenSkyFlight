@@ -64,8 +64,8 @@ async function initApp() {
   // --- Systems ---
   const benchmarkRunner = new BenchmarkRunner();
   const gpuTimer = new GPUTimer(renderer);
+  const adaptiveQuality = new AdaptiveQualityManager(scenePipeline, gpuTimer);
   const flightPlanRecorder = new FlightPlanRecorder();
-  const adaptiveQuality = new AdaptiveQualityManager(renderer);
 
   // --- Ground elevation ---
   let groundElevation = 0;
@@ -277,6 +277,10 @@ async function initApp() {
     referenceViews: REFERENCE_VIEWS.map((v) => v.name),
     setReferenceView: (n) => applyReferenceView(n - 1),
     setConfig: (key, value) => update(key, value),
+    // Resolution of the scene pass relative to the output (dynamic resolution)
+    renderScale: () => scenePipeline.renderScale,
+    memory: () => ({ ...renderer.info.memory }),
+    setRenderScale: (scale) => scenePipeline.setRenderScale(scale),
     pendingTileDownloads: () => geoTerrainManager.pendingDownloads,
     lastGpuTimeMs: () => gpuTimer.getLastGPUTimeMs(),
     // Draw calls and triangles of the last frame
@@ -415,7 +419,7 @@ async function initApp() {
     if (timer) timer.end('minimap');
 
     // --- Post-render phase ---
-    benchmarkRunner.recordMetrics(renderer);
+    benchmarkRunner.recordMetrics(renderer, scenePipeline.renderScale);
     adaptiveQuality.update(frameTimeMs);
     gpuPanel.update(gpuTimer.getLastGPUTimeMs(), 30);
 

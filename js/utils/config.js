@@ -18,6 +18,8 @@
  *
  * Rendering:
  * @property {number}  maxPixelRatio          - Maximum device pixel ratio (default: 2)
+ * @property {number}  renderScale            - Highest resolution of the 3D scene relative to the screen, range [0.5..1] (default: 1)
+ * @property {boolean} dynamicResolution      - Lower the scene resolution when the GPU exceeds the 60 FPS budget (default: true)
  * @property {boolean} bloomEnabled           - Glow around the sun and its specular reflections (default: true)
  *
  * Atmosphere:
@@ -47,6 +49,7 @@ const CONFIG_VALIDATION = {
   skyTurbidity: { min: 1, max: 10 },
   cloudAltitude: { min: 500, max: 12000 },
   cloudOpacity: { min: 0, max: 1 },
+  renderScale: { min: 0.5, max: 1 },
   fogDensity: { min: 0, max: 0.01 },
   minimapZoom: { min: 3, max: 18 },
   lat: { min: -90, max: 90 },
@@ -59,6 +62,8 @@ const CONFIG = {
   cameraMode: 'chase',
   mouseSensitivity: 0.002,
   maxPixelRatio: 2,
+  renderScale: 1,
+  dynamicResolution: true,
   bloomEnabled: true,
   lat: 45.8326, // Mont Blanc default
   lon: 6.8652,
