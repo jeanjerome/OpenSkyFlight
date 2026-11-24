@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { EnvironmentNode, MeshStandardNodeMaterial, NodeMaterial } from 'three/webgpu';
-import { Fn, If, context, luminance, max, uniform, vec2, vec3 } from 'three/tsl';
+import { Fn, If, context, luminance, max, renderGroup, uniform, vec2, vec3 } from 'three/tsl';
 import { Ellipsoid, Geodetic } from '@takram/three-geospatial';
 import {
   AtmosphereContext,
@@ -116,6 +116,12 @@ export default class AtmosphericSky {
 
     this.atmosphere = new AtmosphereContext();
     this.atmosphere.camera = camera;
+    // The context's uniforms (frames, sun and camera positions) are the same
+    // for every object of a render. three puts uniforms in the per-object group
+    // by default, whose buffer is compared and uploaded at each draw call.
+    for (const value of Object.values(this.atmosphere)) {
+      if (value?.isUniformNode) value.setGroup(renderGroup);
+    }
     const { mieScattering, mieExtinction } = this.atmosphere.parameters;
     this._aerosolAlbedo = mieScattering.x / mieExtinction.x;
     this._visibility = null;

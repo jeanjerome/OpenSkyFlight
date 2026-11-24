@@ -1,4 +1,4 @@
-import { struct as ut, uint as Q, uvec2 as Mt, ivec2 as ue, float as P, vec3 as E, uniform as O, clamp as cs, sqrt as _, max as ot, smoothstep as Ae, floor as de, vec4 as w, div as us, mul as pt, PI as Fe, add as Ct, bool as _t, If as D, min as Rt, exp as he, vec2 as U, Loop as wt, mix as ct, step as Un, cos as It, sin as Vt, mrt as we, screenCoordinate as at, acos as qs, Fn as Y, texture as Gt, texture3D as Ee, globalId as st, Return as fe, textureStore as kt, workgroupArray as fs, workgroupBarrier as vs, uvec3 as In, positionView as Pn, PI2 as Bn, fwidth as Zs, equirectUV as On, dFdx as Ns, dFdy as bs, log as Wn, instancedBufferAttribute as We, screenSize as $s, screenUV as kn, pow as Gn, uv as se, nodeProxy as Hs, positionGeometry as ds, remapClamp as qn, normalWorld as Zn, positionWorld as $n, cameraViewMatrix as Hn, int as Es, and as Xs, Break as Ms, uniformTexture as Xn, uvec4 as Rs, uniformArray as zs, instanceIndex as Ls, pmremTexture as Kn } from "three/tsl";
+import { renderGroup as OSF_renderGroup, struct as ut, uint as Q, uvec2 as Mt, ivec2 as ue, float as P, vec3 as E, uniform as O, clamp as cs, sqrt as _, max as ot, smoothstep as Ae, floor as de, vec4 as w, div as us, mul as pt, PI as Fe, add as Ct, bool as _t, If as D, min as Rt, exp as he, vec2 as U, Loop as wt, mix as ct, step as Un, cos as It, sin as Vt, mrt as we, screenCoordinate as at, acos as qs, Fn as Y, texture as Gt, texture3D as Ee, globalId as st, Return as fe, textureStore as kt, workgroupArray as fs, workgroupBarrier as vs, uvec3 as In, positionView as Pn, PI2 as Bn, fwidth as Zs, equirectUV as On, dFdx as Ns, dFdy as bs, log as Wn, instancedBufferAttribute as We, screenSize as $s, screenUV as kn, pow as Gn, uv as se, nodeProxy as Hs, positionGeometry as ds, remapClamp as qn, normalWorld as Zn, positionWorld as $n, cameraViewMatrix as Hn, int as Es, and as Xs, Break as Ms, uniformTexture as Xn, uvec4 as Rs, uniformArray as zs, instanceIndex as Ls, pmremTexture as Kn } from "three/tsl";
 import { Vector3 as nt, RenderTarget as Ht, RGBAFormat as Bt, LinearFilter as X, NoColorSpace as De, RenderTarget3D as Qn, Vector2 as zt, Texture as Yn, FloatType as ls, HalfFloatType as Xt, Data3DTexture as _n, Sprite as jn, InstancedBufferAttribute as ke, AdditiveBlending as Jn, DirectionalLight as Ks, Matrix3 as to, RGFormat as ms, Box2 as eo, Matrix4 as Qs, Vector4 as so, PerspectiveCamera as no, Points as oo, BufferGeometry as io, BufferAttribute as ao, Mesh as ro, CubeRenderTarget as co, CubeCamera as uo } from "three";
 import { reinterpretType as hs, radians as Ys, isFloatLinearSupported as lo, Geodetic as mo, Ellipsoid as ho, ArrayBufferLoader as po, floorPowerOfTwo as go, QuadGeometry as xo } from "@takram/three-geospatial";
 import { l as rt, r as Vs, k as So, a as yo } from "./shared2.js";
@@ -123,11 +123,12 @@ class gs {
         ),
         mieDensity: qe(c, e),
         // OSF: aerosol coefficients as uniforms, so the aerosol density can change
-        // at runtime (new LUTs) without recompiling the shaders
-        mieScattering: O(new nt().copy(d).divideScalar(e)).onRenderUpdate((OSF_f, { value: OSF_v }) => {
+        // at runtime (new LUTs) without recompiling the shaders; shared by all
+        // the objects of a render
+        mieScattering: O(new nt().copy(d).divideScalar(e)).setGroup(OSF_renderGroup).onRenderUpdate((OSF_f, { value: OSF_v }) => {
           OSF_v.copy(t.mieScattering).divideScalar(e);
         }),
-        mieExtinction: O(new nt().copy(l).divideScalar(e)).onRenderUpdate((OSF_f, { value: OSF_v }) => {
+        mieExtinction: O(new nt().copy(l).divideScalar(e)).setGroup(OSF_renderGroup).onRenderUpdate((OSF_f, { value: OSF_v }) => {
           OSF_v.copy(t.mieExtinction).divideScalar(e);
         }),
         miePhaseFunctionG: P(h),
