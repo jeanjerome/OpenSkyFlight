@@ -9,33 +9,38 @@ en fin de session.
 ## État courant (mis à jour le 2026-11-24)
 
 - **Lots terminés** : 0 et 1 (L1.4 achevée pendant le lot 2). **Lot en cours** : lot 2 ; L2.9, L2.5,
-  L2.1, L2.2 et L2.3 terminées, L2.6 en grande partie (graphe d'élévation partagé, PMREM sur toute la scène).
+  L2.1, L2.2, L2.3 et L2.4 terminées, L2.6 en grande partie (graphe d'élévation partagé, PMREM sur toute la scène).
 - **three.js** : r187 (import map d'`index.html`), mis à jour depuis r183 pour le TRAA compatible avec
   la profondeur inversée.
 - **Git** : branche `feat/render-hdr-pipeline` (depuis `main`), non poussée.
 - **Environnement local** : bundle three-tile construit, `npm install` fait (racine et
   `vendor/three-tile`), cache `cache/` chaud pour les vues de référence et les deux vols. Lancer
   `npm run dev` en tâche de fond avant toute mesure. Mesurer **sur l'écran intégré 120 Hz** : sur un
-  écran 60 Hz, Chrome plafonne à 60 FPS et la qualité adaptative dégrade la résolution pour de bon.
-- **Référence de comparaison** : `benchmarks/render/bloom/` (captures des **6** vues avec coût GPU,
-  draw calls et triangles, deux benchmarks de vol, non versionnés). Chiffres dans **Mesures**, lignes
-  « L2.3 ». Sans bloom, même méthode de mesure : `benchmarks/render/traa-frames/` (captures seules).
+  écran 60 Hz, Chrome plafonne à 60 FPS (la résolution dynamique ne se déclenche plus à tort depuis
+  L2.4, mais les FPS ne sont pas comparables).
+- **Référence de comparaison** : `benchmarks/render/taau/` (captures des **6** vues avec coût GPU
+  **à pleine résolution**, échelle, draw calls et triangles, deux benchmarks de vol, non versionnés).
+  Chiffres dans **Mesures**, lignes « L2.4 ». **Les coûts GPU antérieurs à L2.4 ont été mesurés à
+  1028×645** (voir Outillage) : ne comparer qu'aux lignes « pleine résolution ».
 - **Vue 6** (face au soleil bas, massif en contre-jour) ajoutée pour le bloom, et plus tard les rayons
   crépusculaires et le reflet d'objectif (L4.7).
 - **Lire les temps GPU** (voir Outillage) : seul le « coût GPU » de `render:capture` (`gpuMedianMs`,
   mesuré GPU saturé) compare deux états du code ; la colonne GPU des vols indique la charge, pas le coût.
 - **Rendu** : `js/rendering/ScenePipeline.js` — `RenderPipeline` : passe de scène HalfFloat (profondeur
-  float32, MRT couleur + vitesse, sans MSAA) → `traa()` → `bloom()` ajouté à l'image TRAA → tone
-  mapping et espace couleur en sortie. Seuil du bloom fixé par `AtmosphericSky` (voir L2.3).
-- **Ordre conseillé pour la suite du lot 2** : L2.4 → L2.8 → L2.7 ; reste de L2.6 (décodage
-  d'altitude dans un worker, `compileAsync`) seulement si p5 ou p1 le justifient.
-- **Prochaine tâche, L2.4 (résolution dynamique) — points d'entrée** : `AdaptiveQualityManager` baisse
-  `renderer.setPixelRatio` d'après l'intervalle entre frames (CPU), ce qui redimensionne toute la
-  chaîne et, sur un écran 60 Hz, se déclenche à tort pour de bon (voir Outillage). Piloter plutôt
-  l'échelle de la passe de scène (`PassNode.setResolutionScale`) et laisser TRAA reconstruire à la
-  résolution de sortie ; vérifier d'abord que le `TRAANode` r187 accepte une entrée plus petite que
-  sa sortie (taille de l'historique prise sur la cible de la passe de scène). Décider du signal :
-  temps GPU de la frame (`GPUTimer`) plutôt que l'intervalle rAF, borné par vsync.
+  float32, MRT couleur + vitesse, sans MSAA, échelle réglable) → `taau()` (reconstruction à la
+  résolution de sortie) → `bloom()` ajouté à l'image TAAU → tone mapping et espace couleur en sortie.
+  Seuil du bloom fixé par `AtmosphericSky` (voir L2.3) ; échelle de la passe de scène pilotée par
+  `AdaptiveQualityManager` (voir L2.4), plafonnée par `CONFIG.renderScale`.
+- **Ordre conseillé pour la suite du lot 2** : L2.8 → L2.7 ; reste de L2.6 (décodage d'altitude dans
+  un worker, `compileAsync`) seulement si p5 ou p1 le justifient.
+- **Prochaine tâche, L2.8 (exposition automatique) — points d'entrée** : l'exposition est fixe (0,35,
+  `TONE_MAPPING_EXPOSURE`, posée par `AtmosphericSky` sur `renderer.toneMappingExposure`, lue en
+  direct par la sortie du pipeline). Histogramme de luminance logarithmique de l'image TAAU par
+  compute shader (WebGPU) → moyenne pondérée en excluant les extrêmes → adaptation temporelle
+  (vitesses différentes vers le clair et vers le sombre) → exposition. Repli WebGL2 sans compute :
+  moyenne par réduction successive, ou exposition fixe. Bornes min/max d'exposition pour que la vue 6
+  (soleil dans le champ) et la vue 4 (coucher) restent lisibles ; le seuil du bloom est une radiance
+  avant exposition, il ne change pas. Mesurer le coût à pleine résolution.
 
 ---
 
@@ -147,6 +152,16 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
   TRAA, bloom, sortie). Avant L2.3, la passe de scène passait en mise à jour « par rendu » et TRAA
   ne se résolvait qu'une fois ; three comptant chaque rendu de quad comme un rendu, la scène était
   aussi re-rendue dans la résolution TRAA (13 scènes pour 12 rendus) : coûts surestimés de ≈ 5–9 %.
+- **Jusqu'à L2.3 inclus, le coût GPU a été mesuré à 1028×645 au lieu de 4112×2580.** L'ancien
+  `AdaptiveQualityManager` baissait le `pixelRatio` de 0,05 par frame dès que l'intervalle moyen
+  dépassait 20 ms, ce que provoquent les 12 rendus par frame : le canevas tombait de 4112 à 1028 px
+  de large en ≈ 0,5 s, avant la fenêtre de mesure (vérifié en relevant `canvas.width`). Les coûts
+  consignés reflétaient surtout la géométrie ; les effets plein écran étaient sous-estimés (bloom :
+  +0,3 ms mesuré, +0,2 à +0,9 ms à pleine résolution). Captures d'écran et vols non affectés (la
+  résolution remontait en moins d'une seconde). Depuis L2.4 la résolution dynamique lit le temps GPU
+  par rendu et ne réagit plus aux rendus répétés.
+- À pleine résolution, deux captures successives concordent à ±1 % sur les vues 1, 3, 4 et 6, à
+  ±12–14 % sur les vues 2 et 5.
 - `--views` (sous-ensemble de vues) change la séquence de chargement des tuiles : triangles et coût
   diffèrent de la capture complète (vue 2 : 2,36 M contre 2,60 M). Ne comparer que des séquences
   identiques.
@@ -211,8 +226,20 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       reflets spéculaires du soleil passent. Strength 0,015, radius 0,8 (comparé à 0,03/0,4, cœur
       saturé trop large, et 0,008/1, soleil trop petit). Vue 1 inchangée (écart moyen 0,17 %, bruit
       TRAA). Coût +0,26–0,33 ms ; désactivable (panneau, `bloomEnabled`), coupé en SAR.
-- [ ] **L2.4** Résolution dynamique : `AdaptiveQualityManager` pilote l'échelle de rendu interne
+- [x] **L2.4** Résolution dynamique : `AdaptiveQualityManager` pilote l'échelle de rendu interne
       reconstruite par TRAA, au lieu du `pixelRatio`.
+      Fait : le `TRAANode` r187 suppose des tampons de même taille ; three r187 fournit `TAAUNode`
+      (même accumulation, reconstruction à la résolution de sortie par filtre gaussien sur 9
+      échantillons). TAAU remplace TRAA, aussi à l'échelle 1 (pas de recompilation de la chaîne quand
+      l'échelle change ; image indiscernable de TRAA, +0,1 à +0,8 ms). `AdaptiveQualityManager` règle
+      `PassNode.setResolutionScale` d'après la médiane du temps GPU sur 30 frames, budget 60 FPS :
+      baisse proportionnelle à la surcharge au-delà de 90 % du budget, hausse de 0,05 sous 80 % après
+      2 s sans changement, plancher 0,5 ; repli sur l'intervalle entre frames sans mesure GPU.
+      Surcharge simulée (5 rendus par frame, ≈ 24 ms) : échelle 1 → 0,57 en 2 s, 68 FPS, retour à 1
+      en ≈ 17 s sans oscillation. Échelle 0,75 indiscernable de 1 ; 0,5 plus douce, marches sur les
+      crêtes lointaines. Gain limité (−0,7 à −2,3 ms à 0,5) : la frame est dominée par la géométrie
+      et TAAU, bloom et sortie restent à pleine résolution. `renderScale` et `dynamicResolution`
+      dans `config.js` ; l'échelle est enregistrée dans les benchmarks et les captures.
 - [x] **L2.5** Rétablir le frustum culling des tuiles (`GeoTerrainManager.js:154`) avec des boîtes
       englobantes calculées depuis l'altitude min/max de chaque tuile.
       Fait : `DisplacedTileGeometry` (`TerrariumShaderLoader.ts`) élargit ses bornes de la plage
@@ -348,6 +375,8 @@ Notes de lecture :
 | 2026-11-24 | L2.2 (TRAA) | Plan 1 (basse alt.) | 94 s | 119,4 | 83,3 | 62,1 | 4,7 (6,3) | 0 / 0 | 2,67 M | 652 |
 | 2026-11-24 | L2.3 (bloom) | Vol par défaut | 128 s | 119,3 | 106,4 | 61,3 | 4,0 (6,3) | 1 / 0 | 2,12 M | 552 |
 | 2026-11-24 | L2.3 (bloom) | Plan 1 (basse alt.) | 94 s | 119,3 | 81,3 | 61,3 | 5,0 (6,3) | 1 / 0 | 2,67 M | 664 |
+| 2026-11-24 | L2.4 (TAAU, résolution dynamique ; échelle 1 tout le vol) | Vol par défaut | 128 s | 119,3 | 106,4 | 62,9 | 4,1 (6,3) | 0 / 0 | 2,12 M | 552 |
+| 2026-11-24 | L2.4 (TAAU, résolution dynamique ; échelle 1 tout le vol) | Plan 1 (basse alt.) | 94 s | 119,4 | 84,7 | 59,9 | 5,1 (6,3) | 0 / 0 | 2,67 M | 664 |
 
 Pour mémoire, la configuration n°4 de `BENCHMARKS.md` (même machine, Chrome 146, ancien moteur
 geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,7 / 76,3 / 35,2).
@@ -376,10 +405,19 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 | 2026-11-24 | L2.2, mesure corrigée (frame entière répétée) — coût GPU ms | 1,19 | 1,59 | 1,62 | 1,42 | 1,52 | 1,46 |
 | 2026-11-24 | L2.3 (bloom) — coût GPU ms | 1,52 | 1,90 | 1,92 | 1,73 | 1,82 | 1,72 |
 | 2026-11-24 | L2.3 (bloom) — draw calls / triangles | 538 / 1,93 M | 646 / 2,60 M | 652 / 2,61 M | 592 / 2,03 M | 618 / 2,19 M | 592 / 2,05 M |
+| 2026-11-24 | **Pleine résolution** — TRAA sans bloom (état L2.2) | 2,65 | 3,74 | 2,87 | 2,64 | 2,40 | 2,50 |
+| 2026-11-24 | **Pleine résolution** — TRAA + bloom (état L2.3) | 2,86 | 4,23 | 3,54 | 3,21 | 3,27 | 3,41 |
+| 2026-11-24 | **Pleine résolution** — TAAU sans bloom, échelle 1 | 2,93 | 4,37 | 2,97 | 3,21 | 2,93 | 3,11 |
+| 2026-11-24 | **Pleine résolution** — L2.4 : TAAU + bloom, échelle 1, capture 1 | 3,08 | 5,07 | 3,64 | 3,33 | 3,13 | 3,27 |
+| 2026-11-24 | **Pleine résolution** — L2.4 : TAAU + bloom, échelle 1, capture 2 (référence) | 3,08 | 4,46 | 3,63 | 3,33 | 3,51 | 3,26 |
+| 2026-11-24 | **Pleine résolution** — TAAU + bloom, échelle 0,75 | 2,82 | 3,88 | 2,95 | 2,71 | 2,65 | 2,99 |
+| 2026-11-24 | **Pleine résolution** — TAAU + bloom, échelle 0,5 | 2,13 | 2,77 | 2,57 | 2,25 | 2,43 | 2,28 |
 
 Les lignes « GPU ms méd. » antérieures à L2.9 ne sont pas exploitables (somme des passes, fréquence
-du GPU fixée par le régulateur). Le coût GPU réel d'une frame est ≈ 1,3–1,5 ms à 4112×2580 sur M4 Max
-(`gpuBusy` 0,92–0,94), loin du budget de 16,6 ms.
+du GPU fixée par le régulateur). Les lignes « coût GPU » de L2.9 à L2.3 ont été mesurées à 1028×645
+(résolution abaissée par l'ancienne qualité adaptative, voir Outillage) : comparables entre elles
+pour la géométrie seulement. Le coût GPU réel d'une frame est ≈ 3–5 ms à 4112×2580 sur M4 Max (lignes
+« Pleine résolution »), loin du budget de 16,6 ms.
 
 Constats visuels après le lot 1 (`docs/screenshots/render/lot1/`, état avec l'altitude décodée sur CPU) :
 - Ciel de Preetham visible, dégradé zénith/horizon, lueur solaire au couchant ; terrain et ciel se
@@ -416,11 +454,26 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 | 2026-11-24 | Anti-crénelage | TRAA, MSAA désactivé | Exigé par TRAA ; qualité équivalente au MSAA sur captures fixes et en vol, stabilité temporelle en plus, +0,3–0,5 ms |
 | 2026-11-24 | Bloom | Après TRAA, seuil = radiance la plus forte hors soleil (surface diffuse blanche au soleil ou ciel au bord du disque) | Ordre des moteurs AAA : les reflets sous-pixel, stabilisés par TRAA, ne scintillent pas dans le halo (pas de comparaison en vol : aucun reflet ne dépasse le seuil sur les vols de référence). Seuil dérivé de l'éclairage plutôt que fixe : pas de bloom sur la neige ni sur l'auréole, quelle que soit la hauteur du soleil |
 | 2026-11-24 | Mesure du coût GPU | Répétitions = frames de nœuds successives | Mise à jour « par rendu » impossible pour TRAA et bloom : three compte chaque rendu de quad comme un rendu, d'où des rendus imbriqués de la scène |
+| 2026-11-24 | Anti-crénelage | TAAU (`TAAUNode`) au lieu de TRAA, à toutes les échelles | Seul nœud de three r187 qui reconstruit la résolution de sortie depuis une passe de scène réduite ; changer de nœud selon l'échelle recompilerait la chaîne au moment d'une surcharge. Image identique à l'échelle 1, +0,1 à +0,8 ms |
+| 2026-11-24 | Signal de la résolution dynamique | Temps GPU par rendu (médiane sur 30 frames), budget 60 FPS, hausse par paliers après 2 s | L'intervalle entre frames vaut l'intervalle de rafraîchissement à vsync (un écran 60 Hz semble toujours au budget) et grimpe pendant la mesure saturée ; le régulateur de fréquence masque la marge, d'où une hausse par essais, défaite en une fenêtre si elle surcharge |
 | 2026-11-23 | Vitesse par défaut | 560 m/s | Vitesse réelle de l'ancien défaut (800 unités Mercator/s) : benchmarks comparables à la baseline |
 
 ## Journal des sessions
 
 <!-- Entrée la plus récente en haut. -->
+
+### 2026-11-24 (11)
+- Fait : L2.4. Trois commits : TAAU à la place de TRAA, résolution dynamique pilotée par le temps GPU
+  (échelle de la passe de scène, `renderScale`, `dynamicResolution`, échelle dans les rapports),
+  README.
+- Découvert : l'ancienne qualité adaptative abaissait le canevas à 1028×645 pendant chaque mesure
+  saturée : tous les coûts GPU consignés de L2.9 à L2.3 sont à cette résolution. Re-mesuré à pleine
+  résolution : ≈ 3–5 ms par vue, bloom +0,2 à +0,9 ms. Le `TRAANode` r187 ne sait pas reconstruire
+  une résolution supérieure ; `TAAUNode` (r187) le fait.
+- Vérifié : TAAU échelle 1 indiscernable de TRAA ; 0,75 indiscernable, 0,5 acceptable en secours ;
+  surcharge simulée absorbée en 2 s et résorbée sans oscillation ; vols à l'échelle 1 de bout en
+  bout, p1 62,9 / 59,9 ; modes `sar` et `elevation`, aucune erreur de page.
+- Prochaine étape : L2.8 (voir État courant).
 
 ### 2026-11-24 (10)
 - Fait : L2.3. Trois commits : mesure GPU répétant la frame entière, vue de référence 6 (face au soleil
