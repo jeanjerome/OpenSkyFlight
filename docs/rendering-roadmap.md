@@ -13,15 +13,17 @@ en fin de session.
   plus. Bilan dans **Mesures** (lignes « Clôture du lot 2 ») et constats visuels sous les tableaux.
 - **three.js** : r187 (import map d'`index.html`), mis à jour depuis r183 pour le TRAA compatible avec
   la profondeur inversée.
-- **Git** : tout est dans `main`, poussé ; créer une branche de lot depuis `main` pour le lot 3.
+- **Git** : tout est dans `main` (lots 0 à 2, correctifs de dépendances, décision three-tile) ;
+  créer la branche du lot 3 depuis `main` : `feat/render-atmosphere`.
 - **Environnement local** : bundle three-tile construit, `npm install` fait (racine et
   `vendor/three-tile`), cache `cache/` chaud pour les vues de référence et les deux vols. Lancer
   `npm run dev` en tâche de fond avant toute mesure. Mesurer **sur l'écran intégré 120 Hz** : sur un
   écran 60 Hz, Chrome plafonne à 60 FPS (la résolution dynamique ne se déclenche plus à tort depuis
   L2.4, mais les FPS ne sont pas comparables).
-- **Référence de comparaison** : `benchmarks/render/ae/` (captures des **6** vues avec coût GPU
-  **à pleine résolution**, échelle, luminance adaptée, draw calls et triangles, deux benchmarks de vol,
-  non versionnés). Chiffres dans **Mesures**, lignes « L2.8 ». **Les coûts GPU antérieurs à L2.4 ont été mesurés à
+- **Référence de comparaison** : `benchmarks/render/lot2/` (état de clôture du lot 2, preset High :
+  captures des **6** vues avec coût GPU **à pleine résolution**, échelle, luminance adaptée, draw
+  calls et triangles, deux benchmarks de vol, non versionnés). Chiffres dans **Mesures**, lignes
+  « Clôture du lot 2 » ; captures versionnées dans `docs/screenshots/render/lot2/`. **Les coûts GPU antérieurs à L2.4 ont été mesurés à
   1028×645** (voir Outillage) : ne comparer qu'aux lignes « pleine résolution ».
 - **Vue 6** (face au soleil bas, massif en contre-jour) ajoutée pour le bloom, et plus tard les rayons
   crépusculaires et le reflet d'objectif (L4.7).
@@ -39,6 +41,16 @@ en fin de session.
   `js/utils/settingsStore.js`. `render:capture` et `render:benchmark` ouvrent l'app avec `?dev=1`
   (et HUD / mini-carte masqués par l'URL pour les captures), dans un profil vierge : preset High,
   identique à l'état d'avant L2.10, donc les mesures de référence restent comparables.
+- **Prochaine session — commencer le lot 3 par L3.1** (choix de la technique d'atmosphère) :
+  vérifier si `@takram/three-atmosphere` fonctionne avec `WebGPURenderer` et TSL (three r187), sinon
+  évaluer le modèle de Hillaire 2020 écrit en TSL ; **présenter les options à l'utilisateur et faire
+  valider le choix** avant de coder, puis le consigner dans **Décisions**. Code concerné aujourd'hui :
+  `js/atmosphere/AtmosphericSky.js` (ciel de Preetham `SkyMesh`, soleil, lumière du ciel, `FogExp2`
+  à la couleur de l'horizon, seuil du bloom, mode SAR), `preethamSky.js` (port CPU du modèle, échelle
+  de radiance partagée), `SkyEnvironment.js` (PMREM du ciel en `scene.environment`), `CloudLayer.js`.
+  L'exposition de base et l'exposition automatique (`AutoExposureNode`, compensation 60 %) sont calées
+  sur l'échelle de radiance actuelle : à recaler avec la nouvelle atmosphère. Les réglages du soleil
+  et du ciel sont dans l'onglet World du menu (`settingsSchema.js`) ; L3.5 y ajoutera l'heure du jour.
 - **Suite** : lot 3 (atmosphère physique et heure du jour). Points ouverts : coût CPU de soumission (≈ 5 µs par
   draw call) qui limite Ultra à 120 Hz ; minimap OSM bloquée par la politique d'usage des tuiles
   d'OpenStreetMap (hors rendu, voir **Problèmes hors rendu relevés**).
@@ -391,7 +403,8 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
 - [ ] **L3.3** Perspective aérienne appliquée au terrain, à l'avion et à l'eau ; suppression de `FogExp2`.
 - [ ] **L3.4** Couleur et intensité du soleil et de l'ambiance dérivées de l'atmosphère.
 - [ ] **L3.5** Position astronomique du soleil (date, heure, lat/lon) ; curseur d'heure et accélération
-      du temps dans le panneau.
+      du temps dans l'onglet World du menu de réglages (entrées du schéma `settingsSchema.js`, réglages
+      compréhensibles par l'utilisateur, voir les décisions sous L2.10).
 - [ ] **L3.6** Nuit : ciel étoilé, lune, lumières des villes (tuiles NASA Black Marble via le proxy de
       `scripts/serve.js`) en émissif sur le terrain.
 - [ ] **L3.7** Vérifier les modes `sar` et `elevation` (ciel désactivé).
@@ -616,8 +629,12 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 - Fait : clôture du lot 2 — captures des 6 vues (`docs/screenshots/render/lot2/`), mesures finales
   (`benchmarks/render/lot2/`, non versionné), bilan et constats visuels, lint sans erreur.
 - Fait ensuite, avec l'accord de l'utilisateur : `feat/render-hdr-pipeline` fusionnée dans `main`
-  (avance rapide) et poussée ; branche de lot supprimée.
-- Prochaine étape : lot 3.
+  (avance rapide) et poussée ; branche de lot supprimée (locale et distante).
+- Hors rendu : les 7 alertes Dependabot (js-yaml, brace-expansion, @humanfs/node, toutes tirées par
+  ESLint) corrigées par `npm audit fix` ; `vendor/three-tile` signale 18 vulnérabilités d'outils de
+  construction (Vite 5, esbuild…), absentes du bundle, laissées en l'état. Branche `dev` de three-tile
+  examinée : rien à reprendre (voir **Décisions**).
+- Prochaine étape : lot 3, en commençant par L3.1 (voir État courant).
 
 ### 2026-11-24 (13)
 - Fait : L2.10 (conception validée avec l'utilisateur, voir les décisions sous L2.10) et la partie
