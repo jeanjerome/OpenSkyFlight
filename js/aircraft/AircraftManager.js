@@ -135,7 +135,6 @@ export default class AircraftManager {
     // Apply visual pitch around local X axis
     this._qVisualPitch.setFromAxisAngle(this._axisX, this._visualPitch);
     this.group.quaternion.multiply(this._qVisualPitch);
-    this.group.updateMatrixWorld();
 
     const { camera, renderer } = this.rendering;
     renderer.getDrawingBufferSize(this._bufferSize);

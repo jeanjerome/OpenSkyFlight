@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { MeshBasicNodeMaterial, MeshStandardNodeMaterial, SpriteNodeMaterial } from 'three/webgpu';
+import { MeshBasicNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   Discard,
   Fn,
@@ -11,6 +12,7 @@ import {
   exp,
   float,
   getScreenPosition,
+  instanceIndex,
   max,
   mix,
   modelViewMatrix,
@@ -19,11 +21,14 @@ import {
   positionGeometry,
   positionView,
   pow,
+  select,
   sin,
   smoothstep,
   time,
   uniform,
+  uniformArray,
   uv,
+  varying,
   vec3,
   vec4,
 } from 'three/tsl';
@@ -77,6 +82,10 @@ function lensLuminance(candelas) {
  * The engines glow from inside their nozzles with thrust, and the afterburner
  * adds a flame with shock diamonds, also drawn by the glow pass.
  *
+ * Four draw calls in all, since each object costs main-thread time: the lenses
+ * and the halos are instanced (per-light values in uniform arrays), the two
+ * nozzles' glow and flames are merged.
+ *
  * Positions are in the model's own frame (metres, x left, y up, z forward).
  * Luminances are in the scene unit, multiplied by the night exposure of light
  * sources (AtmosphericSky.emissiveExposure).
@@ -102,71 +111,101 @@ export default class AircraftLights {
     // Size of a pixel at unit distance, for the halos' smallest size on screen
     this._pixelAngle = uniform(0.001);
 
-    this._lights = AIRCRAFT_LIGHTS.map((spec) => this._createLight(spec));
-    this._engines = ENGINE_NOZZLES.map((nozzle) => this._createEngine(nozzle));
+    this._specs = AIRCRAFT_LIGHTS;
+    // Per light: lens luminance when on (scene unit) times its current level
+    this._lensLevels = uniformArray(new Array(AIRCRAFT_LIGHTS.length).fill(0), 'float');
+    this._haloLevels = uniformArray(new Array(AIRCRAFT_LIGHTS.length).fill(0), 'float');
+    this._colors = uniformArray(
+      AIRCRAFT_LIGHTS.map((spec) => new THREE.Color(...spec.color)),
+      'color',
+    );
+    this._createLenses();
+    this._createHalos();
+
+    this._engineThrottle = uniform(0);
+    this._engineAfterburner = uniform(0);
+    this._createEngines();
   }
 
-  _createLight(spec) {
-    const color = new THREE.Color(...spec.color);
-    const level = uniform(0);
+  _createLenses() {
+    const color = this._colors.element(instanceIndex);
+    const material = new MeshStandardNodeMaterial({ roughness: 0.15, metalness: 0 });
+    // Colored glass by day, emissive when on
+    material.colorNode = varying(color.mul(0.35));
+    material.emissiveNode = varying(color.mul(this._lensLevels.element(instanceIndex))).mul(this.exposure);
+    const lenses = new THREE.InstancedMesh(
+      new THREE.SphereGeometry(LIGHT_LENS_RADIUS, 12, 8),
+      material,
+      this._specs.length,
+    );
+    const matrix = new THREE.Matrix4();
+    this._specs.forEach((spec, i) => lenses.setMatrixAt(i, matrix.makeTranslation(...spec.position)));
+    lenses.name = 'LightLenses';
+    lenses.frustumCulled = false;
+    this.model.add(lenses);
+  }
 
-    // Lens: colored glass by day, emissive when on
-    const lensMaterial = new MeshStandardNodeMaterial({ roughness: 0.15, metalness: 0 });
-    lensMaterial.colorNode = vec3(...color.clone().multiplyScalar(0.35).toArray());
-    lensMaterial.emissiveNode = vec3(...color.toArray())
-      .mul(level)
-      .mul(lensLuminance(spec.candelas))
-      .mul(this.exposure);
-    const lens = new THREE.Mesh(new THREE.SphereGeometry(LIGHT_LENS_RADIUS, 12, 8), lensMaterial);
-    lens.position.set(...spec.position);
-    lens.name = `Light_${spec.name}`;
-    this.model.add(lens);
-
-    // Halo: a narrow core and a wider glare, at least GLOW_MIN_PIXELS across
-    const haloMaterial = new SpriteNodeMaterial({
+  /** Halos: billboards at the lights, a narrow core and a wider glare, at least GLOW_MIN_PIXELS across */
+  _createHalos() {
+    const positions = uniformArray(
+      this._specs.map((spec) => new THREE.Vector3(...spec.position)),
+      'vec3',
+    );
+    const sizes = uniformArray(
+      this._specs.map((spec) => spec.haloSize),
+      'float',
+    );
+    const material = new MeshBasicNodeMaterial({
       transparent: true,
       depthWrite: false,
       depthTest: false,
       blending: THREE.AdditiveBlending,
     });
-    const center = modelViewMatrix.mul(vec4(0, 0, 0, 1)).xyz;
-    haloMaterial.scaleNode = max(float(spec.haloSize), center.length().mul(this._pixelAngle).mul(GLOW_MIN_PIXELS));
-    haloMaterial.colorNode = Fn(() => {
-      If(inFrontOfScene(this.sceneDepth, center).not(), () => {
-        Discard();
-      });
+    const center = modelViewMatrix.mul(vec4(positions.element(instanceIndex), 1)).xyz;
+    const size = max(sizes.element(instanceIndex), center.length().mul(this._pixelAngle).mul(GLOW_MIN_PIXELS));
+    material.vertexNode = cameraProjectionMatrix.mul(vec4(center.add(vec3(positionGeometry.xy.mul(size), 0)), 1));
+    // Whether the light is visible, tested once per halo at its centre
+    const shown = select(inFrontOfScene(this.sceneDepth, center), float(1), float(0));
+    const light = varying(this._colors.element(instanceIndex).mul(this._haloLevels.element(instanceIndex)).mul(shown));
+    material.colorNode = Fn(() => {
       const r = uv().sub(0.5).length().mul(2);
       // Both terms fall to 10⁻⁴ at the edge, where a light thousands of times
       // brighter than the night scene would otherwise still saturate
       const falloff = exp(r.pow2().mul(-40))
         .mul(0.65)
         .add(exp(r.pow2().mul(-9)).mul(0.35));
-      const luminance = level.mul(lensLuminance(spec.candelas) * spec.haloShare).mul(this.exposure);
-      return vec4(
-        vec3(...color.toArray())
-          .mul(falloff)
-          .mul(luminance),
-        1,
-      );
+      return vec4(light.mul(falloff).mul(this.exposure), 1);
     })();
-    const halo = new THREE.Sprite(haloMaterial);
-    halo.position.set(...spec.position);
-    halo.layers.set(GLOW_LAYER);
-    halo.frustumCulled = false;
-    halo.name = `Halo_${spec.name}`;
-    this.model.add(halo);
-
-    return { spec, level, lens, halo };
+    const halos = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), material, this._specs.length);
+    halos.layers.set(GLOW_LAYER);
+    halos.frustumCulled = false;
+    halos.name = 'LightHalos';
+    this.model.add(halos);
   }
 
-  _createEngine({ position, radius, mesh }) {
-    const [x, y, z] = position;
-    const throttle = uniform(0);
-    const afterburner = uniform(0);
+  _createEngines() {
+    const throttle = this._engineThrottle;
+    const afterburner = this._engineAfterburner;
+    const discs = [];
+    const flames = [];
+    const length = AFTERBURNER_FLAME_LENGTH;
+    const exitZ = ENGINE_NOZZLES[0].position[2];
+    for (const { position, radius, mesh } of ENGINE_NOZZLES) {
+      const [x, y, z] = position;
+      // The model paints its nozzles like the airframe: bare, heat-tinted metal instead
+      const nozzle = this.model.getObjectByName(mesh);
+      if (nozzle?.isMesh) nozzle.material = NOZZLE_METAL;
 
-    // The model paints its nozzles like the airframe: bare, heat-tinted metal instead
-    const nozzle = this.model.getObjectByName(mesh);
-    if (nozzle?.isMesh) nozzle.material = NOZZLE_METAL;
+      const disc = new THREE.CircleGeometry(radius * 1.2, 24);
+      disc.rotateY(Math.PI); // facing aft
+      disc.translate(x, y, z + 0.6);
+      discs.push(disc);
+
+      const flame = new THREE.CylinderGeometry(radius * 0.35, radius * 0.95, length, 24, 24, true);
+      flame.rotateX(-Math.PI / 2); // axis along z, top (narrow end) aft
+      flame.translate(x, y, z - length / 2);
+      flames.push(flame);
+    }
 
     // Hot turbine and flame holder seen through the nozzle, dark metal by day:
     // barely glowing at idle, dull orange at full dry thrust, white-yellow with
@@ -180,18 +219,12 @@ export default class AircraftLights {
       const glow = mix(float(NOZZLE_GLOW_LUMINANCE), float(AFTERBURNER_LUMINANCE), afterburner);
       return color.mul(core.mul(0.7).add(0.3)).mul(heat).mul(glow).mul(this.exposure);
     })();
-    const disc = new THREE.Mesh(new THREE.CircleGeometry(radius * 1.2, 24), discMaterial);
-    disc.position.set(x, y, z + 0.6);
-    disc.rotation.y = Math.PI; // facing aft
+    const disc = new THREE.Mesh(mergeGeometries(discs), discMaterial);
     disc.name = 'NozzleGlow';
     this.model.add(disc);
 
-    // Afterburner flame: a cone from the nozzle exit, brighter where the line
-    // of sight crosses more of it, with shock diamonds fading downstream
-    const length = AFTERBURNER_FLAME_LENGTH;
-    const geometry = new THREE.CylinderGeometry(radius * 0.35, radius * 0.95, length, 24, 24, true);
-    geometry.rotateX(-Math.PI / 2); // axis along z, top (narrow end) aft
-    geometry.translate(0, 0, -length / 2);
+    // Afterburner flames: cones from the nozzle exits, brighter where the line
+    // of sight crosses more of them, with shock diamonds fading downstream
     const flameMaterial = new MeshBasicNodeMaterial({
       transparent: true,
       depthWrite: false,
@@ -204,7 +237,7 @@ export default class AircraftLights {
         Discard();
       });
       // 0 at the nozzle exit, 1 at the tip
-      const t = positionGeometry.z.negate().div(length).clamp(0, 1);
+      const t = positionGeometry.z.sub(exitZ).negate().div(length).clamp(0, 1);
       const facing = normalView.dot(positionView.normalize().negate()).abs();
       const thickness = pow(facing, 1.5);
       const diamonds = pow(cos(t.mul(length / 0.75).mul(Math.PI * 2)).max(0), 6).mul(t.oneMinus());
@@ -223,14 +256,11 @@ export default class AircraftLights {
         1,
       );
     })();
-    const flame = new THREE.Mesh(geometry, flameMaterial);
-    flame.position.set(x, y, z);
-    flame.layers.set(GLOW_LAYER);
-    flame.frustumCulled = false;
-    flame.name = 'AfterburnerFlame';
-    this.model.add(flame);
-
-    return { throttle, afterburner, disc, flame };
+    this._flame = new THREE.Mesh(mergeGeometries(flames), flameMaterial);
+    this._flame.layers.set(GLOW_LAYER);
+    this._flame.frustumCulled = false;
+    this._flame.name = 'AfterburnerFlames';
+    this.model.add(this._flame);
   }
 
   /**
@@ -246,19 +276,19 @@ export default class AircraftLights {
     // Engines spool up in about a second, the afterburner lights faster
     this._throttle += ((thrust ? 1 : 0) - this._throttle) * Math.min(1, dt * 2.5);
     this._afterburner += ((thrust && afterburner ? 1 : 0) - this._afterburner) * Math.min(1, dt * 6);
-    for (const engine of this._engines) {
-      engine.throttle.value = this._throttle;
-      engine.afterburner.value = this._afterburner;
-      engine.flame.visible = this._afterburner > 0.01;
-    }
+    this._engineThrottle.value = this._throttle;
+    this._engineAfterburner.value = this._afterburner;
+    this._flame.visible = this._afterburner > 0.01;
 
+    // The model's world matrix of the previous frame: a frame late at most
     this._normalMatrix.getNormalMatrix(this.model.matrixWorld);
-    for (const light of this._lights) {
-      const { spec } = light;
+    const lens = this._lensLevels.array;
+    const halo = this._haloLevels.array;
+    this._specs.forEach((spec, i) => {
       let on = flashing(spec.flash, this._time);
       // Field of view of the light: full inside, fading over 10° at its edge
       if (spec.axis && on > 0) {
-        light.lens.getWorldPosition(this._worldPosition);
+        this._worldPosition.set(...spec.position).applyMatrix4(this.model.matrixWorld);
         this._toCamera.subVectors(camera.position, this._worldPosition).normalize();
         this._axis
           .set(...spec.axis)
@@ -267,9 +297,9 @@ export default class AircraftLights {
         const angle = Math.acos(THREE.MathUtils.clamp(this._axis.dot(this._toCamera), -1, 1)) * (180 / Math.PI);
         on *= THREE.MathUtils.clamp((spec.coverage - angle) / 10 + 0.5, 0, 1);
       }
-      light.level.value = on;
-      light.halo.visible = on > 0;
-    }
+      lens[i] = on * lensLuminance(spec.candelas);
+      halo[i] = on * lensLuminance(spec.candelas) * spec.haloShare;
+    });
   }
 }
 
