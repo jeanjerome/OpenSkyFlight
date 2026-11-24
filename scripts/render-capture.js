@@ -61,14 +61,12 @@ page.on('console', (m) => {
   if (m.type() === 'error') errors.push(m.text());
 });
 
-// Developer mode, HUD and minimap hidden; a fresh browser profile starts from the default settings
+// Developer mode, HUD and minimap hidden; a fresh browser profile starts from the default settings.
+// --set values go in the URL too, so the terrain loads once with them.
 const url = new URL(values.url);
 url.searchParams.set('dev', '1');
 url.searchParams.set('showHud', 'false');
 url.searchParams.set('showMinimap', 'false');
-await page.goto(url.href, { waitUntil: 'load' });
-await page.waitForFunction(() => window.osf !== undefined, null, { timeout: 30000 });
-
 const overrides = {};
 for (const assignment of values.set) {
   const eq = assignment.indexOf('=');
@@ -84,10 +82,10 @@ for (const assignment of values.set) {
     value = raw;
   }
   overrides[assignment.slice(0, eq)] = value;
+  url.searchParams.set(assignment.slice(0, eq), raw);
 }
-for (const [key, value] of Object.entries(overrides)) {
-  await page.evaluate(([k, v]) => window.osf.setConfig(k, v), [key, value]);
-}
+await page.goto(url.href, { waitUntil: 'load' });
+await page.waitForFunction(() => window.osf !== undefined, null, { timeout: 30000 });
 
 /** Wait until no tile download has been pending for 3 s. Returns the wait in ms, -1 on timeout. */
 async function waitTilesSettled(maxMs = 90000) {
