@@ -50,15 +50,13 @@ en fin de session.
   PMREM du ciel se régénère à chaque frame, +2 ms) ; `renderer.info.autoReset` coupé (la remise à zéro
   de three tournait parfois après la frame de l'app : draw calls à 0) ; le ciel en `scene.backgroundNode`
   coûtait ≈ 0,5 ms (évalué sous tout le terrain), d'où son calcul dans la passe d'atmosphère.
-- **Prochaine session** : 1) faire trancher par l'utilisateur le contraste de l'éclairage (voile
-  gris-lavande sur le terrain, ciel délavé par rapport au lot 2 ; comparaisons dans
-  `benchmarks/render/l3-cal/`, `l3-indirect/`, `l3-albedo/`) : environnement PMREM (actuel, reflets
-  de l'avion) ou lumière indirecte d'`AtmosphereLight` en chaque point (ombres plus contrastées, mais
-  plus de reflets sur l'avion), puis éventuellement exposition/étalonnage ; 2) volume de perspective
-  aérienne (L3.2) pour revenir dans le budget de 1 ms ; 3) rétablir « Air clarity » (densité des
-  aérosols : les paramètres sont figés dans les shaders, il faut recréer le contexte d'atmosphère et
-  recompiler) ; 4) L3.5 (heure du jour, position astronomique du soleil : `astronomy-engine` ou les
-  fonctions de la bibliothèque, l'entrée principale de takram tire `postprocessing`, à éviter).
+- **Prochaine session** : 1) rétablir « Air clarity » (densité des aérosols : les paramètres sont
+  figés dans les shaders, il faut recréer le contexte d'atmosphère et recompiler), qui règle aussi le
+  voile du terrain vu d'altitude et donc la lisibilité de l'avion ; 2) volume de perspective aérienne
+  (L3.2) pour revenir dans le budget de 1 ms ; 3) L3.5 (heure du jour, position astronomique du soleil :
+  `astronomy-engine` ou les fonctions de la bibliothèque, l'entrée principale de takram tire
+  `postprocessing`, à éviter). Comparaisons de la session : `benchmarks/render/l3-cal/` (option A),
+  `l3-b-uncal/` (option B retenue, exposition identique).
 - **Suite** : lot 3 (atmosphère physique et heure du jour). Points ouverts : coût CPU de soumission (≈ 5 µs par
   draw call) qui limite Ultra à 120 Hz ; minimap OSM bloquée par la politique d'usage des tuiles
   d'OpenStreetMap (hors rendu, voir **Problèmes hors rendu relevés**).
@@ -424,10 +422,12 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       et `preethamSky.js` supprimés ; le réglage « Distance haze » (`fogEnabled`) active la
       perspective aérienne. Reste : coût (L3.2), réglage « Air clarity » à rétablir (voir État courant).
 - [~] **L3.4** Couleur et intensité du soleil et de l'ambiance dérivées de l'atmosphère.
-      Fait : `AtmosphereLight` (soleil direct avec sa transmittance en chaque point), PMREM du ciel
-      (`skyEnvironment`) pour la lumière du ciel et les reflets, seuil du bloom calculé sur le GPU depuis
+      Fait : `AtmosphereLight` (soleil direct avec sa transmittance et lumière diffuse du ciel, toutes
+      deux évaluées en chaque point), PMREM du ciel (`skyEnvironment`) pour les seuls reflets
+      (`ReflectionEnvironmentNode`, appliqué à tous les matériaux PBR), seuil du bloom calculé sur le GPU depuis
       les LUT, exposition et plage de mesure recalées (×24,3, moyenne géométrique des vues de jour).
-      Reste : contraste de l'éclairage (voir État courant).
+      Choix de l'utilisateur : lumière du ciel en chaque point (option « B ») ; il préfère la nouvelle
+      atmosphère, surtout en altitude, mais l'avion se détache moins du terrain voilé en vue rapprochée.
 - [ ] **L3.5** Position astronomique du soleil (date, heure, lat/lon) ; curseur d'heure et accélération
       du temps dans l'onglet World du menu de réglages (entrées du schéma `settingsSchema.js`, réglages
       compréhensibles par l'utilisateur, voir les décisions sous L2.10).
@@ -669,6 +669,9 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
   terrain proche voilé et moins contrasté, ciel gris-bleu délavé (AgX), coucher de soleil (vue 4) moins
   orangé qu'avant. La perspective aérienne n'est pas en cause (sans elle, le versant proche garde le voile) :
   c'est l'éclairage (part de la lumière du ciel).
+- Choix de l'éclairage par l'utilisateur : option B (lumière du ciel en chaque point, PMREM pour les
+  seuls reflets). Exposition inchangée (luminance mesurée identique à ±1 %). Le voile restant vient de la
+  perspective aérienne : vu d'altitude, le terrain s'éclaircit et l'avion blanc s'en détache moins.
 - Reste : voir État courant (« Prochaine session »). Pas encore de benchmark de vol ni de captures
   versionnées pour le lot 3.
 
