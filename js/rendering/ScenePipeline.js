@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { NodeUpdateType } from 'three/webgpu';
 import { mrt, output, pass, velocity } from 'three/tsl';
 import { traa } from 'three/addons/tsl/display/TRAANode.js';
 
@@ -40,18 +39,22 @@ export default class ScenePipeline {
 
   /**
    * Render one frame.
-   * @param {number} [repeats=1] - times the whole frame is rendered. The scene
-   *   pass normally renders once per frame however often the pipeline runs; with
-   *   repeats > 1 it renders on every run, so that GPU time measurements that
-   *   repeat the frame (see GPUTimer) repeat all of it.
+   * @param {number} [repeats=1] - times the whole frame is rendered, for GPU time
+   *   measurements that repeat the frame (see GPUTimer). The scene pass and the
+   *   effects render once per node frame however often the pipeline runs, so the
+   *   node frame is advanced between repeats: each one renders all of the frame.
+   *   (Per-render updates would not do: three counts every quad render of an
+   *   effect as a render, so the scene would render again inside TRAA's resolve.)
    */
   render(repeats = 1) {
     if (this._renderer.toneMapping !== this._toneMapping) {
       this._toneMapping = this._renderer.toneMapping;
       this._pipeline.needsUpdate = true;
     }
-    this.scenePass.updateBeforeType = repeats > 1 ? NodeUpdateType.RENDER : NodeUpdateType.FRAME;
-    for (let i = 0; i < repeats; i++) this._pipeline.render();
+    for (let i = 0; i < repeats; i++) {
+      if (i > 0) this._renderer._nodes.nodeFrame.update();
+      this._pipeline.render();
+    }
   }
 
   dispose() {
