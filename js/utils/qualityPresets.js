@@ -52,7 +52,7 @@ export const IMAGE_SHARPNESS = {
 export const TERRAIN_DETAIL = {
   normal: { terrainLodThreshold: 0.9, textureAnisotropy: 4 },
   high: { terrainLodThreshold: 1.2, textureAnisotropy: 16 },
-  maximum: { terrainLodThreshold: 1.6, textureAnisotropy: 16 },
+  maximum: { terrainLodThreshold: 1.4, textureAnisotropy: 16 },
 };
 
 const PRESET_KEYS = Object.keys(QUALITY_PRESETS.high);
