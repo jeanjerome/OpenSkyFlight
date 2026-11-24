@@ -122,6 +122,13 @@ export const AERIAL_PERSPECTIVE_VOLUME_SIZE = [128, 64, 64];
 export const AERIAL_PERSPECTIVE_VOLUME_DISTANCE = 1000e3;
 
 /**
+ * Albedo of the ground beyond the terrain tiles, drawn with the sky (linear):
+ * fields and forests of the lowlands around the Alps, as satellite imagery
+ * averages them
+ */
+export const DISTANT_GROUND_ALBEDO = [0.09, 0.1, 0.07];
+
+/**
  * Night exposure (see AtmosphericSky): below this sun elevation (degrees), the
  * exposure before the scene follows the falling light level of the ground...
  */

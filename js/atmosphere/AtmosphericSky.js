@@ -1,13 +1,15 @@
 import * as THREE from 'three';
 import { EnvironmentNode, MeshStandardNodeMaterial, NodeMaterial } from 'three/webgpu';
-import { Fn, If, context, luminance, max, renderGroup, uniform, vec2, vec3 } from 'three/tsl';
+import { Fn, If, context, luminance, max, renderGroup, uniform, uv, vec2, vec3, vec4 } from 'three/tsl';
 import { Ellipsoid, Geodetic } from '@takram/three-geospatial';
+import { rayEllipsoidIntersection } from '@takram/three-geospatial/webgpu';
 import {
   AtmosphereContext,
   AtmosphereLight,
   AtmosphereLightNode,
   aerialPerspective,
   getIndirectLuminance,
+  getIndirectLuminanceToPoint,
   getSplitIlluminance,
   sky,
   skyEnvironment,
@@ -20,6 +22,7 @@ import { eciToEcefMatrix, julianDate, moonDirectionECI, sunDirectionECI } from '
 import { NIGHT_SKY_ILLUMINANCE, moonIlluminance, moonPhaseFactor, sunIlluminance } from './skyIlluminance.js';
 import {
   BLOOM_THRESHOLD_FLOOR,
+  DISTANT_GROUND_ALBEDO,
   EMISSIVE_EXPOSURE_SHARE,
   SCENE_UNIT_LUMINANCE,
   NIGHT_EXPOSURE_START_ELEVATION,
@@ -198,6 +201,11 @@ export default class AtmosphericSky {
     this.lightScale = uniform(1).setGroup(renderGroup);
     // Glow of the night sky behind the atmosphere's (see _overScene)
     this._nightSkyGlow = uniform(new THREE.Color()).setGroup(renderGroup);
+    // Camera matrices for the view rays of the distant ground (see _distantGround)
+    this._projectionInverse = uniform(new THREE.Matrix4()).setGroup(renderGroup);
+    this._projectionInverse.onRenderUpdate(() => camera.projectionMatrixInverse);
+    this._cameraWorld = uniform(new THREE.Matrix4()).setGroup(renderGroup);
+    this._cameraWorld.onRenderUpdate(() => camera.matrixWorld);
     renderer.contextNode = context({
       ...renderer.contextNode.value,
       getAtmosphere: () => this.atmosphere,
@@ -354,10 +362,55 @@ export default class AtmosphericSky {
     return Fn(() => {
       const result = vec3(surface.rgb).toVar();
       If(empty, () => {
-        result.addAssign(this.skyNode.add(this._nightSkyGlow).mul(color.a.oneMinus()));
+        const behind = this.skyNode.add(this._nightSkyGlow).toVar();
+        this._distantGround(behind);
+        result.addAssign(behind.mul(color.a.oneMinus()));
       });
       return result;
     })();
+  }
+
+  /**
+   * The ground beyond the terrain tiles, where the view ray meets the
+   * ellipsoid: replaces, in `luminance`, the sky the atmosphere library draws
+   * below the horizon, which is only the light scattered by the air along the
+   * ray, jumps at the horizon (its scattering table switches there between
+   * rays that reach the ground and rays that leave the atmosphere) and leaves
+   * a bright band between the edge of the terrain and the horizon. The ground
+   * is a diffuse surface of DISTANT_GROUND_ALBEDO lit by the sun (or the moon)
+   * and the sky, seen through the air between it and the camera. The terrain,
+   * lowered by the curvature of the Earth, meets it at the horizon.
+   * @param {Node} luminance - vec3 variable, the sky behind the pixel
+   */
+  _distantGround(luminance) {
+    const { atmosphere } = this;
+    const { worldToUnit } = atmosphere.parameters;
+    const { matrixWorldToECEF, cameraPositionUnit, altitudeCorrectionUnit } = atmosphere;
+    const radii = vec3(atmosphere.ellipsoid.radii).mul(worldToUnit);
+
+    const screen = uv();
+    const ndc = vec2(screen.x, screen.y.oneMinus()).mul(2).sub(1);
+    const target = this._projectionInverse.mul(vec4(ndc, 0.5, 1));
+    const directionWorld = this._cameraWorld.mul(vec4(target.xyz.div(target.w).normalize(), 0)).xyz;
+    const direction = matrixWorldToECEF.mul(vec4(directionWorld, 0)).xyz.normalize().toConst();
+    const hit = rayEllipsoidIntersection(cameraPositionUnit, direction, radii).x.toConst();
+    If(hit.greaterThanEqual(0), () => {
+      const point = cameraPositionUnit.add(direction.mul(hit)).toConst();
+      const normal = point.div(radii.pow2()).normalize();
+      const origin = cameraPositionUnit.add(altitudeCorrectionUnit);
+      const ground = point.add(altitudeCorrectionUnit);
+      const light = this.lightDirectionECEF;
+      const illuminance = getSplitIlluminance(ground, normal, light);
+      const reflected = illuminance
+        .get('direct')
+        .add(illuminance.get('indirect'))
+        .mul(this.lightScale)
+        .div(Math.PI)
+        .add(this._nightSkyGlow)
+        .mul(vec3(...DISTANT_GROUND_ALBEDO));
+      const scattering = getIndirectLuminanceToPoint(origin, ground, vec2(0), light).toConst();
+      luminance.assign(reflected.mul(scattering.get('transmittance')).add(scattering.get('luminance').mul(this.lightScale)));
+    });
   }
 
   /**
