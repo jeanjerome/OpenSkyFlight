@@ -13,8 +13,8 @@ en fin de session.
   plus. Bilan dans **Mesures** (lignes « Clôture du lot 2 ») et constats visuels sous les tableaux.
 - **three.js** : r187 (import map d'`index.html`), mis à jour depuis r183 pour le TRAA compatible avec
   la profondeur inversée.
-- **Git** : tout est dans `main` (lots 0 à 2, correctifs de dépendances, décision three-tile) ;
-  créer la branche du lot 3 depuis `main` : `feat/render-atmosphere`.
+- **Git** : lots 0 à 2 dans `main` ; lot 3 sur la branche locale `feat/render-atmosphere` (créée depuis
+  `main`, **non poussée**). Reprendre sur cette branche.
 - **Environnement local** : bundle three-tile construit, `npm install` fait (racine et
   `vendor/three-tile`), cache `cache/` chaud pour les vues de référence et les deux vols. Lancer
   `npm run dev` en tâche de fond avant toute mesure. Mesurer **sur l'écran intégré 120 Hz** : sur un
@@ -30,10 +30,13 @@ en fin de session.
 - **Lire les temps GPU** (voir Outillage) : seul le « coût GPU » de `render:capture` (`gpuMedianMs`,
   mesuré GPU saturé) compare deux états du code ; la colonne GPU des vols indique la charge, pas le coût.
 - **Rendu** : `js/rendering/ScenePipeline.js` — `RenderPipeline` : passe de scène HalfFloat (profondeur
-  float32, MRT couleur + vitesse, sans MSAA, échelle réglable) → `taau()` (reconstruction à la
+  float32, MRT couleur + vitesse, sans MSAA, échelle réglable, fond transparent noir) → atmosphère
+  (perspective aérienne + ciel sur les pixels vides, `rtt` à l'échelle de la passe, voir
+  `setAtmosphere`) → `taau()` (reconstruction à la
   résolution de sortie) → `bloom()` ajouté à l'image TAAU → × correction d'exposition automatique
   (`AutoExposureNode`, histogramme mesuré sur l'image TAAU) → tone mapping et espace couleur en sortie.
-  Seuil du bloom fixé par `AtmosphericSky` (voir L2.3) ; échelle de la passe de scène pilotée par
+  Seuil du bloom : nœud TSL fourni par `AtmosphericSky` (`setBloomThreshold`) ; exposition de base 8,5
+  et plage de l'histogramme [−13 ; 5] (échelle de luminance du modèle takram, voir `constants/rendering.js`) ; échelle de la passe de scène pilotée par
   `AdaptiveQualityManager` (voir L2.4), plafonnée par `CONFIG.renderScale`.
 - **Réglages** : menu ouvert par Échap (`js/ui/ControlPanel.js`), généré depuis
   `js/utils/settingsSchema.js` ; presets et correspondance réglages utilisateur → valeurs techniques
@@ -56,7 +59,12 @@ en fin de session.
   (L3.2) pour revenir dans le budget de 1 ms ; 3) L3.5 (heure du jour, position astronomique du soleil :
   `astronomy-engine` ou les fonctions de la bibliothèque, l'entrée principale de takram tire
   `postprocessing`, à éviter). Comparaisons de la session : `benchmarks/render/l3-cal/` (option A),
-  `l3-b-uncal/` (option B retenue, exposition identique).
+  `l3-b-uncal/` (option B retenue, exposition identique) ; images côte à côte avec
+  `ffmpeg -i a.png -i b.png -filter_complex "[0]scale=1000:-1[a];[1]scale=1000:-1[b];[a][b]hstack"`.
+  Pour comparer à `main` dans les mêmes conditions : `git worktree add <dir> main`, liens symboliques
+  vers `cache/`, `node_modules/` et `vendor/three-tile/packages/lib/dist`, `node scripts/serve.js
+  --port 3001` dans le worktree, puis `render:capture -- --url http://localhost:3001/`. Le coût GPU
+  d'une vue varie de ± 0,4 ms d'un passage à l'autre : alterner les variantes et répéter.
 - **Suite** : lot 3 (atmosphère physique et heure du jour). Points ouverts : coût CPU de soumission (≈ 5 µs par
   draw call) qui limite Ultra à 120 Hz ; minimap OSM bloquée par la politique d'usage des tuiles
   d'OpenStreetMap (hors rendu, voir **Problèmes hors rendu relevés**).
@@ -646,6 +654,7 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 | 2026-11-24 | Exposition automatique | Compensation partielle (60 %) autour de l'exposition de base, bornée à [−1,5 ; +1] EV, calée sur les vues de jour | La compensation totale uniformise les scènes (neige grise, crépuscule comme en plein jour) ; l'exposition de base, réglée sur les vues de référence, reste l'aspect de jour. Correction appliquée sur le GPU (pas de latence de relecture) |
 | 2026-11-24 | three-tile | Garder la copie 0.11.8 modifiée (`vendor/three-tile`), sans reprendre la branche `dev` de `sxguojf/three-tile` | Aucune version publiée depuis la 0.11.8 (`master` : README seulement) ; `dev` (future 0.11.10, inachevée, inactive depuis mars 2026) apporte des formats inutilisés ici (ArcGIS, TIFF, DEM, VirtualEarth) et refond `Tile`, `TileLoader` et `TileMap`, là où portent nos modifications, avec des choix contraires à nos mesures (LOD au point le plus haut, allocations par tuile et par frame) ; toujours WebGL seulement. À revoir si une version publiée apporte le WebGPU |
 | 2026-11-24 | Atmosphère | `@takram/three-atmosphere` 0.19.1 (WebGPU/TSL), copie corrigée dans `vendor/takram/`, plutôt qu'un modèle de Hillaire écrit en TSL ou un chargement depuis le CDN | Modèle de Bruneton (LUT 4D) avec la LUT de diffusion multiple de Hillaire, perspective aérienne par ray marching, `AtmosphereLight` compatible avec les matériaux standard, environnement PMREM, étoiles, lune et light shafts sur CSM (utiles à L4.7 et L5.3), repli WebGL2, licence MIT ; un modèle maison demanderait plusieurs sessions pour moins. La version publiée ne se charge pas avec three ≥ r185 (`struct()`, issue #111, PR #118 non fusionnée, dépôt inactif depuis mai 2026) et suppose `three` = build WebGL : correctifs locaux, à reprendre à chaque mise à jour |
+| 2026-11-24 | Lumière du ciel | Diffuse évaluée en chaque point par `AtmosphereLight` (table d'irradiance) ; PMREM du ciel réduite aux reflets pour tous les matériaux PBR (`ReflectionEnvironmentNode`) | Choix de l'utilisateur sur captures (option « B ») : ombres des versants plus contrastées ; la PMREM est le ciel vu depuis la caméra et ignore l'altitude de la surface. L'avion garde ses reflets sans recevoir deux fois la lumière du ciel |
 | 2026-11-23 | Vitesse par défaut | 560 m/s | Vitesse réelle de l'ancien défaut (800 unités Mercator/s) : benchmarks comparables à la baseline |
 
 ## Journal des sessions
