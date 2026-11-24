@@ -397,8 +397,12 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
 
 ## Lot 3 — Atmosphère physique et heure du jour
 
-- [ ] **L3.1** Décision : intégrer `@takram/three-atmosphere` (vérifier le support WebGPU/TSL) ou
+- [x] **L3.1** Décision : intégrer `@takram/three-atmosphere` (vérifier le support WebGPU/TSL) ou
       implémenter le modèle de Hillaire 2020 en TSL. Consigner dans **Décisions**.
+      Fait : `@takram/three-atmosphere` 0.19.1 (entrée `/webgpu`, TSL) et `@takram/three-geospatial`
+      0.9.1 copiés et corrigés dans `vendor/takram/` (correctifs listés dans son `README.md`), servis
+      par l'import map. Prototype validé sur three r187 : WebGPU et repli WebGL2, profondeur inversée,
+      ciel, perspective aérienne et `AtmosphereLight`.
 - [ ] **L3.2** LUT : transmittance, diffusion multiple, vue du ciel, volume de perspective aérienne.
 - [ ] **L3.3** Perspective aérienne appliquée au terrain, à l'avion et à l'eau ; suppression de `FogExp2`.
 - [ ] **L3.4** Couleur et intensité du soleil et de l'ambiance dérivées de l'atmosphère.
@@ -619,6 +623,7 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 | 2026-11-24 | Signal de la résolution dynamique | Temps GPU par rendu (médiane sur 30 frames), budget 60 FPS, hausse par paliers après 2 s | L'intervalle entre frames vaut l'intervalle de rafraîchissement à vsync (un écran 60 Hz semble toujours au budget) et grimpe pendant la mesure saturée ; le régulateur de fréquence masque la marge, d'où une hausse par essais, défaite en une fenêtre si elle surcharge |
 | 2026-11-24 | Exposition automatique | Compensation partielle (60 %) autour de l'exposition de base, bornée à [−1,5 ; +1] EV, calée sur les vues de jour | La compensation totale uniformise les scènes (neige grise, crépuscule comme en plein jour) ; l'exposition de base, réglée sur les vues de référence, reste l'aspect de jour. Correction appliquée sur le GPU (pas de latence de relecture) |
 | 2026-11-24 | three-tile | Garder la copie 0.11.8 modifiée (`vendor/three-tile`), sans reprendre la branche `dev` de `sxguojf/three-tile` | Aucune version publiée depuis la 0.11.8 (`master` : README seulement) ; `dev` (future 0.11.10, inachevée, inactive depuis mars 2026) apporte des formats inutilisés ici (ArcGIS, TIFF, DEM, VirtualEarth) et refond `Tile`, `TileLoader` et `TileMap`, là où portent nos modifications, avec des choix contraires à nos mesures (LOD au point le plus haut, allocations par tuile et par frame) ; toujours WebGL seulement. À revoir si une version publiée apporte le WebGPU |
+| 2026-11-24 | Atmosphère | `@takram/three-atmosphere` 0.19.1 (WebGPU/TSL), copie corrigée dans `vendor/takram/`, plutôt qu'un modèle de Hillaire écrit en TSL ou un chargement depuis le CDN | Modèle de Bruneton (LUT 4D) avec la LUT de diffusion multiple de Hillaire, perspective aérienne par ray marching, `AtmosphereLight` compatible avec les matériaux standard, environnement PMREM, étoiles, lune et light shafts sur CSM (utiles à L4.7 et L5.3), repli WebGL2, licence MIT ; un modèle maison demanderait plusieurs sessions pour moins. La version publiée ne se charge pas avec three ≥ r185 (`struct()`, issue #111, PR #118 non fusionnée, dépôt inactif depuis mai 2026) et suppose `three` = build WebGL : correctifs locaux, à reprendre à chaque mise à jour |
 | 2026-11-23 | Vitesse par défaut | 560 m/s | Vitesse réelle de l'ancien défaut (800 unités Mercator/s) : benchmarks comparables à la baseline |
 
 ## Journal des sessions
