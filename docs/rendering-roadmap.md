@@ -360,6 +360,15 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       tant que la souris est libre. Zone de survol du bord droit et thème MFD du panneau supprimés.
       Vérifié dans Chrome : presets, passage en Custom puis reconnaissance d'un preset, persistance
       après rechargement, Échap, largeur 400 px, captures sans HUD ni indication.
+      Refonte visuelle demandée ensuite par l'utilisateur (« plus gaming ») : trois maquettes
+      proposées (Hangar, Arcade, Tactical HUD), **Hangar** retenue avec navigation clavier, impact sur
+      les performances, sons d'interface et animations. Menu plein écran : colonne de catégories,
+      presets en cartes avec leur coût GPU relatif à High (`PRESET_GPU_COST`), sélecteurs ◀ ▶ à
+      niveaux, fiche du réglage sélectionné avec jauges coût / gain (`impact` du schéma, tirés des
+      mesures), barre de raccourcis. Clavier : ↑ ↓, ← →, Q / E, R (valeur par défaut), Échap ; les
+      raccourcis de vol sont bloqués menu ouvert. Sons synthétisés en Web Audio (`uiSounds.js`,
+      réglage Menu sounds). Police Rajdhani (OFL) dans `assets/fonts/rajdhani/`. HUD, réticule et
+      mini-carte masqués pendant la pause.
 - [x] **L2.9** Fiabiliser les mesures : `GPUTimer` avec une mesure par frame (horodatages de passe
       attribués à la frame) exportée par sous-système (terrain, ciel, post-traitement) ; `summary.fps.avg`
       calculé comme frames / durée au lieu de la moyenne des FPS instantanés.
@@ -584,6 +593,8 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
   Terrain detail (`LODThreshold` + anisotropie).
 - Fait ensuite : mesures des presets (L2.7 terminée) ; Ultra ramené à LODThreshold 1,4 ; plafond de
   la résolution dynamique relevé appliqué immédiatement ; `render:capture` passe `--set` dans l'URL.
+- Fait ensuite : refonte visuelle du menu de réglages en style « Hangar » (maquettes A / B / C
+  proposées, A retenue), navigation clavier, jauges d'impact, sons, animations.
 - Prochaine étape : clôture du lot 2.
 
 ### 2026-11-24 (12)
