@@ -11,6 +11,7 @@ const ICONS = {
   graphics: '<rect x="3" y="5" width="18" height="12" rx="1"/><path d="M8 21h8M12 17v4"/>',
   world: '<path d="M3 18l6-9 4 6 3-4 5 7z"/><circle cx="17" cy="6" r="2"/>',
   flight: '<path d="M12 2l2 7 8 3-8 2-2 8-2-8-8-2 8-3z"/>',
+  audio: '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 010 7M19 6a8.5 8.5 0 010 12"/>',
   controls: '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h1M10 10h1M14 10h1M18 10h1M7 14h10"/>',
   dev: '<path d="M8 9l-4 3 4 3M16 9l4 3-4 3M14 5l-4 14"/>',
 };
@@ -19,6 +20,7 @@ const TABS = [
   { id: 'graphics', label: 'Graphics', help: 'Image quality and the cost of each setting.' },
   { id: 'world', label: 'World', help: 'Where to fly, the ground imagery, the sun, the sky and the clouds.' },
   { id: 'flight', label: 'Flight', help: 'Speed, view, mouse and what is shown over the view.' },
+  { id: 'audio', label: 'Audio', help: 'Volume of each kind of sound.' },
   { id: 'controls', label: 'Controls', help: 'Keyboard and mouse controls in flight.' },
   { id: 'dev', label: 'Developer', help: 'Measurements, reference views and raw rendering values.', dev: true },
 ];

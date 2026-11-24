@@ -4,7 +4,7 @@
  *
  * Fields:
  * - key      CONFIG key
- * - tab      menu tab ('graphics' | 'world' | 'flight' | 'dev'); absent for values with no control
+ * - tab      menu tab ('graphics' | 'world' | 'flight' | 'audio' | 'dev'); absent for values with no control
  * - section  heading the control is listed under, within its tab
  * - label    control label; help: one sentence shown while the control is hovered or focused
  * - type     'toggle' | 'choice' (segmented buttons) | 'select' (drop-down) | 'range'
@@ -290,13 +290,58 @@ export const SETTINGS = [
     persist: true,
   },
   { key: 'minimapZoom', min: 3, max: 18, persist: true },
+
+  // ── Audio ──
   {
-    key: 'uiSounds',
-    tab: 'flight',
-    section: 'Interface',
-    label: 'Menu sounds',
-    help: 'Short sounds when moving through this menu and changing a setting.',
-    type: 'toggle',
+    key: 'masterVolume',
+    tab: 'audio',
+    section: 'Volume',
+    label: 'Master volume',
+    help: 'Volume of every sound of the simulator.',
+    type: 'range',
+    min: 0,
+    max: 1,
+    step: 0.05,
+    format: percent,
+    persist: true,
+  },
+  {
+    key: 'interfaceVolume',
+    tab: 'audio',
+    section: 'Volume',
+    label: 'Interface',
+    help: 'Sounds of this menu when moving through it and changing a setting.',
+    type: 'range',
+    min: 0,
+    max: 1,
+    step: 0.05,
+    format: percent,
+    persist: true,
+  },
+  {
+    key: 'engineVolume',
+    tab: 'audio',
+    section: 'Volume',
+    label: 'Engines',
+    help: 'Sound of the aircraft engines. The aircraft has no engine sound yet: this volume will apply to it.',
+    type: 'range',
+    min: 0,
+    max: 1,
+    step: 0.05,
+    format: percent,
+    persist: true,
+  },
+  {
+    key: 'radioVolume',
+    tab: 'audio',
+    section: 'Volume',
+    label: 'Radio',
+    help: 'Voices on the radio. There is no radio traffic yet: this volume will apply to it.',
+    type: 'range',
+    min: 0,
+    max: 1,
+    step: 0.05,
+    format: percent,
     persist: true,
   },
 

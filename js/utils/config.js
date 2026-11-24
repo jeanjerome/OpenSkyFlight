@@ -47,7 +47,12 @@ import { SETTINGS_BY_KEY } from './settingsSchema.js';
  * @property {boolean} showLogs               - Show log panel (default: false)
  * @property {boolean} showMinimap            - Show minimap (default: true)
  * @property {number}  minimapZoom            - Minimap zoom level, range [3..18] (default: 13)
- * @property {boolean} uiSounds               - Sounds of the settings menu (default: true)
+ *
+ * Audio (0 to 1):
+ * @property {number}  masterVolume           - Volume of all sounds (default: 0.8)
+ * @property {number}  interfaceVolume        - Menu sounds (default: 0.6)
+ * @property {number}  engineVolume           - Aircraft engines (default: 0.8)
+ * @property {number}  radioVolume            - Radio voices (default: 0.8)
  */
 
 /** @type {AppConfig} */
@@ -75,7 +80,10 @@ const CONFIG = {
   showLogs: false,
   showMinimap: true,
   minimapZoom: 13,
-  uiSounds: true,
+  masterVolume: 0.8,
+  interfaceVolume: 0.6,
+  engineVolume: 0.8,
+  radioVolume: 0.8,
   sunElevation: 35,
   sunAzimuth: 160,
   skyTurbidity: 2.0,

@@ -1,33 +1,15 @@
-import { CONFIG } from '../utils/config.js';
+import { audioChannel } from '../audio/AudioMixer.js';
 
 /**
- * Sounds of the settings menu, synthesised with Web Audio (no sound files).
- * Muted by CONFIG.uiSounds. The audio context starts on the first sound, which
- * always follows a key press or a click, as browsers require.
+ * Sounds of the settings menu, synthesised with Web Audio (no sound files), played
+ * on the interface channel of the mixer (interface and master volumes).
  */
 
-const MASTER_GAIN = 0.35;
-
-let ctx = null;
-let master = null;
-
-function audio() {
-  if (!ctx) {
-    try {
-      ctx = new AudioContext();
-    } catch {
-      return null;
-    }
-    master = ctx.createGain();
-    master.gain.value = MASTER_GAIN;
-    master.connect(ctx.destination);
-  }
-  if (ctx.state === 'suspended') ctx.resume();
-  return ctx;
-}
+/** Level of these sounds at full volume: short clicks, kept well below a full-scale signal */
+const LEVEL = 0.35;
 
 /** A short tone gliding from `from` to `to` Hz, with a fast attack and an exponential decay */
-function tone(c, { from, to = from, duration, type = 'sine', gain, delay = 0, cutoff = 6000 }) {
+function tone({ ctx: c, out }, { from, to = from, duration, type = 'sine', gain, delay = 0, cutoff = 6000 }) {
   const t0 = c.currentTime + delay;
   const osc = c.createOscillator();
   osc.type = type;
@@ -38,9 +20,9 @@ function tone(c, { from, to = from, duration, type = 'sine', gain, delay = 0, cu
   filter.frequency.value = cutoff;
   const env = c.createGain();
   env.gain.setValueAtTime(0, t0);
-  env.gain.linearRampToValueAtTime(gain, t0 + 0.005);
+  env.gain.linearRampToValueAtTime(gain * LEVEL, t0 + 0.005);
   env.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
-  osc.connect(filter).connect(env).connect(master);
+  osc.connect(filter).connect(env).connect(out);
   osc.start(t0);
   osc.stop(t0 + duration + 0.02);
 }
@@ -69,7 +51,6 @@ const SOUNDS = {
 
 /** @param {keyof SOUNDS} name */
 export function playUiSound(name) {
-  if (!CONFIG.uiSounds) return;
-  const c = audio();
-  if (c) SOUNDS[name](c);
+  const channel = audioChannel('interface');
+  if (channel) SOUNDS[name](channel);
 }
