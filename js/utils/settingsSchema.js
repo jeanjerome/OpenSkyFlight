@@ -15,6 +15,10 @@
  * - persist  kept in localStorage across sessions
  * - reload   'terrain' when the value only applies to terrain tiles loaded afterwards:
  *            the terrain is reloaded when the menu closes
+ * - ordered  the options of a 'choice' or 'select' go from least to most: the menu shows
+ *            the level reached and stops at both ends instead of wrapping around
+ * - impact   { cost, gain } from 0 to 5, and a note, shown for the graphics settings:
+ *            measured on the reference views (docs/rendering-roadmap.md, L2.7)
  */
 
 import { MACH_1_MS } from '../constants/physics.js';
@@ -50,6 +54,8 @@ export const SETTINGS = [
       ['ultra', 'Ultra'],
       ['custom', 'Custom'],
     ],
+    ordered: true,
+    impact: { note: 'The GPU time of each preset is shown relative to High, as measured on the reference views.' },
     persist: true,
   },
   {
@@ -64,6 +70,12 @@ export const SETTINGS = [
       ['high', 'High'],
       ['maximum', 'Maximum'],
     ],
+    ordered: true,
+    impact: {
+      cost: 4,
+      gain: 4,
+      note: 'Standard saves about a quarter of the GPU time of Maximum, High about a tenth.',
+    },
     persist: true,
   },
   {
@@ -73,6 +85,7 @@ export const SETTINGS = [
     label: 'Prioritise smoothness',
     help: 'Lowers the image sharpness when needed to keep 60 frames per second.',
     type: 'toggle',
+    impact: { cost: 0, gain: 0, note: 'Costs nothing: it only lowers the load when the GPU falls behind.' },
     persist: true,
   },
   {
@@ -87,6 +100,12 @@ export const SETTINGS = [
       ['high', 'High'],
       ['maximum', 'Maximum'],
     ],
+    ordered: true,
+    impact: {
+      cost: 3,
+      gain: 2,
+      note: 'Normal draws a third fewer terrain tiles than High; Maximum draws a third more and can stutter at 120 Hz.',
+    },
     persist: true,
   },
   {
@@ -96,6 +115,7 @@ export const SETTINGS = [
     label: 'Sun glow',
     help: 'Soft glow around the sun and its reflections on water and snow.',
     type: 'toggle',
+    impact: { cost: 2, gain: 3, note: 'About a tenth of the GPU time of a frame.' },
     persist: true,
   },
   {
@@ -105,6 +125,7 @@ export const SETTINGS = [
     label: 'Eye adaptation',
     help: 'Adjusts the brightness to the scene, as the eye does between shaded valleys and bright snow.',
     type: 'toggle',
+    impact: { cost: 1, gain: 3, note: 'Under 1 % of the GPU time of a frame.' },
     persist: true,
   },
 
@@ -269,6 +290,15 @@ export const SETTINGS = [
     persist: true,
   },
   { key: 'minimapZoom', min: 3, max: 18, persist: true },
+  {
+    key: 'uiSounds',
+    tab: 'flight',
+    section: 'Interface',
+    label: 'Menu sounds',
+    help: 'Short sounds when moving through this menu and changing a setting.',
+    type: 'toggle',
+    persist: true,
+  },
 
   // ── Developer ──
   {
@@ -291,6 +321,7 @@ export const SETTINGS = [
       ['WARN', 'Warning'],
       ['ERROR', 'Error'],
     ],
+    ordered: true,
     persist: true,
   },
   {
@@ -327,6 +358,7 @@ export const SETTINGS = [
       [8, '8×'],
       [16, '16×'],
     ],
+    ordered: true,
     reload: 'terrain',
   },
   {

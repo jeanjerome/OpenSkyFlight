@@ -60,6 +60,7 @@ const MIME = {
   '.json': 'application/json',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
 };
 
 // Content types per source (ESRI satellite returns JPEG, others PNG)

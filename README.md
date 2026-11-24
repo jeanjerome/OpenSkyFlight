@@ -21,7 +21,7 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 - **Cockpit / chase toggle** — press `V` to switch between first-person cockpit (roll applied to horizon) and third-person chase view
 - **Flight simulator controls** — 6-DOF camera with pointer lock, banking, pitch/yaw, full 360° looping
 - **Aircraft-style HUD** — compass, artificial horizon, altimeter (MSL + AGL), speed indicator
-- **Settings menu** — `Esc` pauses the flight and opens tabbed settings (Graphics, World, Flight, Controls) over the live scene; a quality preset (Low / Medium / High / Ultra) sets the graphics settings at once, settings are remembered across sessions and can be given in the URL (`?quality=low&showClouds=true`); `?dev=1` adds a Developer tab (live GPU figures, reference views, benchmark, raw rendering values)
+- **Settings menu** — `Esc` pauses the flight and opens a game-style menu (Graphics, World, Flight, Controls) over the live scene, driven by mouse or keyboard (`↑` `↓` select, `←` `→` change, `Q` / `E` switch tab, `R` restore the default), with the performance impact and visual gain of each graphics setting and synthesised interface sounds; a quality preset (Low / Medium / High / Ultra) sets the graphics settings at once, settings are remembered across sessions and can be given in the URL (`?quality=low&showClouds=true`); `?dev=1` adds a Developer tab (live GPU figures, reference views, benchmark, raw rendering values)
 - **OSM minimap** — real-time 2D map overlay with airplane marker and independent zoom
 - **Flight plan system** — record waypoints, save/load flight plans, and engage autopilot to follow a path automatically
 - **Local tile cache** — transparent caching proxy, pre-download tiles for offline flight
@@ -270,6 +270,12 @@ Place name search uses the [Nominatim](https://nominatim.openstreetmap.org/) geo
 - **License:** results are OpenStreetMap data under [ODbL](https://opendatacommons.org/licenses/odbl/).
 - **Attribution:** © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors.
 - **Usage policy:** max 1 request/second, no bulk geocoding. See the [Nominatim Usage Policy](https://operations.osmfoundation.org/policies/nominatim/).
+
+### Font — Rajdhani
+
+The settings menu uses [Rajdhani](https://fonts.google.com/specimen/Rajdhani) by the Indian Type Foundry, bundled in `assets/fonts/rajdhani/`.
+
+- **License:** [SIL Open Font License 1.1](assets/fonts/rajdhani/OFL.txt).
 
 ## License
 

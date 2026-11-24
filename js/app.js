@@ -31,9 +31,6 @@ import ChaseCameraController from './camera/ChaseCameraController.js';
 import FlightPlanRecorder from './flightplan/FlightPlanRecorder.js';
 import Stats from 'stats.js';
 
-/** An Escape this soon after the menu opened is the one that released the mouse */
-const ESCAPE_REOPEN_GUARD_MS = 500;
-
 async function initApp() {
   // --- Settings: stored, then URL, then the technical values of the graphics settings ---
   bindQualitySettings(loadSettings());
@@ -190,15 +187,10 @@ async function initApp() {
     }
   });
 
+  // While the menu is open it handles Escape itself (resume)
   input.on('Escape', () => {
-    if (hud.isFlightPlanMenuOpen()) {
-      hud.closeFlightPlanMenu();
-    } else if (panel.isOpen) {
-      // The Escape that released the mouse already opened the menu
-      if (performance.now() - panel.openedAt > ESCAPE_REOPEN_GUARD_MS) panel.resume();
-    } else {
-      panel.open();
-    }
+    if (hud.isFlightPlanMenuOpen()) hud.closeFlightPlanMenu();
+    else panel.open();
   });
 
   input.onKey('n', (e) => {

@@ -47,6 +47,7 @@ import { SETTINGS_BY_KEY } from './settingsSchema.js';
  * @property {boolean} showLogs               - Show log panel (default: false)
  * @property {boolean} showMinimap            - Show minimap (default: true)
  * @property {number}  minimapZoom            - Minimap zoom level, range [3..18] (default: 13)
+ * @property {boolean} uiSounds               - Sounds of the settings menu (default: true)
  */
 
 /** @type {AppConfig} */
@@ -74,6 +75,7 @@ const CONFIG = {
   showLogs: false,
   showMinimap: true,
   minimapZoom: 13,
+  uiSounds: true,
   sunElevation: 35,
   sunAzimuth: 160,
   skyTurbidity: 2.0,

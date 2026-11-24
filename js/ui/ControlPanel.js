@@ -1,21 +1,36 @@
-import { CONFIG, onChange, update } from '../utils/config.js';
+import { CONFIG, DEFAULTS, onChange, update } from '../utils/config.js';
 import { SETTINGS, SETTINGS_BY_KEY } from '../utils/settingsSchema.js';
 import { resetSettings } from '../utils/settingsStore.js';
+import { QUALITY_PRESETS, PRESET_GPU_COST } from '../utils/qualityPresets.js';
 import Logger from '../utils/Logger.js';
 import { showNotification } from './Notification.js';
 import { SHORTCUTS } from './shortcuts.js';
+import { playUiSound } from './uiSounds.js';
+
+const ICONS = {
+  graphics: '<rect x="3" y="5" width="18" height="12" rx="1"/><path d="M8 21h8M12 17v4"/>',
+  world: '<path d="M3 18l6-9 4 6 3-4 5 7z"/><circle cx="17" cy="6" r="2"/>',
+  flight: '<path d="M12 2l2 7 8 3-8 2-2 8-2-8-8-2 8-3z"/>',
+  controls: '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h1M10 10h1M14 10h1M18 10h1M7 14h10"/>',
+  dev: '<path d="M8 9l-4 3 4 3M16 9l4 3-4 3M14 5l-4 14"/>',
+};
 
 const TABS = [
-  { id: 'graphics', label: 'Graphics' },
-  { id: 'world', label: 'World' },
-  { id: 'flight', label: 'Flight' },
-  { id: 'controls', label: 'Controls' },
-  { id: 'dev', label: 'Developer', dev: true },
+  { id: 'graphics', label: 'Graphics', help: 'Image quality and the cost of each setting.' },
+  { id: 'world', label: 'World', help: 'Where to fly, the ground imagery, the sun, the sky and the clouds.' },
+  { id: 'flight', label: 'Flight', help: 'Speed, view, mouse and what is shown over the view.' },
+  { id: 'controls', label: 'Controls', help: 'Keyboard and mouse controls in flight.' },
+  { id: 'dev', label: 'Developer', help: 'Measurements, reference views and raw rendering values.', dev: true },
 ];
 
 const LOG_SLIDER_STEPS = 1000;
+/** Slider positions moved by one press of ← or → on a logarithmic slider */
+const LOG_SLIDER_KEY_STEP = 20;
 const METRICS_INTERVAL_MS = 250;
 const RESET_CONFIRM_MS = 3000;
+/** An Escape this soon after the menu opened is the one that released the mouse */
+const ESCAPE_REOPEN_GUARD_MS = 500;
+const MAX_LEVEL_BARS = 5;
 
 /** Creates an element with a class and optional text */
 function el(tag, className, text) {
@@ -25,9 +40,41 @@ function el(tag, className, text) {
   return node;
 }
 
+function button(className, text, label) {
+  const b = el('button', className, text);
+  b.type = 'button';
+  if (label) b.setAttribute('aria-label', label);
+  return b;
+}
+
+/** Row of `count` bars, the first `filled` of them lit */
+function levelBars(className, count, filled) {
+  const bars = el('div', className);
+  for (let i = 0; i < count; i++) {
+    const bar = el('i');
+    if (i < filled) bar.className = 'f';
+    bars.append(bar);
+  }
+  return bars;
+}
+
+function formatCoordinates(lat, lon) {
+  const ns = lat >= 0 ? 'N' : 'S';
+  const ew = lon >= 0 ? 'E' : 'W';
+  return `${Math.abs(lat).toFixed(2)}°${ns}  ${Math.abs(lon).toFixed(2)}°${ew}`;
+}
+
+function isTextField(target) {
+  return target?.tagName === 'INPUT' && target.type !== 'range';
+}
+
 /**
  * Settings menu: tabs generated from the settings schema (js/utils/settingsSchema.js),
  * kept in sync with CONFIG both ways. Opening it pauses the flight (see app.js).
+ *
+ * Every setting is a row. One row is highlighted at a time, by the mouse or with
+ * ↑ ↓; ← → change its value, R restores its default, Q E switch tabs, Escape
+ * resumes the flight. While the menu is open, keys do not reach the flight shortcuts.
  *
  * @typedef {Object} PanelActions
  * @property {() => void} resume - give the mouse back to the flight
@@ -39,6 +86,15 @@ function el(tag, className, text) {
  * @property {() => boolean} toggleDebugTiles - returns whether the overlay is on
  * @property {() => void} toggleBenchmark
  * @property {() => void} storeBaseline
+ *
+ * @typedef {Object} Row
+ * @property {HTMLElement} el
+ * @property {string} title
+ * @property {string} [help]
+ * @property {Object} [impact]
+ * @property {(dir: number) => void} [adjust] - ← (-1) or → (+1)
+ * @property {() => void} [activate] - Enter or Space
+ * @property {() => void} [reset] - R
  */
 export default class ControlPanel {
   /**
@@ -54,6 +110,10 @@ export default class ControlPanel {
     this._controls = {};
     this._panes = {};
     this._tabButtons = {};
+    /** @type {Object<string, Row[]>} */
+    this._rows = {};
+    this._selected = null;
+    this._tabs = TABS.filter((t) => !t.dev || devMode);
     this._activeTab = 'graphics';
     this._pendingTerrainReload = false;
     this._metricsTimer = null;
@@ -62,11 +122,15 @@ export default class ControlPanel {
 
     onChange((key, value) => {
       this._controls[key]?.(value);
+      if (key === 'lat' || key === 'lon') this._locEl.textContent = formatCoordinates(CONFIG.lat, CONFIG.lon);
       if (SETTINGS_BY_KEY[key]?.reload === 'terrain') {
         if (this.isOpen) this._pendingTerrainReload = true;
         else this.actions.reloadTerrain();
       }
     });
+
+    // Capture phase on window: runs before the flight shortcuts and controls
+    window.addEventListener('keydown', (e) => this._onKeyDown(e), true);
   }
 
   /** @param {(open: boolean) => void} fn - called when the menu opens or closes */
@@ -79,7 +143,9 @@ export default class ControlPanel {
     this.isOpen = true;
     this.openedAt = performance.now();
     this.root.hidden = false;
-    this._refreshMetrics();
+    document.body.classList.add('menu-open');
+    playUiSound('open');
+    this._selectTab(this._activeTab, { silent: true });
     for (const fn of this._listeners) fn(true);
   }
 
@@ -87,7 +153,9 @@ export default class ControlPanel {
     if (!this.isOpen) return;
     this.isOpen = false;
     this.root.hidden = true;
+    document.body.classList.remove('menu-open');
     this._stopMetrics();
+    if (document.activeElement && this.root.contains(document.activeElement)) document.activeElement.blur();
     if (this._pendingTerrainReload) {
       this._pendingTerrainReload = false;
       this.actions.reloadTerrain();
@@ -97,8 +165,71 @@ export default class ControlPanel {
 
   /** Closes the menu and gives the mouse back to the flight */
   resume() {
+    playUiSound('close');
     this.close();
     this.actions.resume();
+  }
+
+  /** Changes a setting from the menu, with its sound */
+  _set(key, value) {
+    const before = CONFIG[key];
+    update(key, value);
+    playUiSound(CONFIG[key] !== before ? 'change' : 'deny');
+  }
+
+  // ── Keyboard ──
+
+  _onKeyDown(e) {
+    if (!this.isOpen || e.metaKey || e.ctrlKey || e.altKey) return;
+    const typing = isTextField(e.target);
+
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      e.preventDefault();
+      if (typing) e.target.blur();
+      else if (performance.now() - this.openedAt > ESCAPE_REOPEN_GUARD_MS) this.resume();
+      return;
+    }
+    if (typing) return;
+
+    // No other key reaches the flight shortcuts while the menu is open
+    e.stopPropagation();
+    const row = this._selected;
+    const handlers = {
+      ArrowUp: () => this._moveSelection(-1),
+      ArrowDown: () => this._moveSelection(1),
+      ArrowLeft: () => row?.adjust?.(-1),
+      ArrowRight: () => row?.adjust?.(1),
+      Enter: () => row?.activate?.(),
+      ' ': () => row?.activate?.(),
+      q: () => this._stepTab(-1),
+      e: () => this._stepTab(1),
+      r: () => row?.reset?.(),
+    };
+    const handler = handlers[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+    if (handler) {
+      e.preventDefault();
+      handler();
+    }
+  }
+
+  _moveSelection(dir) {
+    const rows = this._rows[this._activeTab] || [];
+    if (rows.length === 0) {
+      // Panes without rows (Controls) scroll instead
+      this._panes[this._activeTab].parentElement.scrollBy({ top: dir * 120, behavior: 'smooth' });
+      return;
+    }
+    const index = rows.indexOf(this._selected);
+    const next = rows[Math.max(0, Math.min(rows.length - 1, index + dir))];
+    if (next === this._selected) playUiSound('deny');
+    else this._selectRow(next, { keyboard: true });
+  }
+
+  _stepTab(dir) {
+    const ids = this._tabs.map((t) => t.id);
+    const index = ids.indexOf(this._activeTab);
+    this._selectTab(ids[(index + dir + ids.length) % ids.length]);
   }
 
   // ── Construction ──
@@ -107,70 +238,120 @@ export default class ControlPanel {
     this.root = el('div');
     this.root.id = 'settings-menu';
     this.root.hidden = true;
+    this.root.setAttribute('role', 'dialog');
+    this.root.setAttribute('aria-label', 'Settings');
 
-    const panel = el('div', 'sm-panel');
-    panel.setAttribute('role', 'dialog');
-    panel.setAttribute('aria-label', 'Settings');
+    // Top bar
+    const top = el('header', 'sm-top');
+    this._crumbEl = el('span', 'sm-crumb');
+    this._locEl = el('span', 'sm-loc', formatCoordinates(CONFIG.lat, CONFIG.lon));
+    top.append(el('span', 'sm-paused', 'Paused'), el('span', 'sm-sep'), this._crumbEl, this._locEl);
 
-    const header = el('header', 'sm-header');
-    header.append(el('span', 'sm-title', 'Settings'));
-    const tabs = el('nav', 'sm-tabs');
-    tabs.setAttribute('role', 'tablist');
-    header.append(tabs);
-
-    const body = el('div', 'sm-body');
-    for (const tab of TABS) {
-      if (tab.dev && !this.devMode) continue;
-      const button = el('button', 'sm-tab', tab.label);
-      button.type = 'button';
-      button.setAttribute('role', 'tab');
-      button.addEventListener('click', () => this._selectTab(tab.id));
-      tabs.append(button);
-      this._tabButtons[tab.id] = button;
+    // Category rail
+    const rail = el('nav', 'sm-rail');
+    rail.setAttribute('role', 'tablist');
+    const main = el('main', 'sm-main');
+    for (const tab of this._tabs) {
+      const b = button('sm-cat');
+      b.setAttribute('role', 'tab');
+      b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[tab.id]}</svg>`;
+      b.append(el('span', '', tab.label));
+      b.addEventListener('click', () => this._selectTab(tab.id));
+      rail.append(b);
+      this._tabButtons[tab.id] = b;
 
       const pane = el('div', 'sm-pane');
       pane.setAttribute('role', 'tabpanel');
       this._panes[tab.id] = pane;
-      body.append(pane);
+      this._rows[tab.id] = [];
+      main.append(pane);
     }
+    const reset = button('sm-reset', 'Reset all');
+    reset.addEventListener('click', () => this._onReset(reset));
+    rail.append(el('div', 'sm-rail-fill'), reset);
 
-    this._buildWorldLocation(this._panes.world);
+    // Description of the highlighted row
+    const info = el('aside', 'sm-info');
+    this._infoTitle = el('h4');
+    this._infoText = el('p');
+    this._infoMeters = el('div', 'sm-meters');
+    this._infoNote = el('p', 'sm-note');
+    info.append(this._infoTitle, this._infoText, this._infoMeters, this._infoNote);
+
+    // Key hints
+    const bottom = el('footer', 'sm-bottom');
+    const hint = (keys, text) => {
+      const span = el('span', 'sm-hint');
+      for (const k of keys) span.append(el('kbd', '', k));
+      span.append(text);
+      return span;
+    };
+    const resume = button('sm-resume');
+    resume.append(el('kbd', '', 'Esc'), 'Resume flight');
+    resume.addEventListener('click', () => this.resume());
+    bottom.append(
+      hint(['↑↓'], 'Select'),
+      hint(['←→'], 'Change'),
+      hint(['Q', 'E'], 'Tab'),
+      hint(['R'], 'Default'),
+      resume,
+    );
+
+    this._buildWorldLocation();
     this._buildControls(this._panes.controls);
     if (this.devMode) this._buildDevTools(this._panes.dev);
     this._buildSettings();
 
-    const footer = el('footer', 'sm-footer');
-    this._helpEl = el('p', 'sm-help');
-    const buttons = el('div', 'sm-actions');
-    const reset = el('button', 'sm-btn', 'Reset all');
-    reset.type = 'button';
-    reset.addEventListener('click', () => this._onReset(reset));
-    const resume = el('button', 'sm-btn sm-btn-primary', 'Resume');
-    resume.type = 'button';
-    resume.addEventListener('click', () => this.resume());
-    buttons.append(reset, resume);
-    footer.append(this._helpEl, buttons);
-
-    panel.append(header, body, footer);
-    this.root.append(panel);
+    this.root.append(el('div', 'sm-shade'), top, rail, main, info, bottom);
     document.body.append(this.root);
-    this._selectTab(this._activeTab);
   }
 
-  _selectTab(id) {
+  _selectTab(id, { silent = false } = {}) {
+    if (!silent && id !== this._activeTab) playUiSound('tab');
     this._activeTab = id;
-    for (const [tabId, button] of Object.entries(this._tabButtons)) {
+    const tab = this._tabs.find((t) => t.id === id);
+    this._crumbEl.textContent = `Settings / ${tab.label}`;
+    for (const [tabId, b] of Object.entries(this._tabButtons)) {
       const active = tabId === id;
-      button.classList.toggle('active', active);
-      button.setAttribute('aria-selected', String(active));
+      b.classList.toggle('on', active);
+      b.setAttribute('aria-selected', String(active));
       this._panes[tabId].hidden = !active;
     }
-    this._showHelp('');
+    const first = this._rows[id][0];
+    if (first) this._selectRow(first, { keyboard: true, silent: true });
+    else this._showInfo({ title: tab.label, help: tab.help });
     this._refreshMetrics();
   }
 
-  _showHelp(text) {
-    this._helpEl.textContent = text;
+  /** Highlights a row and describes it in the info card */
+  _selectRow(row, { keyboard = false, silent = false } = {}) {
+    if (row === this._selected) return;
+    this._selected?.el.classList.remove('sel');
+    this._selected = row;
+    row.el.classList.add('sel');
+    if (!silent) playUiSound('move');
+    if (keyboard) {
+      row.el.focus({ preventScroll: true });
+      row.el.scrollIntoView({ block: 'nearest' });
+    }
+    this._showInfo(row);
+  }
+
+  _showInfo({ title, help, impact }) {
+    this._infoTitle.textContent = title;
+    this._infoText.textContent = help || '';
+    this._infoMeters.replaceChildren();
+    if (impact?.cost !== undefined) {
+      for (const [name, value, cls] of [
+        ['Performance impact', impact.cost, 'cost'],
+        ['Visual gain', impact.gain, 'gain'],
+      ]) {
+        const meter = el('div', `sm-meter sm-meter-${cls}`);
+        meter.append(el('span', '', name), levelBars('sm-meter-bars', MAX_LEVEL_BARS, value));
+        this._infoMeters.append(meter);
+      }
+    }
+    this._infoNote.textContent = impact?.note || '';
   }
 
   /** Returns the section of a pane with that title, created on first use */
@@ -179,117 +360,145 @@ export default class ControlPanel {
     if (!section) {
       section = el('section', 'sm-section');
       section.dataset.title = title || '';
-      if (title) section.append(el('h3', 'sm-section-title', title));
+      if (title) section.append(el('h3', 'sm-group', title));
       pane.append(section);
     }
     return section;
   }
 
-  _buildSettings() {
-    for (const setting of SETTINGS) {
-      const pane = setting.tab && this._panes[setting.tab];
-      if (!pane || !setting.type) continue;
-      const row = this._buildRow(setting);
-      this._section(pane, setting.section).append(row);
-    }
-  }
-
-  _buildRow(setting) {
-    const row = el('div', `sm-row sm-row-${setting.type}`);
-    const label = el('span', 'sm-label', setting.label);
-    row.append(label);
-
-    let help = setting.help || '';
-    if (setting.reload === 'terrain') help += ' Applied to the terrain when the menu closes.';
-    if (help) {
-      row.addEventListener('mouseenter', () => this._showHelp(help));
-      row.addEventListener('mouseleave', () => this._showHelp(''));
-      row.addEventListener('focusin', () => this._showHelp(help));
-    }
-
-    const builders = {
-      toggle: () => this._toggle(setting, label),
-      choice: () => this._choice(setting),
-      select: () => this._select(setting),
-      range: () => this._range(setting, row),
-    };
-    row.append(builders[setting.type]());
-    this._controls[setting.key](CONFIG[setting.key]);
+  /**
+   * Adds a selectable row to a tab
+   * @param {string} tabId
+   * @param {string} [sectionTitle]
+   * @param {Row} row
+   */
+  _addRow(tabId, sectionTitle, row) {
+    row.el.tabIndex = -1;
+    row.el.addEventListener('mouseenter', () => this._selectRow(row));
+    row.el.addEventListener('focusin', () => this._selectRow(row, { silent: true }));
+    this._section(this._panes[tabId], sectionTitle).append(row.el);
+    this._rows[tabId].push(row);
     return row;
   }
 
-  _toggle(setting, label) {
-    const button = el('button', 'sm-switch');
-    button.type = 'button';
-    button.setAttribute('role', 'switch');
-    button.setAttribute('aria-label', setting.label);
-    button.addEventListener('click', () => update(setting.key, !CONFIG[setting.key]));
-    label.addEventListener('click', () => button.click());
-    this._controls[setting.key] = (value) => button.setAttribute('aria-checked', String(Boolean(value)));
-    return button;
+  _buildSettings() {
+    for (const setting of SETTINGS) {
+      if (!setting.tab || !setting.type || !this._panes[setting.tab]) continue;
+      const row = setting.key === 'quality' ? this._presetRow(setting) : this._settingRow(setting);
+      this._controls[setting.key](CONFIG[setting.key]);
+      this._addRow(setting.tab, setting.section, row);
+    }
   }
 
-  _choice(setting) {
-    const group = el('div', 'sm-choice');
-    group.setAttribute('role', 'radiogroup');
+  _settingRow(setting) {
+    const rowEl = el('div', `sm-row sm-row-${setting.type}`);
+    rowEl.append(el('span', 'sm-label', setting.label));
+    let help = setting.help || '';
+    if (setting.reload === 'terrain') help += ' Applied to the terrain when the menu closes.';
+    const row = {
+      el: rowEl,
+      title: setting.label,
+      help,
+      impact: setting.impact,
+      reset: () => this._set(setting.key, DEFAULTS[setting.key]),
+    };
+    const builders = {
+      toggle: () => this._toggle(setting, row),
+      choice: () => this._cycle(setting, row),
+      select: () => this._cycle(setting, row),
+      range: () => this._range(setting, row),
+    };
+    rowEl.append(builders[setting.type]());
+    return row;
+  }
+
+  _toggle(setting, row) {
+    const group = el('div', 'sm-toggle');
+    group.setAttribute('role', 'switch');
     group.setAttribute('aria-label', setting.label);
-    const buttons = setting.options.map(([value, text]) => {
-      const button = el('button', 'sm-choice-btn', text);
-      button.type = 'button';
-      button.setAttribute('role', 'radio');
-      // 'custom' is a state reached by changing a setting by hand, not a choice
-      if (value === 'custom') {
-        button.classList.add('sm-choice-state');
-        button.tabIndex = -1;
-      } else {
-        button.addEventListener('click', () => update(setting.key, value));
-      }
-      group.append(button);
-      return [value, button];
-    });
-    this._controls[setting.key] = (current) => {
-      for (const [value, button] of buttons) {
-        const checked = value === current;
-        button.setAttribute('aria-checked', String(checked));
-        if (value === 'custom') button.hidden = !checked;
-      }
+    const off = button('', 'Off');
+    const on = button('', 'On');
+    off.addEventListener('click', () => this._set(setting.key, false));
+    on.addEventListener('click', () => this._set(setting.key, true));
+    group.append(off, on);
+    row.adjust = (dir) => this._set(setting.key, dir > 0);
+    row.activate = () => this._set(setting.key, !CONFIG[setting.key]);
+    row.el.querySelector('.sm-label').addEventListener('click', row.activate);
+    this._controls[setting.key] = (value) => {
+      group.setAttribute('aria-checked', String(Boolean(value)));
+      off.classList.toggle('on', !value);
+      on.classList.toggle('on', Boolean(value));
     };
     return group;
   }
 
-  _select(setting) {
-    const select = el('select', 'sm-select');
-    select.setAttribute('aria-label', setting.label);
-    for (const [value, text] of setting.options) {
-      const option = el('option', '', text);
-      option.value = String(value);
-      select.append(option);
-    }
-    select.addEventListener('change', () => {
-      const option = setting.options.find(([value]) => String(value) === select.value);
-      if (option) update(setting.key, option[0]);
-    });
-    this._controls[setting.key] = (value) => {
-      select.value = String(value);
+  /** ◀ value ▶ selector for 'choice' and 'select' settings */
+  _cycle(setting, row) {
+    const options = setting.options.filter(([value]) => value !== 'custom');
+    const wrap = el('div', 'sm-cycle');
+    const prev = button('sm-arrow', '◀', `Previous ${setting.label}`);
+    const next = button('sm-arrow', '▶', `Next ${setting.label}`);
+    const value = el('div', 'sm-cycle-value');
+    const text = el('span');
+    const pips = el('div', 'sm-pips');
+    value.append(text, pips);
+    wrap.append(prev, value, next);
+
+    const indexOf = () => options.findIndex(([v]) => v === CONFIG[setting.key]);
+    const step = (dir) => {
+      let index = indexOf() + dir;
+      if (setting.ordered) {
+        if (index < 0 || index >= options.length) {
+          playUiSound('deny');
+          return;
+        }
+      } else {
+        index = (index + options.length) % options.length;
+      }
+      this._set(setting.key, options[index][0]);
     };
-    return select;
+    prev.addEventListener('click', () => step(-1));
+    next.addEventListener('click', () => step(1));
+    value.addEventListener('click', () => step(1));
+    row.adjust = step;
+    row.activate = () => step(1);
+
+    this._controls[setting.key] = (current) => {
+      const index = options.findIndex(([v]) => v === current);
+      text.textContent = index >= 0 ? options[index][1] : String(current);
+      pips.replaceChildren(
+        ...options.map((_, i) => {
+          const pip = el('i');
+          if (setting.ordered ? i <= index : i === index) pip.className = 'f';
+          return pip;
+        }),
+      );
+      if (setting.ordered) {
+        prev.disabled = index <= 0;
+        next.disabled = index >= options.length - 1;
+      }
+    };
+    return wrap;
   }
 
   _range(setting, row) {
-    const value = el('span', 'sm-value');
-    row.querySelector('.sm-label').after(value);
+    const wrap = el('div', 'sm-slider');
     const input = el('input', 'sm-range');
     input.type = 'range';
     input.setAttribute('aria-label', setting.label);
+    const value = el('span', 'sm-value');
+    wrap.append(input, value);
 
     let toValue = Number;
     let toPosition = (v) => v;
+    let keyStep = setting.step;
     if (setting.log) {
       const minLog = Math.log(setting.min);
       const span = Math.log(setting.max) - minLog;
       input.min = 0;
       input.max = LOG_SLIDER_STEPS;
       input.step = 1;
+      keyStep = LOG_SLIDER_KEY_STEP;
       toValue = (p) => Math.exp(minLog + (p / LOG_SLIDER_STEPS) * span);
       toPosition = (v) => Math.round(((Math.log(v) - minLog) / span) * LOG_SLIDER_STEPS);
     } else {
@@ -298,33 +507,87 @@ export default class ControlPanel {
       input.step = setting.step;
     }
     const format = setting.format || String;
+    const fill = () => {
+      const p = (Number(input.value) - Number(input.min)) / (Number(input.max) - Number(input.min));
+      input.style.setProperty('--fill', `${(p * 100).toFixed(1)}%`);
+    };
 
     input.addEventListener('input', () => update(setting.key, toValue(Number(input.value))));
+    input.addEventListener('change', () => playUiSound('change'));
+    // The slider is driven by the row's ← →, not by its own key handling
+    input.tabIndex = -1;
+    row.adjust = (dir) => {
+      const position = Math.max(Number(input.min), Math.min(Number(input.max), Number(input.value) + dir * keyStep));
+      this._set(setting.key, toValue(position));
+    };
     this._controls[setting.key] = (v) => {
       input.value = toPosition(v);
       value.textContent = format(v);
+      fill();
     };
-    return input;
+    return wrap;
+  }
+
+  /** Preset cards: the quality setting */
+  _presetRow(setting) {
+    const rowEl = el('div', 'sm-row sm-row-presets');
+    const head = el('div', 'sm-presets-head');
+    const custom = el('span', 'sm-custom', 'Custom');
+    head.append(el('span', 'sm-label', setting.label), custom);
+    const cards = el('div', 'sm-presets');
+    const names = Object.keys(QUALITY_PRESETS);
+    const cardEls = names.map((name, i) => {
+      const card = button('sm-preset');
+      card.append(
+        el('b', '', setting.options.find(([v]) => v === name)[1]),
+        el('small', '', `${Math.round(PRESET_GPU_COST[name] * 100)} % GPU`),
+        levelBars('sm-preset-bars', names.length, i + 1),
+      );
+      card.title = `GPU time relative to High: ${Math.round(PRESET_GPU_COST[name] * 100)} %`;
+      card.addEventListener('click', () => this._set('quality', name));
+      cards.append(card);
+      return [name, card];
+    });
+    rowEl.append(head, cards);
+
+    const row = {
+      el: rowEl,
+      title: setting.label,
+      help: setting.help,
+      impact: setting.impact,
+      reset: () => this._set('quality', DEFAULTS.quality),
+    };
+    row.adjust = (dir) => {
+      let index = names.indexOf(CONFIG.quality);
+      // From Custom, ← → start from the middle presets
+      if (index < 0) index = dir > 0 ? names.indexOf('medium') : names.indexOf('high');
+      const next = index + dir;
+      if (next < 0 || next >= names.length) playUiSound('deny');
+      else this._set('quality', names[next]);
+    };
+    this._controls.quality = (current) => {
+      for (const [name, card] of cardEls) {
+        card.classList.toggle('on', name === current);
+        card.setAttribute('aria-pressed', String(name === current));
+      }
+      custom.hidden = current !== 'custom';
+    };
+    return row;
   }
 
   // ── World: location ──
 
-  _buildWorldLocation(pane) {
-    const section = this._section(pane, 'Location');
-    const searchRow = el('div', 'sm-row sm-row-stack');
-    const searchLine = el('div', 'sm-inline');
+  _buildWorldLocation() {
     const search = el('input', 'sm-input');
     search.type = 'search';
-    search.placeholder = 'Search a place: Mont Blanc, Grand Canyon…';
+    search.placeholder = 'Mont Blanc, Grand Canyon…';
     search.setAttribute('aria-label', 'Search a place');
-    const searchBtn = el('button', 'sm-btn', 'Search');
-    searchBtn.type = 'button';
+    const searchBtn = button('sm-btn', 'Search');
+    const searchRow = el('div', 'sm-row sm-row-field');
+    const searchLine = el('div', 'sm-field');
     searchLine.append(search, searchBtn);
-    const found = el('p', 'sm-note');
-    searchRow.append(searchLine, found);
+    searchRow.append(el('span', 'sm-label', 'Search'), searchLine);
 
-    const coordRow = el('div', 'sm-row sm-row-stack');
-    const coordLine = el('div', 'sm-inline');
     const lat = el('input', 'sm-input sm-input-num');
     const lon = el('input', 'sm-input sm-input-num');
     for (const [input, name] of [
@@ -338,16 +601,31 @@ export default class ControlPanel {
     }
     lat.value = CONFIG.lat;
     lon.value = CONFIG.lon;
-    const fly = el('button', 'sm-btn sm-btn-primary', 'Fly there');
-    fly.type = 'button';
+    const fly = button('sm-btn sm-btn-primary', 'Fly there');
+    const coordRow = el('div', 'sm-row sm-row-field');
+    const coordLine = el('div', 'sm-field');
     coordLine.append(lat, lon, fly);
-    coordRow.append(coordLine);
-    section.append(searchRow, coordRow);
+    coordRow.append(el('span', 'sm-label', 'Coordinates'), coordLine);
+
+    const searchHelp = 'Finds a place by name and fills in its coordinates.';
+    const searchRowObj = this._addRow('world', 'Location', {
+      el: searchRow,
+      title: 'Search a place',
+      help: searchHelp,
+      activate: () => search.focus(),
+    });
+    this._addRow('world', 'Location', {
+      el: coordRow,
+      title: 'Coordinates',
+      help: 'Latitude and longitude in decimal degrees. Fly there loads the terrain around them.',
+      activate: () => fly.click(),
+    });
 
     const doSearch = async () => {
       const query = search.value.trim();
       if (!query) return;
-      found.textContent = 'Searching…';
+      searchRowObj.help = 'Searching…';
+      this._showInfo(searchRowObj);
       try {
         const res = await fetch(
           `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
@@ -356,15 +634,18 @@ export default class ControlPanel {
         if (data.length > 0) {
           lat.value = parseFloat(data[0].lat).toFixed(4);
           lon.value = parseFloat(data[0].lon).toFixed(4);
-          found.textContent = data[0].display_name;
+          searchRowObj.help = `Found: ${data[0].display_name}`;
+          playUiSound('confirm');
         } else {
-          found.textContent = 'No place found.';
+          searchRowObj.help = 'No place found.';
+          playUiSound('deny');
         }
       } catch (err) {
         Logger.warn('ControlPanel', `Nominatim search failed: ${err.message}`);
-        found.textContent = '';
+        searchRowObj.help = searchHelp;
         showNotification('Search error', 'error');
       }
+      this._showInfo(searchRowObj);
     };
     searchBtn.addEventListener('click', doSearch);
     search.addEventListener('keydown', (e) => {
@@ -375,19 +656,13 @@ export default class ControlPanel {
       const la = parseFloat(lat.value);
       const lo = parseFloat(lon.value);
       if (!Number.isFinite(la) || !Number.isFinite(lo)) {
-        found.textContent = 'Enter a latitude and a longitude.';
+        playUiSound('deny');
         return;
       }
       this.actions.flyTo(la, lo);
       this.resume();
     });
 
-    const showRow = (help, row) => {
-      row.addEventListener('mouseenter', () => this._showHelp(help));
-      row.addEventListener('mouseleave', () => this._showHelp(''));
-    };
-    showRow('Finds a place by name and fills in its coordinates.', searchRow);
-    showRow('Loads the terrain around these coordinates, in decimal degrees.', coordRow);
     this._controls.lat = (v) => (lat.value = v);
     this._controls.lon = (v) => (lon.value = v);
   }
@@ -402,7 +677,7 @@ export default class ControlPanel {
       for (const item of group.items) {
         const keys = el('dt');
         item.keys.forEach((key, i) => {
-          if (i > 0) keys.append(item.chord ? ' + ' : ' ');
+          if (i > 0 && item.chord) keys.append(el('span', 'sm-plus', '+'));
           keys.append(el('kbd', '', key));
         });
         list.append(keys, el('dd', '', item.action));
@@ -418,36 +693,53 @@ export default class ControlPanel {
     this._metricsEl = el('dl', 'sm-metrics');
     live.append(this._metricsEl);
 
-    const tools = this._section(pane, 'Tools');
-    const views = el('div', 'sm-row sm-row-stack');
-    views.append(el('span', 'sm-label', 'Reference views'));
-    const viewButtons = el('div', 'sm-inline sm-wrap');
-    this.actions.referenceViews.forEach((name, i) => {
-      const button = el('button', 'sm-btn', String(i + 1));
-      button.type = 'button';
-      button.title = name;
-      button.addEventListener('click', () => this.actions.setReferenceView(i));
-      viewButtons.append(button);
+    const views = el('div', 'sm-row sm-row-field');
+    const viewButtons = el('div', 'sm-field');
+    const names = this.actions.referenceViews;
+    let viewIndex = -1;
+    const showView = (i) => {
+      viewIndex = i;
+      this.actions.setReferenceView(i);
+      playUiSound('change');
+    };
+    names.forEach((name, i) => {
+      const b = button('sm-btn sm-btn-square', String(i + 1), name);
+      b.title = name;
+      b.addEventListener('click', () => showView(i));
+      viewButtons.append(b);
     });
-    views.append(viewButtons);
+    views.append(el('span', 'sm-label', 'Reference views'), viewButtons);
+    this._addRow('dev', 'Tools', {
+      el: views,
+      title: 'Reference views',
+      help: 'Viewpoints used for rendering comparisons. ← → step through them.',
+      adjust: (dir) => showView((viewIndex + dir + names.length) % names.length),
+    });
 
-    const actions = el('div', 'sm-inline sm-wrap');
-    const debug = el('button', 'sm-btn', 'Tile debug overlay');
-    debug.type = 'button';
+    const tools = el('div', 'sm-row sm-row-field');
+    const toolButtons = el('div', 'sm-field');
+    const debug = button('sm-btn', 'Tile debug');
     debug.addEventListener('click', () => {
-      debug.classList.toggle('active', this.actions.toggleDebugTiles());
+      debug.classList.toggle('on', this.actions.toggleDebugTiles());
+      playUiSound('change');
     });
-    const bench = el('button', 'sm-btn', 'Start / stop benchmark');
-    bench.type = 'button';
+    const bench = button('sm-btn', 'Benchmark');
     bench.addEventListener('click', () => {
       this.actions.toggleBenchmark();
       this.resume();
     });
-    const baseline = el('button', 'sm-btn', 'Store baseline');
-    baseline.type = 'button';
-    baseline.addEventListener('click', () => this.actions.storeBaseline());
-    actions.append(debug, bench, baseline);
-    tools.append(views, actions);
+    const baseline = button('sm-btn', 'Store baseline');
+    baseline.addEventListener('click', () => {
+      this.actions.storeBaseline();
+      playUiSound('confirm');
+    });
+    toolButtons.append(debug, bench, baseline);
+    tools.append(el('span', 'sm-label', 'Actions'), toolButtons);
+    this._addRow('dev', 'Tools', {
+      el: tools,
+      title: 'Actions',
+      help: 'Tile debug overlay (X), benchmark flight (B), store the last benchmark as the baseline (Shift+B).',
+    });
   }
 
   _refreshMetrics() {
@@ -470,20 +762,22 @@ export default class ControlPanel {
 
   // ── Reset ──
 
-  _onReset(button) {
-    if (button.dataset.confirm) {
+  _onReset(b) {
+    if (b.dataset.confirm) {
       clearTimeout(this._resetTimer);
-      delete button.dataset.confirm;
-      button.textContent = 'Reset all';
+      delete b.dataset.confirm;
+      b.textContent = 'Reset all';
       resetSettings();
+      playUiSound('confirm');
       showNotification('Settings restored to their defaults');
       return;
     }
-    button.dataset.confirm = '1';
-    button.textContent = 'Click again to reset';
+    playUiSound('deny');
+    b.dataset.confirm = '1';
+    b.textContent = 'Confirm reset';
     this._resetTimer = setTimeout(() => {
-      delete button.dataset.confirm;
-      button.textContent = 'Reset all';
+      delete b.dataset.confirm;
+      b.textContent = 'Reset all';
     }, RESET_CONFIRM_MS);
   }
 }

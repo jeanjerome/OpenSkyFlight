@@ -41,6 +41,12 @@ export const QUALITY_PRESETS = {
   },
 };
 
+/**
+ * GPU time of each preset relative to High, averaged over the six reference views at a
+ * fixed scale (docs/rendering-roadmap.md, L2.7), shown on the preset cards of the menu
+ */
+export const PRESET_GPU_COST = { low: 0.55, medium: 0.74, high: 1, ultra: 1.12 };
+
 /** Highest resolution of the scene pass, relative to the output (TAAU reconstructs the rest) */
 export const IMAGE_SHARPNESS = {
   standard: { renderScale: 0.6 },
