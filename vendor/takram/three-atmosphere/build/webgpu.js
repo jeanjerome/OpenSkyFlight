@@ -122,16 +122,14 @@ class gs {
           u.z / e
         ),
         mieDensity: qe(c, e),
-        mieScattering: E(
-          d.x / e,
-          d.y / e,
-          d.z / e
-        ),
-        mieExtinction: E(
-          l.x / e,
-          l.y / e,
-          l.z / e
-        ),
+        // OSF: aerosol coefficients as uniforms, so the aerosol density can change
+        // at runtime (new LUTs) without recompiling the shaders
+        mieScattering: O(new nt().copy(d).divideScalar(e)).onRenderUpdate((OSF_f, { value: OSF_v }) => {
+          OSF_v.copy(t.mieScattering).divideScalar(e);
+        }),
+        mieExtinction: O(new nt().copy(l).divideScalar(e)).onRenderUpdate((OSF_f, { value: OSF_v }) => {
+          OSF_v.copy(t.mieExtinction).divideScalar(e);
+        }),
         miePhaseFunctionG: P(h),
         absorptionDensity: qe(m, e),
         absorptionExtinction: E(

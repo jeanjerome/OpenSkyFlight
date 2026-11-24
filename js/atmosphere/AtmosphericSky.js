@@ -21,6 +21,9 @@ const DEG2RAD = Math.PI / 180;
 /** Angle from the sun's centre just outside the solar disc (0.27° radius) and its limb */
 const SUN_AUREOLE_ANGLE = 0.5 * DEG2RAD;
 
+/** Contrast threshold of the meteorological visibility (Koschmieder): -ln(0.02) */
+const VISIBILITY_CONTRAST = Math.log(50);
+
 /** Distance the camera moves before the sky environment map is rendered again (m) */
 const ENVIRONMENT_DISTANCE_THRESHOLD = 5000;
 
@@ -99,6 +102,10 @@ export default class AtmosphericSky {
 
     this.atmosphere = new AtmosphereContext();
     this.atmosphere.camera = camera;
+    const { mieScattering, mieExtinction } = this.atmosphere.parameters;
+    this._aerosolAlbedo = mieScattering.x / mieExtinction.x;
+    this._visibility = null;
+    this._updateAerosols();
     // The moon is not drawn yet, but its direction must be a unit vector: the
     // environment map is rendered again whenever the angle between the
     // current and the previous direction exceeds a threshold, and the angle
@@ -133,6 +140,25 @@ export default class AtmosphericSky {
     });
 
     Logger.info('AtmosphericSky', 'Atmosphere initialized (precomputed scattering)');
+  }
+
+  /**
+   * Aerosol density from the visibility setting: the extinction at sea level
+   * that brings the contrast of a dark object down to 2 % at that distance
+   * (green light), less what the air molecules already extinguish. The
+   * scattering tables are computed again over the next frames; a change made
+   * while they are being computed waits for them.
+   */
+  _updateAerosols() {
+    const { parameters, lutNode } = this.atmosphere;
+    const computing =
+      lutNode.updating || (lutNode.currentVersion !== undefined && lutNode.version !== lutNode.currentVersion);
+    if (CONFIG.visibility === this._visibility || computing) return;
+    this._visibility = CONFIG.visibility;
+    const extinction = Math.max(0, VISIBILITY_CONTRAST / (CONFIG.visibility * 1000) - parameters.rayleighScattering.y);
+    parameters.mieExtinction.setScalar(extinction);
+    parameters.mieScattering.setScalar(extinction * this._aerosolAlbedo);
+    lutNode.needsUpdate = true;
   }
 
   _isSarMode() {
@@ -253,6 +279,7 @@ export default class AtmosphericSky {
    */
   update() {
     if (this._isSarMode()) return;
+    this._updateAerosols();
     const { x, z } = this.camera.position;
     const geo = this.worldToGeo(x, z) ?? { lat: CONFIG.lat, lon: CONFIG.lon };
 

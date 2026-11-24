@@ -30,6 +30,14 @@ function formatSpeed(ms) {
   return `Mach ${(ms / MACH_1_MS).toFixed(1)}`;
 }
 
+function formatVisibility(km) {
+  const distance = `${km < 20 ? km.toFixed(1) : Math.round(km)} km`;
+  if (km >= 150) return `${distance} · crystal clear`;
+  if (km >= 60) return `${distance} · clear`;
+  if (km >= 25) return `${distance} · hazy`;
+  return `${distance} · very hazy`;
+}
+
 const percent = (v) => `${Math.round(v * 100)} %`;
 
 export const SETTINGS = [
@@ -162,6 +170,19 @@ export const SETTINGS = [
     max: 360,
     step: 1,
     format: (v) => `${Math.round(v)}° ${COMPASS[Math.round(v / 22.5) % 16]}`,
+    persist: true,
+  },
+  {
+    key: 'visibility',
+    tab: 'world',
+    section: 'Sun and sky',
+    label: 'Visibility',
+    help: 'How far you can see near the ground through the haze and dust in the air, which whiten the sky and redden the sun.',
+    type: 'range',
+    min: 10,
+    max: 280,
+    log: true,
+    format: formatVisibility,
     persist: true,
   },
   {

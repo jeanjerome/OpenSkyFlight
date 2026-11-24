@@ -33,6 +33,15 @@ that name, which lacks the WebGL classes, and does not map `three/src/`.
 - Both `webgpu.js`: `hash` and `hashString` come from the `NodeUtils` namespace of
   `three/webgpu` instead of `three/src/nodes/core/NodeUtils.js`.
 
+**Aerosol density at runtime** — the atmosphere parameters are compiled into
+the shaders as constants, so changing them means building every material again.
+In `three-atmosphere/build/webgpu.js` (`AtmosphereContextBase` constructor), the
+Mie scattering and extinction coefficients of the parameter struct are uniforms
+read from the `AtmosphereParameters` object on each render instead: after
+changing `parameters.mieScattering` and `parameters.mieExtinction`, setting
+`lutNode.needsUpdate = true` computes the tables again, and the shaders pick up
+the new values without recompiling. Lines marked `OSF:`.
+
 **Local assets** — the default URLs of the star catalogue and of the
 spatio-temporal blue noise pointed to `media.githubusercontent.com`; they resolve
 next to the module instead (`new URL('../assets/…', import.meta.url)`), in
