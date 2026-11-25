@@ -10,10 +10,20 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
 
 ## État courant (mis à jour le 2026-11-25)
 
-- **Statut** : plan validé le 2026-11-25 (voir **Décisions**). **G0 et G1 faits** sur la branche
-  `feat/flight-model` (non fusionnée, non poussée), sauf le préchargement et les requêtes par lot de
-  G0.4 (reportés à G3 et G5) et la récupération automatique de G1.2 (reportée). Prochaine étape :
-  G2 (réacteurs et jets) sur la même branche, puis alterner avec les lots de rendu (lot 4).
+- **Statut** : plan validé le 2026-11-25 (voir **Décisions**). **G0, G1 et G2 (sauf G2.4 et l'option
+  G2.7) faits** sur la branche `feat/flight-model` (non fusionnée, non poussée ; le travail de G2 n'est
+  pas encore commité au 2026-11-25), sauf le préchargement et les requêtes par lot de G0.4 (reportés à
+  G3 et G5) et la récupération automatique de G1.2 (reportée). Prochaine étape : G2.4 (brume de
+  chaleur), puis alterner avec les lots de rendu (lot 4).
+- **Réacteurs et jets (G2)** :
+  - `js/flight/exhaust.js` (`exhaustJet()` : rapport de pression de tuyère, Mach du jet, diamètre de
+    sortie, espacement des cellules de choc, premier disque de Mach, niveau et longueur de flamme),
+    `js/aircraft/EngineExhaust.js` (volets de tuyère, lueur de la turbine, flamme volumique, lumière de
+    PC), `js/audio/EngineSound.js` (son synthétisé). `AircraftManager.engines` et `.jet` donnent le
+    régime affiché et entendu ; `AircraftLights` ne garde que les feux.
+  - La flamme est dessinée par la passe de halo : ses fragments partent de la position de la caméra
+    dans le repère du modèle, prise dans `onBeforeRender` (la matrice monde de l'avion de la frame,
+    pas celle d'avant : à 300 m/s, un retard d'une frame décale le rayon de 2,5 m).
 - **Modèle de vol (G1)** :
   - `js/constants/rafale.js` (chiffres et estimations calées), `js/flight/aerodynamics.js` (CL en
     sinus jusqu'à CLmax 1,7 à 32°, facteur de Mach, polaire `CD0(M) + k(M)·CL²`),
@@ -80,19 +90,16 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
   - Le modèle vient de CGTrader (modèle gratuit « Dassault Rafale B ») sous licence Royalty Free,
     incompatible avec sa présence dans le dépôt public (voir Décisions, « Encore ouvert ») : laissé
     tel quel à la demande de l'utilisateur, le 2026-11-25.
-- **Prochaine session : G2**, sur `feat/flight-model` (toujours ni fusionnée ni poussée).
-  1. Remesurer d'abord les vues de référence **machine froide** (`render:capture`, comparer à
-     `lot3-cap2` et `g0`) pour lever le doute sur les écarts de G1 (bruit thermique probable).
-  2. G2.1 : brancher `AircraftLights` sur le régime réel. C'est déjà fait en partie :
-     `state.engines = { thrust: core, afterburner: reheat }` en Simulation (voir `app.js` et
-     `AircraftManager.update`), l'ancienne règle « PC au-dessus de 300 m/s » ne reste qu'en
-     Exploration et pour les trajectoires imposées (G1.8 : les dériver de la vitesse).
-  3. Puis G2.2 (flamme analytique, diamants de choc à l'espacement physique), G2.3 (volets de
-     tuyère, maillages `EngineL`/`EngineR`, charnières comme `ControlSurfaces.js`), G2.4 à G2.6.
-  4. Recueillir le ressenti de l'utilisateur sur la visée souris et le roulis clavier : gains dans
-     `js/flight/MouseAim.js` (`ROLL_GAIN`, `PITCH_GAIN`, `SIDE_BANK_GAIN`…) et
-     `js/flight/SimulatedFlight.js` (`KEY_STICK_TIME`), `KEYBOARD_STICK` dans
-     `js/constants/controls.js`.
+- **Prochaine session** : sur `feat/flight-model` (ni fusionnée ni poussée).
+  1. Faire commiter le travail de G2 (deux commits : jets et lumière de PC, son moteur).
+  2. G2.4 : brume de chaleur en espace écran (tampon de décalage avant le TAAU), preset High et plus.
+  3. Recueillir le ressenti de l'utilisateur : visée souris et roulis clavier (gains dans
+     `js/flight/MouseAim.js`, `KEY_STICK_TIME` de `js/flight/SimulatedFlight.js`, `KEYBOARD_STICK`
+     de `js/constants/controls.js`), son moteur à l'oreille (niveaux dans `EngineSound.update`),
+     aspect de la flamme (poids et couleurs dans `EngineExhaust._emission`).
+  4. Proposé par l'utilisateur (il a aimé les cadrages des scripts de test) : une vue extérieure
+     libre qui tourne autour de l'avion.
+  5. Puis lot 4 du rendu (nuages volumétriques) en alternance.
 - **Outils** : `npm test` (tests Node, dont le banc du modèle de vol), `npm run flight:bench`
   (tableau du banc), scripts Playwright ad hoc dans le scratchpad de session (manette simulée par
   `navigator.getGamepads` injecté avec `addInitScript` ; `window.osf.aircraft()` donne mode, Mach,
@@ -218,25 +225,54 @@ sol) ; les nuages volumétriques (lot 4) n'ont pas de dépendance avec ces lots.
 - [~] **G1.8** Benchmark et pilote automatique : trajectoires toujours imposées (cinématiques), avec
       manette et PC déduits de la vitesse pour l'animation des jets ; pilote automatique « vrai »
       (suivi de cap et d'altitude par les commandes de vol) reporté à G3.
-      Fait pour les trajectoires imposées ; la manette et la PC déduites de la vitesse viendront avec
-      G2 (les jets suivent aujourd'hui l'ancienne règle : PC au-dessus de 300 m/s).
+      Fait pour les trajectoires imposées ; jets en Exploration et sur trajectoire imposée : plein
+      régime en avançant, PC au-dessus de 300 m/s, Mach déduit de la vitesse réglée (G2.1).
 
 ## Lot G2 — Réacteurs et jets selon la poussée
 
-- [ ] **G2.1** Régime moteur (de G1.3) branché sur `AircraftLights` : lueur de la turbine selon le
+- [x] **G2.1** Régime moteur (de G1.3) branché sur `AircraftLights` : lueur de la turbine selon le
       régime, flamme nulle à sec, flamme de PC selon le niveau de PC (min → max).
-- [ ] **G2.2** Flamme analytique améliorée (passe de halo existante) : 2–3 coques coniques
+      Fait : `AircraftManager.engines` (cœur, PC, Mach, en marche) vient du modèle de vol en
+      Simulation ; en Exploration et sur les trajectoires imposées, plein régime en avançant et PC
+      au-dessus de 300 m/s, avec une montée en régime de 0,8 s. `js/flight/exhaust.js` en déduit le
+      jet (testé par `npm test`) ; flamme de 4 m au plus petit cran de PC à 8 m au plein.
+- [x] **G2.2** Flamme analytique améliorée (passe de halo existante) : 2–3 coques coniques
       imbriquées, diamants de choc `I ∝ cos²(πx/L)·e^(−x/ℓ)` avec un espacement
       `L ≈ 1,3·D·√(Mj² − 1)` (≈ 0,8–1 m), cellules raccourcies vers l'aval, 4 à 8 m de flamme ;
       couleur bleu-violet (chimiluminescence, visible de nuit) mêlée de blanc-orangé (suies).
       Coût visé 0,1–0,3 ms.
-- [ ] **G2.3** Volets de tuyère animés : diamètre de sortie ≈ 0,55 m à sec → 0,68 m en PC.
+      Fait (`js/aircraft/EngineExhaust.js`) : volume lumineux intégré le long de chaque ligne de vue,
+      dessiné sur un cylindre autour de chaque axe de tuyère et arrêté par la profondeur de la scène
+      (cellule, relief) ; cœur blanc-jaune, manteau de suies orange, gaine bleu-violet (12 à 24
+      échantillons). Les disques de Mach sont des ellipsoïdes gaussiens intégrés exactement le long de
+      la ligne (forme fermée), 8 disques, cellules raccourcies de 5 % chacune ; premier disque à
+      `0,67·D·√(P0/Pa)`, espacement selon le Mach du jet, qui croît avec la compression dynamique
+      (les cellules s'allongent avec la vitesse). La flamme prend l'exposition des sources de nuit à
+      la puissance 0,35 : sinon elle vire au blanc. Coût mesuré dans le pire cas (vue arrière à
+      11 m, flamme sur une grande part de l'écran) : +0,14 à +0,21 ms, contre +0,8 ms avec un
+      échantillonnage fin des diamants (64 échantillons).
+- [x] **G2.3** Volets de tuyère animés : diamètre de sortie ≈ 0,55 m à sec → 0,68 m en PC.
+      Fait : les volets convergents du modèle (charnière à z = −6,15 m, sortie à −6,64 m) se
+      déforment dans le nuanceur de sommets (`positionNode`) : ouverts au ralenti (0,62 m, estimé),
+      fermés au plein sec (0,55 m), ouverts en PC (0,68 m, rayon dessiné par le modèle).
 - [ ] **G2.4** Brume de chaleur en espace écran : tampon de décalage dessiné par un cône derrière les
       tuyères (toujours actif, même à sec), appliqué avant le TAAU, atténué sur les bords ; preset
       High et plus.
-- [ ] **G2.5** Lumière ponctuelle de PC qui éclaire le fuselage et le sol à basse altitude.
-- [ ] **G2.6** Son moteur (WebAudio) selon le régime et la PC, canal `engineVolume` existant ;
+- [x] **G2.5** Lumière ponctuelle de PC qui éclaire le fuselage et le sol à basse altitude.
+      Fait : `PointLight` 2,5 m derrière les tuyères, 160 000 cd au plein (estimé), orange, avec la
+      même exposition que la flamme, pour que ce qu'elle éclaire ne soit pas plus clair qu'elle.
+      Même éteinte, elle coûte +0,1 à +0,2 ms sur toutes les vues (chaque fragment éclairé, relief et
+      nuages compris, l'évalue) : réglage « Afterburner light » (onglet Graphics, section Light),
+      activé par le preset Ultra seulement. Tant qu'il est actif, la lumière reste dans la scène,
+      sombre sans PC (l'ajouter ou la retirer recompile tous les matériaux éclairés).
+- [x] **G2.6** Son moteur (WebAudio) selon le régime et la PC, canal `engineVolume` existant ;
       sifflement de la turbine, grondement de la PC, effet de proximité en vue extérieure.
+      Fait (`js/audio/EngineSound.js`) : sifflement (soufflante et compresseur, fréquences selon le
+      régime, entendu surtout de l'avant), grondement du jet (bruit filtré, plus clair avec la
+      puissance, surtout de l'arrière), grondement et crépitement de la PC ; niveau selon la distance
+      à la caméra, étouffé en cockpit, coupé quand le menu est ouvert ; démarre au premier appui ou
+      clic (exigence des navigateurs). Vérifié par les paramètres du graphe audio dans Chrome ; le
+      rendu sonore reste à juger à l'oreille.
 - [ ] **G2.7** (option) Évaluer `@aeronautic/afterburner` (MIT, TSL, WebGPU) ou un portage de son
       ray marching en demi-résolution ; budget 1,5–3 ms en vue arrière, à mesurer contre G2.2.
 
@@ -351,6 +387,8 @@ sol) ; les nuages volumétriques (lot 4) n'ont pas de dépendance avec ces lots.
 | 2026-11-25 | Périphériques | Souris + clavier (« mouse aim » par défaut) et manette (Gamepad API, mapping standard) ; pas de HOTAS pour l'instant | Choix de l'utilisateur ; la couche d'entrée unique de G0.3 laisse la porte ouverte |
 | 2026-11-25 | Rotation de la cellule | Imposée par les commandes de vol (suivi de la trajectoire + corrections d'incidence, de roulis et de dérapage, sous limites d'accélération angulaire) plutôt que par des tables de moments | Aucune donnée de moments du Rafale n'est publique ; les commandes de vol électriques masquent de toute façon la dynamique naturelle ; réponses calées sur les chiffres d'essai |
 | 2026-11-25 | Poussée | Chute de poussée de Mattingly (turbofan à faible taux de dilution, PC) + perte en air raréfié | Donne d'elle-même les vitesses max publiées à 11 km et au sol (même température totale d'entrée) et un plafond de 17 km |
+| 2026-11-25 | Lumière de PC | Réglage « Afterburner light », activé par le preset Ultra seulement | Elle coûte 0,1 à 0,2 ms même éteinte (évaluée par chaque fragment éclairé) ; l'ajouter à l'allumage de la PC recompilerait tous les matériaux |
+| 2026-11-25 | Rendu de la flamme | Volume intégré le long de la ligne de vue (12 à 24 échantillons) et disques de Mach intégrés en forme fermée | 4 fois moins cher qu'un échantillonnage fin des diamants, sans bandes ni bruit |
 | 2026-11-25 | Contact avec le sol | Crash (redémarrage 1 500 m au-dessus) en attendant le train et la physique au sol de G3 | Évite de voler sous le relief sans préjuger de G3 |
 
 ### Encore ouvert
@@ -401,6 +439,13 @@ Statuts : **[off]** Dassault/Safran/MBDA/Thales, **[FT]** essai en vol Flight In
 - Couleur : bleu-violet par chimiluminescence (CH, C₂), faible, visible au crépuscule et de nuit ;
   orange-jaune par les suies, plus lumineux.
   https://migflug.com/afterburner/afterburner-flame-colour-blue-orange-russian-american-myth/
+- Modèle du jet (`js/flight/exhaust.js`) [est] : rapport de pression de tuyère au banc 1,3 au ralenti
+  → 3,5 au plein sec, multiplié par la compression dynamique `(1 + 0,2M²)^3,5` ; γ = 1,4. Tuyère
+  convergente, donc jet sous-détendu au-delà d'un rapport de 1,89 : Mj = 1,47 au banc, 1,9 à Mach 0,9.
+  Disque de Mach à `0,67·D·√(P0/Pa)` (Crist, Sherman et Glass, AIAA J. 4(1), 1966). Diamètre de
+  sortie 0,62 m au ralenti (tuyère ouverte pour réduire la poussée de ralenti, estimé), 0,55 au plein
+  sec, 0,68 en PC. Intensité lumineuse des deux flammes au plein : ≈ 160 000 cd (≈ 20 000 cd/m² sur
+  ≈ 8 m² vus de côté, estimé).
 
 ### Train et sol
 
@@ -492,6 +537,16 @@ Preset High, écran intégré 120 Hz, mêmes protocoles que `docs/rendering-road
 | 2026-11-24 | Référence (clôture du lot 3 : `lot3-cap2`, `lot3`) | 3,44 / 3,43 / 3,49 / 3,40 / 3,80 / 3,48 | 119,2 · 105,3 · 64,1 · 1 | |
 | 2026-11-25 | G0 (`benchmarks/render/g0`) | 3,45 / 3,44 / 3,51 / 3,40 / 3,81 / 3,54 | 119,5 · 103,1 · 65,4 · 0 | Draw calls identiques ; écarts dans le bruit (± 0,4 ms) |
 | 2026-11-25 | G1 (`benchmarks/render/g1`, puis `g1-cap2`) | 3,44 / 3,43 / 3,50 / 3,87 / 3,94 / 3,68, puis 3,48 / 3,86 / 3,94 / 3,60 / 4,39 / 3,55 | 119,4 · 105,3 · 64,9 · 1 | Draw calls identiques ; les écarts changent de vue d'une série à l'autre (machine chaude après une longue série de mesures) : bruit thermique, le rendu n'a pas changé. À remesurer machine froide en début de G2 |
+| 2026-11-25 | G1, remesuré (`g1-cold`) et en alternance avec G0 servi par un worktree (`ab-g0-*`, `ab-g1-*`) | 3,44 / 3,85 / 3,50 / 3,54 / 4,32 / 3,70 ; en alternance G0 3,44 / 3,43 / 3,50 / 3,40 / 3,79 / 3,48 et G1 3,44 / 3,44 / 3,50 / 3,86 / 3,79 / 3,48 | | Les sauts de +0,4 ms touchent aussi G0 d'une série à l'autre : bruit (paliers d'horloge du GPU), G1 ne coûte rien |
+| 2026-11-25 | G2, preset High (`ab2-3002-*` ; vol : `g2-flight`) | 3,44 / 3,44 / 3,50 / 3,41 / 3,79 / 3,48 (deux séries) | 119,3 · 105,3 · 61,0 · 0 | Identique à G0 ; une série isolée (`g2-exhaust`) avait donné 5,14 ms sur la vue 5 : bruit. Vol : PC visible tout le trajet (trajectoire imposée au-delà de 300 m/s), p1 à −6 % de G1 |
+| 2026-11-25 | G2, lumière de PC présente et éteinte (`ab3-3002-*`) | 3,53 / 3,61–4,02 / 3,67–3,73 / 3,50–3,96 / 3,94–4,27 / 3,58–4,07 | | +0,1 à +0,2 ms sur chaque vue, d'où le réglage réservé à Ultra |
+
+Vérifications de G2 dans Chrome (`?dev=1`, caméra placée autour de l'avion par un crochet
+temporaire) : à sec, tuyères fermées et pas de flamme ; en PC pleine, flamme de 8 m, diamants
+nets, gaine violette de nuit, masquée par la cellule vue de l'avant ; coût de la flamme dans le pire
+cas (vue arrière à 11 m) +0,14 à +0,21 ms ; son : graphe audio créé au premier clic, fréquence de la
+soufflante 2,7 kHz au ralenti → 3,8 kHz au plein, voie de PC ouverte en PC, coupé au menu ; aucune
+erreur console (hors verrouillage du pointeur refusé à l'automatisation).
 
 Vérifications de G0 dans Chrome (`?view=1`, manette simulée en disposition standard) : avance au
 clavier 1 120 m en 2,0 s simulées (560 m/s, la vitesse réglée) ; demi-gâchette 280 m/s ; manche à fond
@@ -534,6 +589,7 @@ piqué dans le relief : crash et redémarrage ; aucune erreur console.
 
 | Date | Fait | Reste / prochaine étape |
 |---|---|---|
+| 2026-11-25 | Écarts de G1 levés (bruit, mesures en alternance avec un worktree de G0) ; G2 : modèle du jet, volets de tuyère, flamme volumique avec diamants de choc intégrés exactement, lumière de PC (preset Ultra), son moteur synthétisé ; vérifié dans Chrome de jour et de nuit | Commiter G2 ; G2.4 (brume de chaleur) ; ressenti en vol (visée, son, flamme) ; vue extérieure libre proposée |
 | 2026-11-25 | G1 : modèle de vol 6 DDL avec commandes de vol électriques, moteurs M88-2 (Mattingly), banc de vérification (14 cas, `npm run flight:bench`), visée souris, manette des gaz à cran, aérofrein, gouvernes animées, HUD de vol, caméra liée à la cellule, modes Simulation / Exploration (`F`) ; échelle du HUD corrigée | G2 (jets selon la poussée) ; à affiner en vol : sensations de la visée souris et du roulis clavier |
 | 2026-11-25 | G0 : horloge à pas fixe, état de l'avion, mode Exploration, entrées clavier/souris/manette, altitude du sol telle que dessinée, atmosphère standard, registre d'entités, tests Node ; vérifié dans Chrome, vues et vol identiques à la référence | G1 sur `feat/flight-model` : modèle 6 DDL, commandes de vol électriques, souris « mouse aim », banc de vérification |
 | 2026-11-25 | Revue du code existant (vol, lumières, modèle, altitude du sol) ; recherches web sur le modèle de vol, les jets, le radar, les aéroports, les missiles et les drones ; rédaction de cette feuille de route ; décisions d'ordre, de réalisme, de mode Exploration et de périphériques | G0 sur `feat/flight-model` ; vérifier la licence du modèle Rafale |
