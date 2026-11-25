@@ -8,6 +8,7 @@
     "lint": "eslint js/",
     "lint:fix": "eslint js/ --fix",
     "test": "node --test tests/*.test.js",
+    "flight:bench": "node scripts/flight-bench.js",
     "format": "prettier --write \"js/**/*.js\" \"*.js\" \"scripts/**/*.js\"",
     "format:check": "prettier --check \"js/**/*.js\" \"*.js\" \"scripts/**/*.js\"",
     "render:capture": "node scripts/render-capture.js",
@@ -19,6 +20,7 @@
     "eslint": "^9.0.0",
     "globals": "^15.0.0",
     "playwright-core": "^1.58.2",
-    "prettier": "^3.0.0"
+    "prettier": "^3.0.0",
+    "three": "0.187.0"
   }
 }
