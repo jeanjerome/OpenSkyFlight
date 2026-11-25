@@ -62,6 +62,14 @@ const RECIPROCAL_PI4 = 1 / (4 * Math.PI);
 const MIN_DENSITY = 1e-5;
 const MIN_EXTINCTION = 1e-5;
 
+/**
+ * Shortest distance at which the air in front of the clouds is applied (m):
+ * the atmosphere's frame is in km from the Earth's centre, where single floats
+ * are about a metre apart, so that the direction toward a nearer point is lost.
+ * The air over this distance is negligible.
+ */
+const MIN_AIR_DISTANCE = 100;
+
 /** A frame-wide uniform (three's default group is per object, compared and uploaded at every draw call) */
 const frameUniform = (value) => uniform(value).setGroup(renderGroup);
 
@@ -411,8 +419,11 @@ export default class VolumetricClouds {
       });
 
       If(weightSum.greaterThan(0), () => {
-        // The air between the camera and the clouds, at their mean distance
-        const distance = weightedDistance.div(weightSum).toConst();
+        // The air between the camera and the clouds, at their mean distance.
+        // Inside a cloud it is zero where the first sample, taken at the
+        // camera, is dense enough to end the march: the luminance toward a
+        // point at the camera itself is undefined (a zero direction).
+        const distance = max(weightedDistance.div(weightSum), MIN_AIR_DISTANCE).toConst();
         const air = getIndirectLuminanceToPoint(
           atmosphere.cameraPositionUnit.add(atmosphere.altitudeCorrectionUnit),
           this._toAtmosphere(direction.mul(distance)).add(atmosphere.altitudeCorrectionUnit),

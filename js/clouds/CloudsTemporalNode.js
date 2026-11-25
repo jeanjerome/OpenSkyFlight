@@ -9,6 +9,7 @@ import {
   dot,
   exp,
   float,
+  floatBitsToUint,
   ivec2,
   log,
   max,
@@ -22,6 +23,7 @@ import {
   sqrt,
   texture,
   uniform,
+  uvec4,
   vec2,
   vec4,
 } from 'three/tsl';
@@ -50,6 +52,15 @@ const _quad = /* @__PURE__ */ new QuadMesh();
 const _position = /* @__PURE__ */ new THREE.Vector3();
 const _translation = /* @__PURE__ */ new THREE.Matrix4();
 let _rendererState;
+
+/**
+ * Whether no channel of a vec4 is infinite or NaN, from the exponent bits:
+ * comparisons of a NaN may be optimized away by the shader compiler
+ */
+function isFinite4(value) {
+  const exponent = uvec4(0x7f800000);
+  return floatBitsToUint(value).bitAnd(exponent).notEqual(exponent).all();
+}
 
 /**
  * History clipped to a box (all four channels): toward the centre of the box
@@ -279,8 +290,10 @@ export default class CloudsTemporalNode extends Node {
       If(inside, () => {
         const texel = ivec2(min(previous.mul(this._size), this._size.sub(1)));
         const historyDistance = this._historyDistance.load(texel).r.div(HISTORY_DISTANCE_SCALE);
-        If(abs(log(historyDistance.div(distance))).lessThan(CLOUD_HISTORY_DEPTH_TOLERANCE), () => {
-          history.assign(clipToBox(this._historyColor.sample(previous).level(0), mean.sub(spread), mean.add(spread)));
+        const previousColor = this._historyColor.sample(previous).level(0).toConst();
+        // A NaN in the history would stay there for good: clipping and blending keep it
+        If(abs(log(historyDistance.div(distance))).lessThan(CLOUD_HISTORY_DEPTH_TOLERANCE).and(isFinite4(previousColor)), () => {
+          history.assign(clipToBox(previousColor, mean.sub(spread), mean.add(spread)));
           hasHistory.assign(1);
         });
       });
