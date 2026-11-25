@@ -33,6 +33,7 @@ import AtmosphericSky from './atmosphere/AtmosphericSky.js';
 import CityLights from './terrain/CityLights.js';
 import { REFERENCE_VIEWS } from './constants/referenceViews.js';
 import CloudLayer from './atmosphere/CloudLayer.js';
+import VolumetricClouds from './clouds/VolumetricClouds.js';
 import BenchmarkRunner from './benchmark/BenchmarkRunner.js';
 import BenchmarkComparator from './benchmark/BenchmarkComparator.js';
 import GPUTimer from './benchmark/GPUTimer.js';
@@ -79,8 +80,22 @@ async function initApp() {
   });
   const cityLights = new CityLights(geoTerrainManager, atmosphericSky.preExposure);
   geoTerrainManager.setEmissiveNode(cityLights.node);
-  const cloudLayer = new CloudLayer(scene);
-  cloudLayer.mesh.renderOrder = CLOUD_RENDER_ORDER;
+  // Volumetric clouds need compute shaders (their noise textures): the flat
+  // layer stands in for them on the WebGL2 backend
+  let volumetricClouds = null;
+  let cloudLayer = null;
+  if (renderer.backend.isWebGPUBackend) {
+    volumetricClouds = new VolumetricClouds(atmosphericSky, camera);
+    volumetricClouds.init(renderer);
+    volumetricClouds.setBase(CONFIG.cloudAltitude);
+    onChange((key, value) => {
+      if (key === 'cloudAltitude') volumetricClouds.setBase(value);
+    });
+    atmosphericSky.setClouds(volumetricClouds);
+  } else {
+    cloudLayer = new CloudLayer(scene);
+    cloudLayer.mesh.renderOrder = CLOUD_RENDER_ORDER;
+  }
 
   // --- Simulation ---
   // The aircraft is flown at fixed steps (SimulationClock) and drawn at a pose
@@ -661,7 +676,8 @@ async function initApp() {
     }
 
     // --- Environment phase ---
-    cloudLayer.update(dt, camera.position, aircraftState ? aircraftState.pitch : 0);
+    cloudLayer?.update(dt, camera.position, aircraftState ? aircraftState.pitch : 0);
+    volumetricClouds?.update(dt, camera.position);
 
     const timer = benchmarkRunner.getSubsystemTimer();
 

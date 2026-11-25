@@ -1,0 +1,71 @@
+/** Voxels along each side of the cloud shape volume (billows, a few kilometres per repeat) */
+export const CLOUD_SHAPE_SIZE = 128;
+
+/** Voxels along each side of the cloud detail volume (eroded edges, a hundred metres per repeat) */
+export const CLOUD_DETAIL_SIZE = 32;
+
+/** Texels along each side of the weather map (where each layer of clouds forms) */
+export const CLOUD_WEATHER_SIZE = 512;
+
+/** Ground distance covered by one repeat of the weather map (m) */
+export const CLOUD_WEATHER_TILE = 100e3;
+
+/** Distance covered by one repeat of the shape volume (m) */
+export const CLOUD_SHAPE_TILE = 3300;
+
+/** Distance covered by one repeat of the detail volume (m) */
+export const CLOUD_DETAIL_TILE = 170;
+
+/**
+ * The cloud layers, one per channel of the weather map (low cumulus, mid-level
+ * clouds, high cirrus): base relative to the cumulus base (the cloud altitude
+ * setting; the cirrus keep their own altitude, m), thickness (m), density
+ * (extinction per metre at full density), share of the shape noise that erodes
+ * them and of the detail noise, exponent of the weather map, bias of the
+ * rounding of their tops and softness of their edges where the coverage cuts
+ * the weather map (after takram's three-clouds defaults)
+ */
+export const CLOUD_LAYERS = [
+  { base: 0, thickness: 650, density: 0.2, shape: 1, detail: 1, weatherExponent: 1, bias: 0.35, edge: 0.6 },
+  { base: 250, thickness: 1200, density: 0.2, shape: 1, detail: 1, weatherExponent: 1, bias: 0.35, edge: 0.6 },
+  { altitude: 7500, thickness: 500, density: 0.002, shape: 0.6, detail: 0, weatherExponent: 2.5, bias: 0.35, edge: 0.3 },
+];
+
+/** Sky fraction the clouds cover at the default weather (0 clear, 1 overcast) */
+export const CLOUD_DEFAULT_COVERAGE = 0.4;
+
+/** Wind carrying the clouds (m/s, toward +x east and +z south) */
+export const CLOUD_WIND = [8, -3];
+
+/** Primary ray march: steps at most, first step (m), growth of each step, longest step and distance (m) */
+export const CLOUD_MAX_STEPS = 256;
+export const CLOUD_MIN_STEP = 60;
+export const CLOUD_STEP_GROWTH = 1.01;
+export const CLOUD_MAX_STEP = 1000;
+export const CLOUD_MAX_DISTANCE = 200e3;
+
+/** The march stops when the light from behind is below this share */
+export const CLOUD_MIN_TRANSMITTANCE = 0.01;
+
+/** Ray march toward the light: steps, first step (m), growth of each step */
+export const CLOUD_LIGHT_STEPS = 6;
+export const CLOUD_LIGHT_MIN_STEP = 40;
+export const CLOUD_LIGHT_STEP_GROWTH = 2;
+
+/** The detail noise is only read within this distance from the camera (m) */
+export const CLOUD_DETAIL_DISTANCE = 20e3;
+
+/**
+ * Light scattering in a cloud: two Henyey-Greenstein lobes (forward, back) and
+ * the share of the second, octaves of the multiple scattering approximation,
+ * scale of the sky light, darkening of thin edges ("powder": scale, exponent)
+ */
+export const CLOUD_PHASE_G = [0.7, -0.2];
+export const CLOUD_PHASE_MIX = 0.5;
+export const CLOUD_SCATTERING_OCTAVES = 8;
+export const CLOUD_SKY_LIGHT_SCALE = 1;
+export const CLOUD_POWDER_SCALE = 0.8;
+export const CLOUD_POWDER_EXPONENT = 150;
+
+/** Resolution of the cloud pass relative to the scene pass */
+export const CLOUD_RESOLUTION_SCALE = 0.5;

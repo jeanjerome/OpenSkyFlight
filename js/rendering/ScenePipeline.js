@@ -12,6 +12,7 @@ import {
   NIGHT_VISION_SCOTOPIC_LUMINANCE,
   SCENE_UNIT_LUMINANCE,
 } from '../constants/rendering.js';
+import { CLOUD_RESOLUTION_SCALE } from '../constants/clouds.js';
 import AutoExposureNode from './AutoExposureNode.js';
 
 /**
@@ -71,6 +72,8 @@ export default class ScenePipeline {
     this._sceneColor = this.scenePass.getTextureNode('output');
     this._sceneDepth = this.scenePass.getTextureNode('depth');
     this._atmosphereNode = null;
+    this._cloudsNode = null;
+    this._clouds = null;
 
     this.taauNode = taau(this._sceneColor, this._sceneDepth, this.scenePass.getTextureNode('velocity'), camera);
     this._antiAliased = this.taauNode.getTextureNode();
@@ -222,14 +225,19 @@ export default class ScenePipeline {
   }
 
   /**
-   * @param {?function(TextureNode, TextureNode): Node} apply - builds the
+   * @param {?function(TextureNode, TextureNode, ?TextureNode): Node} apply - builds the
    *   atmosphere (sky and aerial perspective) over the scene from its color and
-   *   depth, or null for none. The
+   *   depth, and the clouds' pass when there is one, or null for none. The
    *   result is rendered at the scene pass resolution and fed to the
    *   anti-aliasing in place of the scene color.
+   * @param {?function(TextureNode, boolean): Node} clouds - builds the clouds in
+   *   front of the scene (premultiplied luminance and opacity) from the scene
+   *   depth and whether it is reversed, rendered by a pass of its own at
+   *   CLOUD_RESOLUTION_SCALE of the scene pass; null for none
    */
-  setAtmosphere(apply) {
+  setAtmosphere(apply, clouds = null) {
     this._atmosphereApply = apply;
+    this._clouds = clouds;
     this._applyAtmosphere();
   }
 
@@ -237,6 +245,8 @@ export default class ScenePipeline {
     const apply = this._atmosphereApply;
     this._atmosphereNode?.dispose();
     this._atmosphereNode = null;
+    this._cloudsNode?.dispose();
+    this._cloudsNode = null;
     let input = this._sceneColor;
     if (apply) {
       let color = this._sceneColor;
@@ -247,7 +257,12 @@ export default class ScenePipeline {
         color = this._sceneColor.sample(bent);
         depth = this._sceneDepth.sample(bent);
       }
-      const node = apply(color, depth);
+      if (this._clouds) {
+        this._cloudsNode = rtt(this._clouds(this._sceneDepth, this._renderer.reversedDepthBuffer), null, null, {
+          resolutionScale: this.scenePass.getResolutionScale() * CLOUD_RESOLUTION_SCALE,
+        });
+      }
+      const node = apply(color, depth, this._cloudsNode);
       // The atmosphere covers every pixel (sky included): opaque
       this._atmosphereNode = rtt(vec4(node.rgb, 1), null, null, {
         resolutionScale: this.scenePass.getResolutionScale(),
@@ -271,6 +286,7 @@ export default class ScenePipeline {
   setRenderScale(scale) {
     this.scenePass.setResolutionScale(scale);
     this._atmosphereNode?.setResolutionScale(scale);
+    this._cloudsNode?.setResolutionScale(scale * CLOUD_RESOLUTION_SCALE);
   }
 
   /** @returns {number} */
@@ -305,6 +321,7 @@ export default class ScenePipeline {
     this.autoExposureNode?.dispose();
     this.taauNode.dispose();
     this._atmosphereNode?.dispose();
+    this._cloudsNode?.dispose();
     this._glowPass?.dispose();
     this._heatPass?.dispose();
     this.scenePass.dispose();

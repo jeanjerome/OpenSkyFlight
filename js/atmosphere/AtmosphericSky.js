@@ -163,6 +163,9 @@ export default class AtmosphericSky {
     this._geodetic = new Geodetic();
     this._groundECEF = new THREE.Vector3();
 
+    /** Volumetric clouds, when the renderer supports them (see setClouds) */
+    this.clouds = null;
+
     this.atmosphere = new AtmosphereContext();
     this.atmosphere.camera = camera;
     // The context's uniforms (frames, sun and camera positions) are the same
@@ -243,7 +246,7 @@ export default class AtmosphericSky {
       // Set from the menu or a reference view, not by the clock
       if (key === 'timeOfDay' && value !== this._publishedTime) this._timeOfDay = value;
       if (key === 'dayOfYear' && value !== this._publishedDay) this._dayOfYear = value;
-      if (['fogEnabled', 'aerialPerspectiveVolume', 'textureMode', 'bloomEnabled', 'autoExposure'].includes(key)) {
+      if (['fogEnabled', 'aerialPerspectiveVolume', 'textureMode', 'bloomEnabled', 'autoExposure', 'showClouds'].includes(key)) {
         this._applyMode();
       }
     });
@@ -268,6 +271,15 @@ export default class AtmosphericSky {
     parameters.mieExtinction.setScalar(extinction);
     parameters.mieScattering.setScalar(extinction * this._aerosolAlbedo);
     lutNode.needsUpdate = true;
+  }
+
+  /**
+   * Draw volumetric clouds (or stop): they follow the "Clouds" setting
+   * @param {?import('../clouds/VolumetricClouds.js').default} clouds
+   */
+  setClouds(clouds) {
+    this.clouds = clouds;
+    this._applyMode();
   }
 
   _isSarMode() {
@@ -335,7 +347,8 @@ export default class AtmosphericSky {
     this.renderer.toneMapping = THREE.AgXToneMapping;
     this.renderer.toneMappingExposure = TONE_MAPPING_EXPOSURE;
 
-    this.pipeline.setAtmosphere((color, depth) => this._overScene(color, depth));
+    const clouds = this.clouds && CONFIG.showClouds ? (depth, reversed) => this.clouds.node(depth, reversed) : null;
+    this.pipeline.setAtmosphere((color, depth, cloudsPass) => this._overScene(color, depth, cloudsPass), clouds);
     this.pipeline.setNightVision(this.preExposure);
     this.pipeline.setBloom(CONFIG.bloomEnabled);
     this.pipeline.setAutoExposure(CONFIG.autoExposure);
@@ -354,8 +367,11 @@ export default class AtmosphericSky {
    * adds behind it in proportion to 1 - alpha. Compared with a scene
    * background, the sky shader then runs only on the sky pixels instead of
    * under all the terrain.
+   *
+   * The volumetric clouds come last, in front of both: their pass gives the
+   * light they send toward the camera and their opacity (see VolumetricClouds).
    */
-  _overScene(color, depth) {
+  _overScene(color, depth, clouds) {
     let surface = color;
     if (CONFIG.fogEnabled && CONFIG.aerialPerspectiveVolume && this.renderer.backend.isWebGPUBackend) {
       surface = new AerialPerspectiveVolume(color, depth, this.atmosphere, this.camera, {
@@ -375,6 +391,10 @@ export default class AtmosphericSky {
         this._distantGround(behind);
         result.addAssign(behind.mul(color.a.oneMinus()));
       });
+      if (clouds) {
+        const cloud = vec4(clouds);
+        result.assign(result.mul(cloud.a.oneMinus()).add(cloud.rgb));
+      }
       return result;
     })();
   }
