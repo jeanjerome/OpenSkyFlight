@@ -91,7 +91,9 @@ en fin de session.
   `ScenePipeline.setAtmosphere(apply, clouds)`, composition dans `AtmosphericSky._overScene`. Référence
   des vues : `benchmarks/render/clouds-2` (vue 5 : 6,44 ms, dont ≈ 2,65 ms de nuages contre 3,79 ms
   sans ; les vues de référence remettent le vent à zéro, sinon la couverture en vue dérive pendant une
-  capture et le coût de la vue 5 varie de ±0,6 ms).
+  capture et le coût de la vue 5 varie de ±0,6 ms). Coût non remesuré depuis la session 21 (boîte de
+  rognage élargie, poudre retirée : quelques opérations par pixel) : refaire une capture `clouds-3`
+  avant L4.5. Code commité (dernier commit de code `e360847`), branche non poussée ni fusionnée.
 - **Prochaine étape** : forme des cirrus (nappe lisse, sans filaments ; L4.3), puis L4.5 (ombres des
   nuages sur le terrain). Couverture dans le menu avec L4.8. Fait avec l'utilisateur : scintillement
   (rognage de l'historique, L4.4), cirrus gris et contraste de l'ombre propre (L4.3).
@@ -228,7 +230,16 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
 - Comparer avec un état antérieur : `git worktree add ../osf-<nom> <commit>`, liens symboliques vers
   `cache/` et `node_modules/` du dépôt, `cd vendor/three-tile && npm run build:lib` dans le worktree,
   puis `node scripts/serve.js --port 3001` et `--url http://localhost:3001/` pour les scripts de mesure.
-  Faire les mesures sur un port autre que 3000 (serveur de l'utilisateur).
+  Faire les mesures sur un port autre que 3000 (serveur de l'utilisateur), et n'arrêter que son propre
+  serveur (tâche de fond ou PID) : `pkill -f scripts/serve.js` arrête aussi celui de l'utilisateur.
+- Scintillement des nuages (scripts Playwright ad hoc, non versionnés) : vue 5 caméra fixe, 40
+  captures 1280×800 ×1 à ≈ 120 ms d'intervalle, écart moyen de luminance entre captures successives
+  (sur 255) dans des zones de nuages seuls (`magick … -compose difference`), comparé à la même zone
+  sans nuages (`setConfig('showClouds', false)` après la vue) ; dérive = premier contre dernier. Pour
+  le mouvement : `cameraSpeed` 560, `cloudAltitude` 5000 (nuages juste sous l'avion), touche W
+  maintenue. Pour voir où l'historique est rejeté ou rogné : teinter ces pixels en rouge dans la
+  résolution ; pour les valeurs exactes, lire les cibles de `CloudsTemporalNode` par
+  `renderer.readRenderTargetPixelsAsync` via un export temporaire dans `window.osf`.
 
 ## Lot 1 — Gains rapides
 
@@ -881,6 +892,8 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
   de l'historique, voir L4.4) ; bruit de détail fixe pendant que le vent déplaçait les nuages.
 - Réglé avec l'utilisateur (L4.3) : plus de poudre ; lumière du ciel à 0,5 essayée puis refusée
   (dessus des cumulus gris). Rebond du sol écarté.
+- Commits : `7c35329`, `f55f231`, `e360847` sur `feat/render-clouds` (non poussée).
+- Mesures : scintillement (voir L4.4) ; coût GPU non remesuré (à refaire avant L4.5).
 - Prochaine étape : forme des cirrus, puis L4.5 (voir État courant).
 
 ### 2026-11-25 (20)
