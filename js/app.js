@@ -38,6 +38,7 @@ import GPUTimer from './benchmark/GPUTimer.js';
 import AircraftManager from './aircraft/AircraftManager.js';
 import EngineSound from './audio/EngineSound.js';
 import ChaseCameraController from './camera/ChaseCameraController.js';
+import OrbitCameraController from './camera/OrbitCameraController.js';
 import FlightPlanRecorder from './flightplan/FlightPlanRecorder.js';
 import Stats from 'stats.js';
 
@@ -115,6 +116,7 @@ async function initApp() {
     else showNotification('Gamepad connected — unknown layout, its sticks and buttons may be swapped');
   };
   const chaseCameraController = new ChaseCameraController();
+  const orbitCameraController = new OrbitCameraController((x, z) => geoTerrainManager.groundHeight(x, z));
   setFlightMode(CONFIG.flightMode);
   // Start in level flight
   if (flight === simulation) simulation.teleport(aircraft.position.clone(), aircraft.yaw, 0);
@@ -177,14 +179,18 @@ async function initApp() {
   // --- Config listeners ---
   const hiresBadge = document.getElementById('hires-badge');
   const applyDisplay = () => {
-    hudCanvas.style.display = CONFIG.showHud ? 'block' : 'none';
+    // The free exterior view shows the aircraft alone: the HUD reads as seen from behind
+    hudCanvas.style.display = CONFIG.showHud && CONFIG.cameraMode !== 'orbit' ? 'block' : 'none';
     hiresBadge.style.display = CONFIG.hiResMode ? 'block' : 'none';
   };
   applyDisplay();
   onChange((key) => {
-    if (key === 'showHud' || key === 'hiResMode') applyDisplay();
+    if (key === 'showHud' || key === 'hiResMode' || key === 'cameraMode') applyDisplay();
     if (key === 'showHud') updateFlyHint();
-    if (key === 'cameraMode') chaseCameraController.reset();
+    if (key === 'cameraMode') {
+      chaseCameraController.reset();
+      orbitCameraController.reset();
+    }
     if (key === 'flightMode') setFlightMode(CONFIG.flightMode);
   });
 
@@ -227,9 +233,12 @@ async function initApp() {
     showNotification(`Texture: ${CONFIG.textureMode}`);
   });
 
+  const VIEWS = ['chase', 'orbit', 'cockpit'];
   const toggleView = () => {
-    const next = CONFIG.cameraMode === 'chase' ? 'cockpit' : 'chase';
+    const next = VIEWS[(VIEWS.indexOf(CONFIG.cameraMode) + 1) % VIEWS.length];
     update('cameraMode', next);
+    // The mouse stops steering there: say how it turns the view instead
+    if (next === 'orbit') showNotification('Orbit view — mouse or right stick turns, wheel zooms');
     Logger.info('App', `Camera mode: ${next}`);
   };
   input.onKey('v', toggleView);
@@ -514,6 +523,7 @@ async function initApp() {
     smoothedFrameMs += (frameTimeMs - smoothedFrameMs) * 0.05;
 
     // --- Input phase ---
+    controls.freeLook = CONFIG.cameraMode === 'orbit';
     const commands = controls.sample(dt);
     if (controls.device !== lastControlDevice) {
       lastControlDevice = controls.device;
@@ -604,6 +614,10 @@ async function initApp() {
         _qRoll.setFromAxisAngle(_axisZ, aircraftState.roll);
         camera.quaternion.multiply(_qRoll);
         chaseCameraController.reset();
+      } else if (CONFIG.cameraMode === 'orbit') {
+        aircraftManager.setVisible(true);
+        orbitCameraController.turn(commands.view);
+        orbitCameraController.update(aircraftState, camera, dt);
       } else {
         aircraftManager.setVisible(true);
         // Simulation: behind the mouse aim, or attached to the airframe when
@@ -675,7 +689,7 @@ async function initApp() {
 
     // --- Overlay phase ---
     if (timer) timer.begin('hud');
-    hud.update(camera, aircraftState ? aircraftGroundElevation : groundElevation, benchmarkRunner, dt, flightPlanRecorder, aircraftState);
+    if (CONFIG.cameraMode !== 'orbit') hud.update(camera, aircraftState ? aircraftGroundElevation : groundElevation, benchmarkRunner, dt, flightPlanRecorder, aircraftState);
     if (timer) timer.end('hud');
 
     if (timer) timer.begin('minimap');

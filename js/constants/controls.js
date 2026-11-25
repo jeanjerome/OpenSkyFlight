@@ -10,6 +10,9 @@ export const GAMEPAD_TRIGGER_DEADZONE = 0.05;
 /** Turn rate (rad/s) at full stick in the Exploration mode, at sensitivity 1 */
 export const GAMEPAD_YAW_RATE = 1.2;
 
+/** Turn rate of a free view at full right stick (rad/s) */
+export const GAMEPAD_VIEW_RATE = 2;
+
 /** Pitch rate (rad/s) at full stick in the Exploration mode, at sensitivity 1 */
 export const GAMEPAD_PITCH_RATE = 0.9;
 

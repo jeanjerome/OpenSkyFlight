@@ -305,10 +305,11 @@ export const SETTINGS = [
     tab: 'flight',
     section: 'Aircraft',
     label: 'View',
-    help: 'Behind the aircraft, or from the cockpit (V).',
+    help: 'Behind the aircraft; around it, turned with the mouse or the right stick and zoomed with the wheel; or from the cockpit (V).',
     type: 'choice',
     options: [
       ['chase', 'Chase'],
+      ['orbit', 'Orbit'],
       ['cockpit', 'Cockpit'],
     ],
     persist: true,

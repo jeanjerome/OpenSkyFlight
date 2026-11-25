@@ -5,6 +5,7 @@ import {
   GAMEPAD_EXPO,
   GAMEPAD_PITCH_RATE,
   GAMEPAD_TRIGGER_DEADZONE,
+  GAMEPAD_VIEW_RATE,
   GAMEPAD_YAW_RATE,
   KEYBOARD_STICK,
   MOUSE_EVENT_RATE,
@@ -28,6 +29,12 @@ const MOUSE_DRIFT_RATIO = 0.2;
  *   - throttle: -1 to 1, lever moving back or forward (S/W, triggers)
  *   - airbrake: Space or the gamepad's B button
  *   - aimYaw, aimPitch: mouse moves this frame (rad), for the mouse aim
+ * - view: turn of a free view this frame, as yaw and pitch (rad, as lookYaw
+ *   and lookPitch), and wheel scroll (pixels, positive away)
+ *
+ * With freeLook set (free exterior view), the mouse and the gamepad's right
+ * stick turn the view instead of steering, sliding or working the rudder:
+ * they then only feed `view`.
  *
  * The mouse steers only while the pointer is locked to the view (click on the
  * view); the keyboard and the gamepad steer without it. Gamepads are read in
@@ -45,6 +52,8 @@ export default class ControlInputs {
     this.device = 'keyboard';
     /** Called with the gamepad when one is connected, with null when it is disconnected */
     this.onGamepadChange = null;
+    /** Whether the mouse and the right stick turn a free view (see the class comment) */
+    this.freeLook = false;
 
     this.commands = {
       lookYaw: 0,
@@ -54,7 +63,9 @@ export default class ControlInputs {
       forward: 0,
       strafe: 0,
       flight: { pitch: 0, roll: 0, yaw: 0, direct: false, throttle: 0, airbrake: false, aimYaw: 0, aimPitch: 0 },
+      view: { yaw: 0, pitch: 0, zoom: 0 },
     };
+    this._wheel = 0;
 
     this._mouseYaw = 0;
     this._mousePitch = 0;
@@ -72,6 +83,9 @@ export default class ControlInputs {
     this._onClick = () => {
       if (!this.locked) this.domElement.requestPointerLock();
     };
+    this._onWheel = (e) => {
+      this._wheel += e.deltaMode === 0 ? e.deltaY : e.deltaY * 40;
+    };
     this._onGamepadConnected = (e) => this.onGamepadChange?.(e.gamepad);
     this._onGamepadDisconnected = () => {
       if (!this._gamepad()) this.onGamepadChange?.(null);
@@ -82,6 +96,7 @@ export default class ControlInputs {
     document.addEventListener('keyup', this._onKeyUp);
     document.addEventListener('pointerlockchange', this._onPointerLockChange);
     domElement.addEventListener('click', this._onClick);
+    domElement.addEventListener('wheel', this._onWheel, { passive: true });
     window.addEventListener('gamepadconnected', this._onGamepadConnected);
     window.addEventListener('gamepaddisconnected', this._onGamepadDisconnected);
   }
@@ -119,6 +134,21 @@ export default class ControlInputs {
     this._mousePitch = 0;
     this._mouseYawRate = null;
     this._mousePitchRate = null;
+    const view = c.view;
+    view.yaw = 0;
+    view.pitch = 0;
+    view.zoom = this._wheel;
+    this._wheel = 0;
+    if (this.freeLook) {
+      view.yaw = c.lookYaw;
+      view.pitch = c.lookPitch;
+      c.lookYaw = 0;
+      c.lookPitch = 0;
+      f.aimYaw = 0;
+      f.aimPitch = 0;
+      c.yawRate = null;
+      c.pitchRate = null;
+    }
 
     const k = this.keys;
     let forward = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0);
@@ -133,7 +163,14 @@ export default class ControlInputs {
     if (pad) {
       const x = stick(pad.axes[GAMEPAD.LEFT_STICK_X]);
       const y = stick(pad.axes[GAMEPAD.LEFT_STICK_Y]);
-      const side = stick(pad.axes[GAMEPAD.RIGHT_STICK_X]);
+      let side = stick(pad.axes[GAMEPAD.RIGHT_STICK_X]);
+      if (this.freeLook) {
+        const up = stick(pad.axes[GAMEPAD.RIGHT_STICK_Y]);
+        view.yaw -= side * GAMEPAD_VIEW_RATE * dt;
+        view.pitch -= up * GAMEPAD_VIEW_RATE * dt;
+        if (side || up) this.device = 'gamepad';
+        side = 0;
+      }
       const triggers = trigger(pad.buttons[GAMEPAD.RT]) - trigger(pad.buttons[GAMEPAD.LT]);
       const bumpers = (pad.buttons[GAMEPAD.RB]?.pressed ? 1 : 0) - (pad.buttons[GAMEPAD.LB]?.pressed ? 1 : 0);
 
@@ -175,6 +212,7 @@ export default class ControlInputs {
     document.removeEventListener('keyup', this._onKeyUp);
     document.removeEventListener('pointerlockchange', this._onPointerLockChange);
     this.domElement.removeEventListener('click', this._onClick);
+    this.domElement.removeEventListener('wheel', this._onWheel);
     window.removeEventListener('gamepadconnected', this._onGamepadConnected);
     window.removeEventListener('gamepaddisconnected', this._onGamepadDisconnected);
   }
