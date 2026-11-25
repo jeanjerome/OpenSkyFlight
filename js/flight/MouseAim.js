@@ -5,8 +5,13 @@ const AIM_PITCH_MAX = (89 * Math.PI) / 180;
 
 /**
  * Angles between the nose and the aim (rad): beyond BANK_FULL the instructor
- * banks to put the aim above the canopy; within BANK_FROM it flies upright,
- * banked in proportion to how far the aim lies to the side; in between it blends
+ * rolls so that the aim lies above the canopy (and pulls) or below the floor
+ * (and pushes); within BANK_FROM it flies upright, banked in proportion to how
+ * far the aim lies to the side. In between it blends the two when upright
+ * and pulling, where they agree. Pushing, where they would pull the roll in
+ * opposite directions, it keeps one until within BANK_FROM and the other
+ * until beyond BANK_FULL; inverted, it pulls until the nose is on the aim
+ * (ROLL_BACK_WITHIN).
  */
 const BANK_FROM = (8 * Math.PI) / 180;
 const BANK_FULL = (20 * Math.PI) / 180;
@@ -15,8 +20,27 @@ const BANK_FULL = (20 * Math.PI) / 180;
 const SIDE_BANK_GAIN = 10;
 const SIDE_BANK_MAX = (60 * Math.PI) / 180;
 
-/** Below the nose and within this angle, the instructor pushes instead of rolling inverted (rad) */
-const PUSH_WITHIN = (15 * Math.PI) / 180;
+/**
+ * Pushing: an aim below the wings is reached by pushing when it lies nearly
+ * under the floor, within PUSH_ROLL of it (an aim further to the side is
+ * reached by banking towards it and pulling), and within PUSH_MAX below the
+ * wings (a steeper aim is reached by rolling inverted and pulling). Once
+ * chosen, pushing goes on until the aim lies SWITCH_MARGIN further aside.
+ */
+const PUSH_ROLL = (40 * Math.PI) / 180;
+const PUSH_MAX = (40 * Math.PI) / 180;
+const SWITCH_MARGIN = (15 * Math.PI) / 180;
+
+/**
+ * Inverted (after a half loop or a split S), the aircraft rolls back upright
+ * once its nose is this close to the aim (rad): a roll about the nose then
+ * keeps it there, where an earlier roll would sweep the still-turning nose
+ * past the aim. Once started, the roll goes on until upright.
+ */
+const ROLL_BACK_WITHIN = (3 * Math.PI) / 180;
+
+/** Roll left to go (rad) beyond which the roll keeps the direction it started in */
+const ROLL_COMMIT = (150 * Math.PI) / 180;
 
 /** Gains of the instructor: bank error to roll stick, pitch error to pitch stick, and their rate damping */
 const ROLL_GAIN = 1.6;
@@ -38,10 +62,11 @@ const smoothstep = (a, b, x) => {
  * same stick commands as a pilot and so within the limits of the flight
  * control system.
  *
- * Far from the aim the instructor banks so that the aim lies above the
- * canopy, then pulls; near it the aircraft flies upright, banked towards the
- * side the aim lies on, and pushes to reach an aim a little below the nose
- * rather than rolling inverted.
+ * Far from the aim the instructor rolls so that the aim lies above the
+ * canopy, then pulls, as a pilot would; an aim moderately below the wings is
+ * reached by rolling the other way, putting it below the floor, and pushing,
+ * when that needs less roll. Near the aim the aircraft flies upright, banked
+ * towards the side the aim lies on.
  */
 export default class MouseAim {
   constructor() {
@@ -52,6 +77,10 @@ export default class MouseAim {
     this._body = new THREE.Vector3();
     this._nose = new THREE.Vector3();
     this._rollDirection = 0;
+    this._pushing = false;
+    this._near = false;
+    this._rollingBack = false;
+    this._turnDirection = 0;
     this._qInv = new THREE.Quaternion();
   }
 
@@ -82,14 +111,28 @@ export default class MouseAim {
     const ahead = -local.z;
     const offset = Math.acos(clamp(ahead, -1, 1));
 
-    // Far: bank so that the aim lies above the canopy (a slightly low aim is
-    // reached by pushing, so the bank only matches its sideways part)
-    const push = up < 0 && offset < PUSH_WITHIN;
-    const over = Math.atan2(right, push ? -up : up);
+    // Far: roll so that the aim lies above the canopy and pull, or, for an aim
+    // a little below the nose, below the floor and push
+    const pull = Math.atan2(right, up);
+    const pushRoll = Math.atan2(-right, -up);
+    const elevation = Math.asin(clamp(up, -1, 1));
+    const canPush = up < 0 && ahead > 0 && elevation > -PUSH_MAX;
+    this._pushing = canPush && Math.abs(pushRoll) < PUSH_ROLL + (this._pushing ? SWITCH_MARGIN : 0);
+    let over = this._pushing ? pushRoll : pull;
+    // An aim right behind the roll axis gives a roll of ±180° whose sign
+    // flips with the slightest sideways move: keep the direction first taken
+    if (Math.abs(over) > ROLL_COMMIT) {
+      this._turnDirection ||= Math.sign(over) || 1;
+      over = this._turnDirection * Math.abs(over);
+    } else if (Math.abs(over) < Math.PI / 2) {
+      this._turnDirection = 0;
+    }
     // Near: upright, banked towards the side of the aim, measured between
-    // headings so that it does not flip when the aircraft is inverted
+    // headings so that it does not flip when the aircraft is inverted, as an
+    // angle (headings converge towards the vertical: a steep climb would
+    // otherwise magnify it and rock the wings)
     const nose = this._nose.set(0, 0, -1).applyQuaternion(model.quaternion);
-    const side = wrap(Math.atan2(-nose.x, -nose.z) - this.yaw);
+    const side = wrap(Math.atan2(-nose.x, -nose.z) - this.yaw) * Math.cos(this.pitch);
     // Past 90° of bank, roll back upright the way it started, without
     // hesitating as the bank flips between +π and −π
     let upright;
@@ -100,16 +143,30 @@ export default class MouseAim {
       this._rollDirection = 0;
       upright = clamp(SIDE_BANK_GAIN * side, -SIDE_BANK_MAX, SIDE_BANK_MAX) - model.bank;
     }
-    // Inverted near the aim (end of a half loop): roll upright first
-    const inverted = Math.abs(model.bank) > Math.PI / 2 && offset < BANK_FULL;
-    const toward = inverted ? 0 : smoothstep(BANK_FROM, BANK_FULL, offset);
-    const bankError = toward * over + (1 - toward) * upright;
+    if (offset < BANK_FROM) this._near = true;
+    else if (offset > BANK_FULL) this._near = false;
+    const inverted = Math.abs(model.bank) > Math.PI / 2;
+    if (!inverted) this._rollingBack = false;
+    else if (offset < ROLL_BACK_WITHIN) this._rollingBack = true;
+    let bankError;
+    // One target or the other: blended, they would hold the roll halfway
+    if (inverted) {
+      bankError = this._rollingBack ? upright : over;
+    } else if (this._pushing) {
+      bankError = this._near ? upright : over;
+    } else {
+      const toward = smoothstep(BANK_FROM, BANK_FULL, offset);
+      bankError = toward * over + (1 - toward) * upright;
+    }
     const rollRate = -model.angularVelocity.z;
     out.roll = clamp(ROLL_GAIN * bankError - ROLL_DAMPING * rollRate, -1, 1);
 
-    // Pitch towards the aim in the plane of the wings' normal
+    // Pitch towards the aim in the plane of the wings' normal; far from an aim
+    // it does not push towards, it rolls and pulls rather than push (pushing
+    // banked away from the aim's side would cancel the turn)
     const pitchError = Math.atan2(up, Math.max(ahead, 0.05));
-    out.pitch = clamp(PITCH_GAIN * pitchError - PITCH_DAMPING * model.angularVelocity.x, -1, 1);
+    const lowest = this._pushing || this._near ? -1 : 0;
+    out.pitch = clamp(PITCH_GAIN * pitchError - PITCH_DAMPING * model.angularVelocity.x, lowest, 1);
     return out;
   }
 
