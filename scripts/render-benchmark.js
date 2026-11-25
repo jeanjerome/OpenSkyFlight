@@ -44,6 +44,8 @@ const page = await context.newPage();
 // Developer mode enables the benchmark key; a fresh browser profile starts from the default settings
 const url = new URL(values.url);
 url.searchParams.set('dev', '1');
+// The default flight starts where the aircraft is: it must hold still until then, as in free flight
+url.searchParams.set('flightMode', 'exploration');
 for (const assignment of values.set) {
   const eq = assignment.indexOf('=');
   if (eq < 1) {

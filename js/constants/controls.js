@@ -37,3 +37,6 @@ export const GAMEPAD = {
   RIGHT_STICK_X: 2,
   RIGHT_STICK_Y: 3,
 };
+
+/** Stick deflection of a held flight key in the Simulation mode: a firm but not a full pull */
+export const KEYBOARD_STICK = 0.7;

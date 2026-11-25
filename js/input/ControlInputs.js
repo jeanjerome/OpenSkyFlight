@@ -6,6 +6,7 @@ import {
   GAMEPAD_PITCH_RATE,
   GAMEPAD_TRIGGER_DEADZONE,
   GAMEPAD_YAW_RATE,
+  KEYBOARD_STICK,
   MOUSE_EVENT_RATE,
 } from '../constants/controls.js';
 
@@ -20,6 +21,13 @@ const MOUSE_DRIFT_RATIO = 0.2;
  * - yawRate, pitchRate: turn rate of the device this frame, in radians per
  *   mouse event (see MOUSE_EVENT_RATE); null when the device did not turn
  * - forward, strafe: from -1 to 1 (W/S or triggers, A/D or right stick)
+ * - flight: commands of the Simulation mode
+ *   - pitch (pull +), roll (right +), yaw (right +): from -1 to 1, from the
+ *     arrows, A/D and Q/E, or the gamepad's left stick, right stick and
+ *     bumpers; `direct` tells whether one of them is held this frame
+ *   - throttle: -1 to 1, lever moving back or forward (S/W, triggers)
+ *   - airbrake: Space or the gamepad's B button
+ *   - aimYaw, aimPitch: mouse moves this frame (rad), for the mouse aim
  *
  * The mouse steers only while the pointer is locked to the view (click on the
  * view); the keyboard and the gamepad steer without it. Gamepads are read in
@@ -38,7 +46,15 @@ export default class ControlInputs {
     /** Called with the gamepad when one is connected, with null when it is disconnected */
     this.onGamepadChange = null;
 
-    this.commands = { lookYaw: 0, lookPitch: 0, yawRate: null, pitchRate: null, forward: 0, strafe: 0 };
+    this.commands = {
+      lookYaw: 0,
+      lookPitch: 0,
+      yawRate: null,
+      pitchRate: null,
+      forward: 0,
+      strafe: 0,
+      flight: { pitch: 0, roll: 0, yaw: 0, direct: false, throttle: 0, airbrake: false, aimYaw: 0, aimPitch: 0 },
+    };
 
     this._mouseYaw = 0;
     this._mousePitch = 0;
@@ -94,6 +110,9 @@ export default class ControlInputs {
     if (absYaw > 0.0001 && Math.abs(pitch) / absYaw < MOUSE_DRIFT_RATIO) pitch = 0;
     c.lookYaw = this._mouseYaw;
     c.lookPitch = pitch;
+    const f = c.flight;
+    f.aimYaw = this._mouseYaw;
+    f.aimPitch = pitch;
     c.yawRate = this._mouseYawRate;
     c.pitchRate = this._mousePitchRate;
     this._mouseYaw = 0;
@@ -104,13 +123,19 @@ export default class ControlInputs {
     const k = this.keys;
     let forward = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0);
     let strafe = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0);
+    let stickPitch = ((k.ArrowDown ? 1 : 0) - (k.ArrowUp ? 1 : 0)) * KEYBOARD_STICK;
+    let stickRoll = strafe * KEYBOARD_STICK;
+    let rudder = (k.KeyE ? 1 : 0) - (k.KeyQ ? 1 : 0);
+    let throttle = (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0);
+    let airbrake = Boolean(k.Space);
 
     const pad = this._gamepad();
     if (pad) {
       const x = stick(pad.axes[GAMEPAD.LEFT_STICK_X]);
       const y = stick(pad.axes[GAMEPAD.LEFT_STICK_Y]);
       const side = stick(pad.axes[GAMEPAD.RIGHT_STICK_X]);
-      const throttle = trigger(pad.buttons[GAMEPAD.RT]) - trigger(pad.buttons[GAMEPAD.LT]);
+      const triggers = trigger(pad.buttons[GAMEPAD.RT]) - trigger(pad.buttons[GAMEPAD.LT]);
+      const bumpers = (pad.buttons[GAMEPAD.RB]?.pressed ? 1 : 0) - (pad.buttons[GAMEPAD.LB]?.pressed ? 1 : 0);
 
       if (x || y) {
         const sensitivity = CONFIG.gamepadSensitivity;
@@ -121,15 +146,26 @@ export default class ControlInputs {
         c.yawRate = yawRate / MOUSE_EVENT_RATE;
         c.pitchRate = pitchRate / MOUSE_EVENT_RATE;
       }
-      forward += throttle;
+      forward += triggers;
       strafe += side;
-      if (x || y || side || throttle) this.device = 'gamepad';
+      stickPitch += CONFIG.invertStickPitch ? -y : y;
+      stickRoll += x;
+      rudder += side + bumpers;
+      throttle += triggers;
+      airbrake ||= Boolean(pad.buttons[GAMEPAD.B]?.pressed);
+      if (x || y || side || triggers || bumpers) this.device = 'gamepad';
 
       this._readButtons(pad);
     }
 
-    c.forward = Math.max(-1, Math.min(1, forward));
-    c.strafe = Math.max(-1, Math.min(1, strafe));
+    c.forward = clampUnit(forward);
+    c.strafe = clampUnit(strafe);
+    f.pitch = clampUnit(stickPitch);
+    f.roll = clampUnit(stickRoll);
+    f.yaw = clampUnit(rudder);
+    f.direct = f.pitch !== 0 || f.roll !== 0;
+    f.throttle = clampUnit(throttle);
+    f.airbrake = airbrake;
     return c;
   }
 
@@ -179,6 +215,8 @@ export default class ControlInputs {
 
   _onKeyDown(e) {
     if (isTextField(e.target)) return;
+    // Space is the airbrake, not a click on the focused button
+    if (e.code === 'Space') e.preventDefault();
     this.keys[e.code] = true;
   }
 
@@ -186,6 +224,10 @@ export default class ControlInputs {
     if (isTextField(e.target)) return;
     this.keys[e.code] = false;
   }
+}
+
+function clampUnit(v) {
+  return Math.max(-1, Math.min(1, v));
 }
 
 function isTextField(target) {

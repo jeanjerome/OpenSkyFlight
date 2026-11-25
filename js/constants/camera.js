@@ -27,6 +27,9 @@ export const STIFFNESS_PITCH = 6;
 /** Spring stiffness for roll following */
 export const STIFFNESS_ROLL = 15;
 
+/** Rate (1/s) at which the attached chase view catches up with the aircraft's orientation */
+export const STIFFNESS_ATTACHED = 6;
+
 /** How much of the aircraft yaw to follow (1.0 = full) */
 export const FOLLOW_YAW = 1.0;
 

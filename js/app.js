@@ -20,6 +20,7 @@ import GeoTerrainManager from './terrain/GeoTerrainManager.js';
 import ControlInputs from './input/ControlInputs.js';
 import AircraftState from './flight/AircraftState.js';
 import ExplorationFlight from './flight/ExplorationFlight.js';
+import SimulatedFlight from './flight/SimulatedFlight.js';
 import SimulationClock from './sim/SimulationClock.js';
 import EntityRegistry from './sim/EntityRegistry.js';
 import ControlPanel from './ui/ControlPanel.js';
@@ -79,8 +80,30 @@ async function initApp() {
   const entities = new EntityRegistry(ENTITY_GRID_CELL);
   const aircraft = new AircraftState();
   aircraft.position.copy(camera.position);
-  const flight = new ExplorationFlight(aircraft);
+  // Two ways to fly the same aircraft: free flight (Exploration) and the
+  // flight model (Simulation); `flight` is the one in use
+  const exploration = new ExplorationFlight(aircraft);
+  const simulation = new SimulatedFlight(aircraft, (x, z) => geoTerrainManager.groundHeight(x, z));
+  let flight = exploration;
   const aircraftPose = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion(), yaw: 0, pitch: 0 };
+  // Heading and pitch the chase view follows in the Simulation mode: the mouse aim
+  const aimView = { position: aircraftPose.position, yaw: 0, pitch: 0 };
+  let attachedView = false;
+
+  /** Fly the aircraft in a mode from where it is, nose where it points */
+  function setFlightMode(mode) {
+    const next = mode === 'exploration' ? exploration : simulation;
+    if (next === flight) return;
+    next.enabled = flight.enabled;
+    flight = next;
+    next.teleport(aircraft.position.clone(), aircraft.yaw, aircraft.pitch);
+    chaseCameraController.reset();
+  }
+  simulation.onCrash = (at, ground) => {
+    showNotification('Crashed: flight restarted 1 500 m above the ground');
+    simulation.teleport(new THREE.Vector3(at.x, ground + 1500, at.z), aircraft.yaw, 0);
+    chaseCameraController.reset();
+  };
 
   // --- Controllers ---
   const controls = new ControlInputs(renderer.domElement);
@@ -91,6 +114,9 @@ async function initApp() {
     else showNotification('Gamepad connected — unknown layout, its sticks and buttons may be swapped');
   };
   const chaseCameraController = new ChaseCameraController();
+  setFlightMode(CONFIG.flightMode);
+  // Start in level flight
+  if (flight === simulation) simulation.teleport(aircraft.position.clone(), aircraft.yaw, 0);
   const _qRoll = new THREE.Quaternion();
   const _axisZ = new THREE.Vector3(0, 0, 1);
   const _autopilotEuler = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -155,6 +181,7 @@ async function initApp() {
     if (key === 'showHud' || key === 'hiResMode') applyDisplay();
     if (key === 'showHud') updateFlyHint();
     if (key === 'cameraMode') chaseCameraController.reset();
+    if (key === 'flightMode') setFlightMode(CONFIG.flightMode);
   });
 
   // --- Input bindings ---
@@ -177,6 +204,11 @@ async function initApp() {
   input.onKey('r', () => {
     const active = geoTerrainManager.toggleHiRes();
     Logger.info('App', `Hi-res mode (zoom 18) ${active ? 'enabled' : 'disabled'}`);
+  });
+
+  input.onKey('f', () => {
+    update('flightMode', CONFIG.flightMode === 'simulation' ? 'exploration' : 'simulation');
+    showNotification(CONFIG.flightMode === 'simulation' ? 'Simulation flight' : 'Exploration flight');
   });
 
   input.onKey('o', () => {
@@ -315,6 +347,8 @@ async function initApp() {
     if (!position) return false;
 
     if (flightPlanRecorder.autopilotActive) flightPlanRecorder.autopilotActive = false;
+    // Views are set up in free flight, where the aircraft holds still
+    update('flightMode', 'exploration');
     flight.enabled = true;
     // Sun fixed for reproducible captures
     update('timeSpeed', 0);
@@ -431,6 +465,17 @@ async function initApp() {
         simulationTime: simulationClock.time,
         groundHeight: geoTerrainManager.groundHeight(x, z),
         groundHeightZoom12: geoTerrainManager.getGroundElevation(x, z, null),
+        mode: CONFIG.flightMode,
+        ...(flight === simulation && {
+          mach: simulation.model.mach,
+          indicatedAirspeed: simulation.model.indicatedAirspeed,
+          loadFactor: simulation.model.loadFactor,
+          alpha: simulation.model.alpha,
+          bank: simulation.model.bank,
+          lever: simulation.model.controls.lever,
+          thrust: simulation.model.engines.thrust,
+          fuel: simulation.model.fuel,
+        }),
       };
     },
     // Ground as drawn at a world position (null while not loaded)
@@ -518,6 +563,8 @@ async function initApp() {
         thrust: true,
       };
     } else if (!benchmarkRunner.isRunning()) {
+      const simulated = flight === simulation;
+      const model = simulation.model;
       aircraftState = {
         position: aircraftPose.position,
         yaw: aircraftPose.yaw,
@@ -526,6 +573,10 @@ async function initApp() {
         pitchRate: flight.pitchRate,
         quaternion: aircraftPose.quaternion,
         thrust: flight.thrusting,
+        engines: simulated ? { thrust: model.engines.core, afterburner: model.engines.reheat } : null,
+        // Flight data for the HUD and the control surfaces, in the Simulation mode
+        model: simulated ? model : null,
+        aim: simulated && simulation.aiming ? simulation.aim.direction : null,
       };
     }
 
@@ -549,7 +600,22 @@ async function initApp() {
         chaseCameraController.reset();
       } else {
         aircraftManager.setVisible(true);
-        chaseCameraController.update(aircraftState, camera, dt);
+        // Simulation: behind the mouse aim, or attached to the airframe when
+        // flown with the keys or the gamepad
+        const attached = Boolean(aircraftState.model) && !aircraftState.aim;
+        if (attached !== attachedView) {
+          attachedView = attached;
+          chaseCameraController.reset();
+        }
+        if (attached) {
+          chaseCameraController.updateAttached(aircraftState, camera, dt);
+        } else if (aircraftState.aim) {
+          aimView.yaw = simulation.aim.yaw;
+          aimView.pitch = simulation.aim.pitch;
+          chaseCameraController.update(aimView, camera, dt);
+        } else {
+          chaseCameraController.update(aircraftState, camera, dt);
+        }
       }
     }
 

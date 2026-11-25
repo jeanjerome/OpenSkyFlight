@@ -265,11 +265,24 @@ export const SETTINGS = [
 
   // ── Flight ──
   {
+    key: 'flightMode',
+    tab: 'flight',
+    section: 'Aircraft',
+    label: 'Flight',
+    help: 'Simulation: the Rafale flies by its weight, wings and engines. Exploration: free flight at any speed, to travel and look around (F).',
+    type: 'choice',
+    options: [
+      ['simulation', 'Simulation'],
+      ['exploration', 'Exploration'],
+    ],
+    persist: true,
+  },
+  {
     key: 'cameraSpeed',
     tab: 'flight',
     section: 'Aircraft',
-    label: 'Speed',
-    help: 'Flying speed while W or ↑ is held.',
+    label: 'Exploration speed',
+    help: 'Flying speed in the Exploration mode while W or ↑ is held.',
     type: 'range',
     min: 1,
     max: 4000,

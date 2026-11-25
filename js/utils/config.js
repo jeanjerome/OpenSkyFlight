@@ -12,7 +12,8 @@ import { SETTINGS_BY_KEY } from './settingsSchema.js';
  * @property {boolean} hiResMode              - Hi-res zoom 18 mode (default: false)
  *
  * Camera & flight:
- * @property {number}  cameraSpeed            - Flight speed in m/s, range [1..4000] (default: 560)
+ * @property {string}  flightMode             - 'simulation' (flight model) | 'exploration' (free flight) (default: 'simulation')
+ * @property {number}  cameraSpeed            - Exploration flight speed in m/s, range [1..4000] (default: 560)
  * @property {string}  cameraMode             - 'chase' | 'cockpit' (default: 'chase')
  * @property {number}  mouseSensitivity       - Mouse look sensitivity (default: 0.002)
  * @property {number}  gamepadSensitivity     - Turn rate at full stick relative to the default, range [0.25..2] (default: 1)
@@ -60,6 +61,7 @@ import { SETTINGS_BY_KEY } from './settingsSchema.js';
 
 /** @type {AppConfig} */
 const CONFIG = {
+  flightMode: 'simulation',
   cameraSpeed: 560,
   cameraMode: 'chase',
   mouseSensitivity: 0.002,

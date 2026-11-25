@@ -6,6 +6,7 @@ import {
   STIFFNESS_YAW,
   STIFFNESS_PITCH,
   FOLLOW_YAW,
+  STIFFNESS_ATTACHED,
 } from '../constants/camera.js';
 
 export default class ChaseCameraController {
@@ -14,6 +15,7 @@ export default class ChaseCameraController {
     this.pitchFollower = new SpringScalar(0, false);
 
     this._needsInit = true;
+    this._attached = new THREE.Quaternion();
 
     // Reusable objects
     this._offset = new THREE.Vector3();
@@ -25,6 +27,28 @@ export default class ChaseCameraController {
     this._needsInit = true;
   }
 
+  /**
+   * Behind the aircraft, turning with it in all three axes (roll included),
+   * a little late so that the airframe's motion shows
+   * @param {{position: THREE.Vector3, quaternion: THREE.Quaternion}} state
+   */
+  updateAttached(state, camera, dt) {
+    if (this._needsInit) {
+      this._attached.copy(state.quaternion);
+      this._needsInit = false;
+    }
+    this._attached.slerp(state.quaternion, 1 - Math.exp(-STIFFNESS_ATTACHED * dt));
+    this._offset.set(0, BOOM_HEIGHT, BOOM_DISTANCE).applyQuaternion(this._attached);
+    camera.position.copy(state.position).add(this._offset);
+    camera.quaternion.copy(this._attached);
+  }
+
+  /**
+   * Behind the aircraft, turning with springs on a heading and a pitch, wings
+   * of the view level: the aircraft's own in the Exploration mode, the mouse
+   * aim's in the Simulation mode
+   * @param {{position: THREE.Vector3, yaw: number, pitch: number}} state
+   */
   update(state, camera, dt) {
     if (this._needsInit) {
       this._initFromState(state);
