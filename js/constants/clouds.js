@@ -58,14 +58,21 @@ export const CLOUD_DETAIL_DISTANCE = 20e3;
 /**
  * Light scattering in a cloud: two Henyey-Greenstein lobes (forward, back) and
  * the share of the second, octaves of the multiple scattering approximation,
- * scale of the sky light, darkening of thin edges ("powder": scale, exponent)
+ * scale of the sky light. Thin edges are not darkened ("powder", Schneider):
+ * it greyed the thin cirrus, darker than the sky behind them, and dulled the
+ * cumulus.
  */
 export const CLOUD_PHASE_G = [0.7, -0.2];
 export const CLOUD_PHASE_MIX = 0.5;
 export const CLOUD_SCATTERING_OCTAVES = 8;
+/**
+ * Factors applied at each octave of the multiple scattering (Wrenninge 2013):
+ * to its energy, to the optical depth it goes through (below 1, the light of
+ * the later octaves reaches deeper into the cloud) and to the anisotropy of its
+ * phase function
+ */
+export const CLOUD_SCATTERING_DECAY = { energy: 0.5, opticalDepth: 0.5, anisotropy: 0.5 };
 export const CLOUD_SKY_LIGHT_SCALE = 1;
-export const CLOUD_POWDER_SCALE = 0.8;
-export const CLOUD_POWDER_EXPONENT = 150;
 
 /** Distance standing for the sky, where the scene pass drew nothing (m) */
 export const CLOUD_SKY_DISTANCE = 1e7;

@@ -44,8 +44,7 @@ import {
   CLOUD_MIN_TRANSMITTANCE,
   CLOUD_PHASE_G,
   CLOUD_PHASE_MIX,
-  CLOUD_POWDER_EXPONENT,
-  CLOUD_POWDER_SCALE,
+  CLOUD_SCATTERING_DECAY,
   CLOUD_SCATTERING_OCTAVES,
   CLOUD_SHAPE_TILE,
   CLOUD_SKY_DISTANCE,
@@ -101,7 +100,7 @@ function henyeyGreenstein(g, cosTheta) {
  * reaches each sample is the sunlight (or moonlight) through the cloud between
  * it and the light, marched in a few growing steps, scattered by a two-lobe
  * Henyey-Greenstein phase function with Wrenninge's approximation of multiple
- * scattering, plus the sky light; thin edges are darkened ("powder", Schneider).
+ * scattering, plus the sky light.
  * The scattered light is integrated over each step analytically (Hillaire,
  * Frostbite 2016). The sunlight and the sky light at the clouds' altitudes come
  * from the scattering tables of the atmosphere, and the air between the camera
@@ -367,10 +366,10 @@ export default class VolumetricClouds {
       const skyLow = vec3(low.sky).toConst();
       const skyHigh = vec3(high.sky).toConst();
 
-      // Phase of each octave of the multiple scattering: the anisotropy halves with each
+      // Phase of each octave of the multiple scattering, of decreasing anisotropy
       const phases = [];
       for (let i = 0; i < CLOUD_SCATTERING_OCTAVES; i++) {
-        const attenuation = 0.5 ** i;
+        const attenuation = CLOUD_SCATTERING_DECAY.anisotropy ** i;
         phases.push(
           mix(
             henyeyGreenstein(float(CLOUD_PHASE_G[0] * attenuation), cosTheta),
@@ -380,7 +379,11 @@ export default class VolumetricClouds {
         );
       }
       const multipleScattering = (opticalDepth) =>
-        phases.reduce((sum, phase, i) => sum.add(exp(opticalDepth.mul(-(0.5 ** i))).mul(phase).mul(0.5 ** i)), float(0));
+        phases.reduce(
+          (sum, phase, i) =>
+            sum.add(exp(opticalDepth.mul(-(CLOUD_SCATTERING_DECAY.opticalDepth ** i))).mul(phase).mul(CLOUD_SCATTERING_DECAY.energy ** i)),
+          float(0),
+        );
 
       const radiance = vec3(0).toVar();
       const transmittance = float(1).toVar();
@@ -405,8 +408,7 @@ export default class VolumetricClouds {
             const scattered = mix(sunLow, sunHigh, alpha)
               .mul(multipleScattering(opticalDepth))
               .add(mix(skyLow, skyHigh, alpha).mul(RECIPROCAL_PI4 * CLOUD_SKY_LIGHT_SCALE).mul(skyGradient))
-              .mul(extinction)
-              .mul(exp(extinction.mul(-CLOUD_POWDER_EXPONENT)).mul(CLOUD_POWDER_SCALE).oneMinus());
+              .mul(extinction);
             // Scattered light integrated over the step (energy conserving)
             const stepTransmittance = exp(extinction.mul(step).negate()).toConst();
             radiance.addAssign(transmittance.mul(scattered.sub(scattered.mul(stepTransmittance)).div(extinction)));

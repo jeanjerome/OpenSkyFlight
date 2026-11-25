@@ -6,7 +6,7 @@ contrainte : l'application doit continuer à fonctionner dans un navigateur (Web
 Ce document est la **source de vérité de l'avancement**. Il est lu en début de session et mis à jour
 en fin de session.
 
-## État courant (mis à jour le 2026-11-25, session 20)
+## État courant (mis à jour le 2026-11-25, session 21)
 
 - **Lots terminés** : 0 à 3, fusionnés dans `main` (lots 2 et 3 le 2026-11-24). Lot 3 : bilan dans
   **Mesures** (lignes « Clôture du lot 3 ») et constats visuels sous les tableaux. Lot 2 : toutes les tâches faites sauf le reste optionnel de
@@ -92,10 +92,9 @@ en fin de session.
   des vues : `benchmarks/render/clouds-2` (vue 5 : 6,44 ms, dont ≈ 2,65 ms de nuages contre 3,79 ms
   sans ; les vues de référence remettent le vent à zéro, sinon la couverture en vue dérive pendant une
   capture et le coût de la vue 5 varie de ±0,6 ms).
-- **Prochaine étape** : réglage du rendu avec l'utilisateur (L4.2, L4.3 : cirrus gris, contraste de
-  l'ombre propre, rebond du sol, couverture dans le menu), puis L4.5. Le scintillement de la
-  surface des nuages venait du rognage de l'historique (voir L4.4) ; revoir en vol rapide s'il
-  reste un grain des nuages proches.
+- **Prochaine étape** : forme des cirrus (nappe lisse, sans filaments ; L4.3), puis L4.5 (ombres des
+  nuages sur le terrain). Couverture dans le menu avec L4.8. Fait avec l'utilisateur : scintillement
+  (rognage de l'historique, L4.4), cirrus gris et contraste de l'ombre propre (L4.3).
 - **Suite** : lot 4 (nuages volumétriques). Points ouverts : culling des tuiles par three presque
   inopérant (sphère englobante calculée en coordonnées locales où l'épaisseur est en mètres et la
   largeur en tuiles : rayon démesuré une fois mis à l'échelle), piste CPU et GPU pour le lot 5 ; coût CPU de soumission (≈ 5 µs par
@@ -576,6 +575,15 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       (bruit bleu du point de départ non accumulé). Reste : réglages fins (cirrus gris, contraste de
       l'ombre propre, rebond du sol), grain des nuages proches en mouvement. Coût et grain à l'arrêt
       traités par L4.4.
+      Réglé avec l'utilisateur : plus de poudre (elle se règle sur l'extinction ; pensée pour les
+      bords des cumulus denses, elle divisait par ≈ 3 la lumière des cirrus, 100 fois moins denses,
+      plus sombres que le ciel derrière eux, et ternissait les cumulus). La lumière du ciel à 0,5
+      donnait plus de volume aux faces à l'ombre mais grisait le dessus des cumulus : refusée.
+      Coefficients de la diffusion multiple en constantes (`CLOUD_SCATTERING_DECAY`, inchangés).
+      Grain des nuages proches en vol rapide : plus de points sombres depuis la correction du
+      rognage (L4.4), seulement un léger flou en mouvement. Rebond du sol (`groundBounceScale` de
+      takram) écarté pour l'instant par l'utilisateur, faute de vue sous la couche. Reste : forme des
+      cirrus (une nappe lisse, sans filaments).
 - [x] **L4.4** Rendu à 1/4 de résolution + reprojection temporelle, composition tenant compte de la
       profondeur du terrain.
       `js/clouds/CloudsTemporalNode.js` : chaque frame marche un pixel de chaque bloc 4×4 de la passe
@@ -866,6 +874,14 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 ## Journal des sessions
 
 <!-- Entrée la plus récente en haut. -->
+
+### 2026-11-25 (21)
+- Corrigé : taches noires après la traversée d'un nuage (NaN de la perspective aérienne à distance
+  nulle, gardés pour toujours par l'historique) ; scintillement de la surface des nuages (rognage
+  de l'historique, voir L4.4) ; bruit de détail fixe pendant que le vent déplaçait les nuages.
+- Réglé avec l'utilisateur (L4.3) : plus de poudre ; lumière du ciel à 0,5 essayée puis refusée
+  (dessus des cumulus gris). Rebond du sol écarté.
+- Prochaine étape : forme des cirrus, puis L4.5 (voir État courant).
 
 ### 2026-11-25 (20)
 - Lot 4 jusqu'ici commité sur `feat/render-clouds` (correction du TAAU, nuages, documentation).
