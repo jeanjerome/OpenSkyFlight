@@ -77,8 +77,35 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
     matrices identité). Les charnières restent à calculer depuis la géométrie. `Rafale-2.gltf` est
     identique à `Rafale.gltf`. `Textures.zip` contient la texture de peinture et un `UVMap.pdf`
     (gabarit UV utile pour peindre les cartes métal/rugosité/normales de L6.1).
-  - Le modèle vient de CGTrader (modèle gratuit « Dassault Rafale B ») : licence à vérifier avant d'en
-    redistribuer des dérivés (voir Décisions, « Encore ouvert »).
+  - Le modèle vient de CGTrader (modèle gratuit « Dassault Rafale B ») sous licence Royalty Free,
+    incompatible avec sa présence dans le dépôt public (voir Décisions, « Encore ouvert ») : laissé
+    tel quel à la demande de l'utilisateur, le 2026-11-25.
+- **Prochaine session : G2**, sur `feat/flight-model` (toujours ni fusionnée ni poussée).
+  1. Remesurer d'abord les vues de référence **machine froide** (`render:capture`, comparer à
+     `lot3-cap2` et `g0`) pour lever le doute sur les écarts de G1 (bruit thermique probable).
+  2. G2.1 : brancher `AircraftLights` sur le régime réel. C'est déjà fait en partie :
+     `state.engines = { thrust: core, afterburner: reheat }` en Simulation (voir `app.js` et
+     `AircraftManager.update`), l'ancienne règle « PC au-dessus de 300 m/s » ne reste qu'en
+     Exploration et pour les trajectoires imposées (G1.8 : les dériver de la vitesse).
+  3. Puis G2.2 (flamme analytique, diamants de choc à l'espacement physique), G2.3 (volets de
+     tuyère, maillages `EngineL`/`EngineR`, charnières comme `ControlSurfaces.js`), G2.4 à G2.6.
+  4. Recueillir le ressenti de l'utilisateur sur la visée souris et le roulis clavier : gains dans
+     `js/flight/MouseAim.js` (`ROLL_GAIN`, `PITCH_GAIN`, `SIDE_BANK_GAIN`…) et
+     `js/flight/SimulatedFlight.js` (`KEY_STICK_TIME`), `KEYBOARD_STICK` dans
+     `js/constants/controls.js`.
+- **Outils** : `npm test` (tests Node, dont le banc du modèle de vol), `npm run flight:bench`
+  (tableau du banc), scripts Playwright ad hoc dans le scratchpad de session (manette simulée par
+  `navigator.getGamepads` injecté avec `addInitScript` ; `window.osf.aircraft()` donne mode, Mach,
+  vitesse, g, incidence, inclinaison, manette, poussée et carburant). Serveur de test sur un autre
+  port que celui de l'utilisateur (3000), voir `docs/rendering-roadmap.md`, Outillage.
+
+## Comment reprendre le travail (début de session)
+
+1. Lire **État courant**, puis le lot en cours et **Décisions**.
+2. `git status` et `git log --oneline -15` sur `feat/flight-model`.
+3. `npm test` doit passer (banc du modèle de vol compris) avant toute modification.
+4. En fin de session : cocher les tâches, consigner mesures et banc, mettre à jour **État courant** et
+   ajouter une entrée au **Journal des sessions**.
 
 ## Conventions
 
