@@ -6,7 +6,7 @@ contrainte : l'application doit continuer à fonctionner dans un navigateur (Web
 Ce document est la **source de vérité de l'avancement**. Il est lu en début de session et mis à jour
 en fin de session.
 
-## État courant (mis à jour le 2026-11-24, session 18)
+## État courant (mis à jour le 2026-11-25, session 19)
 
 - **Lots terminés** : 0 à 3, fusionnés dans `main` (lots 2 et 3 le 2026-11-24). Lot 3 : bilan dans
   **Mesures** (lignes « Clôture du lot 3 ») et constats visuels sous les tableaux. Lot 2 : toutes les tâches faites sauf le reste optionnel de
@@ -67,8 +67,8 @@ en fin de session.
   un bruit bleu à `screenCoordinate`, absent d'un compute (`raymarchSampleOffset`) ; comparer
   WebGPU et WebGL2 avec `autoExposure=false` (exposition automatique WebGPU seulement).
 - **Pause terminée le 2026-11-25** : les lots G0 à G2 de `docs/gameplay-roadmap.md` (socle de
-  simulation, modèle de vol, réacteurs et jets) sont faits sur `feat/flight-model` (non fusionnée, non
-  poussée) ; les lots de vol et de rendu alternent désormais, le lot 4 d'abord. Conséquences pour les
+  simulation, modèle de vol, réacteurs et jets) sont faits et fusionnés dans `main` (poussée le
+  2026-11-25) ; les lots de vol et de rendu alternent désormais, le lot 4 d'abord. Conséquences pour les
   mesures de rendu :
   - l'app démarre en mode Simulation (l'avion vole) ; les vues de référence passent en Exploration
     (immobile) et `render:benchmark` ouvre l'app avec `flightMode=exploration` ;
@@ -83,10 +83,17 @@ en fin de session.
   - les écarts de +0,4 ms (jusqu'à +1,3) qui sautent d'une vue à l'autre d'une série de captures à
     l'autre touchent aussi l'ancien code : seules des captures alternées (worktree de l'ancien état
     sur le port 3001, ou `--set` d'un réglage sur le même code) tranchent une régression.
-- **Prochaine session de rendu** : lot 4, en commençant par L4.1 (textures de bruit 3D par compute). La
-  couche nuageuse plane actuelle suit déjà la courbure de la Terre (sous-divisée) ; les nuages
-  volumétriques devront faire de même (couche sphérique autour de la caméra) et reprendre le
-  contexte takram pour leur éclairage.
+- **Lot 4 en cours** sur `feat/render-clouds` (depuis `main`, après la fusion de `feat/flight-model`
+  le 2026-11-25). Fait : L4.1, et premières versions de L4.2 et L4.3 (voir les tâches). Le réglage
+  « Clouds » (`showClouds`) dessine les nuages volumétriques en WebGPU (la couche plane `CloudLayer`
+  reste en WebGL2 jusqu'à L4.8) ; `cloudAltitude` fixe la base des cumulus. Code : `js/clouds/`,
+  `js/constants/clouds.js`, passe des nuages dans `ScenePipeline.setAtmosphere(apply, clouds)`,
+  composition dans `AtmosphericSky._overScene`. Référence des vues : `benchmarks/render/clouds-1`
+  (vues sans nuages identiques à `haze-true-*` au bruit près ; vue 5 avec nuages 8,75 ms).
+- **Prochaine étape** : L4.4 (passe des nuages à 1/4 de résolution par axe avec reprojection
+  temporelle et motif de Bayer 4×4, à la manière de takram, puis suréchantillonnage tenant compte de la
+  profondeur aux silhouettes du relief) pour ramener la vue 5 sous le budget de 3 ms, puis réglage
+  du rendu avec l'utilisateur.
 - **Suite** : lot 4 (nuages volumétriques). Points ouverts : culling des tuiles par three presque
   inopérant (sphère englobante calculée en coordonnées locales où l'épaisseur est en mètres et la
   largeur en tuiles : rayon démesuré une fois mis à l'échelle), piste CPU et GPU pour le lot 5 ; coût CPU de soumission (≈ 5 µs par
@@ -541,10 +548,31 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
 
 ## Lot 4 — Nuages volumétriques
 
-- [ ] **L4.1** Textures de bruit 3D générées par compute shader (Perlin-Worley 128³, Worley 32³).
-- [ ] **L4.2** Carte météo (couverture, type de nuage) et vent.
-- [ ] **L4.3** Ray marching dans la couche, éclairage Beer + powder + Henyey-Greenstein double lobe,
+- [x] **L4.1** Textures de bruit 3D générées par compute shader (Perlin-Worley 128³, Worley 32³).
+      `js/clouds/tileableNoise.js` (Worley et Perlin périodiques, hachage entier PCG3D au lieu du hachage
+      en sinus de Hillaire, qui plaçait tous les points de Worley sur la diagonale de leur cellule) et
+      `js/clouds/CloudTextures.js` (forme 128³, détail 32³, carte météo 512², en `rgba8unorm` : un format à
+      un canal ne s'écrit pas en compute). Générées une fois au démarrage : ≈ 20 ms (300 ms au premier
+      lancement, compilation comprise). Comparées côte à côte aux textures livrées par takram : même
+      structure, sans leurs coutures.
+- [~] **L4.2** Carte météo (couverture, type de nuage) et vent.
+      Fait : carte météo générée avec les autres textures (cumulus en rouge, nuages moyens en vert,
+      cirrus en bleu, 100 km par répétition), couverture (uniforme `coverage`, 0,4 par défaut), vent
+      constant (`CLOUD_WIND`, la carte et la forme dérivent ensemble). Reste : réglage de la couverture
+      dans le menu (avec L4.8), vent et météo liés à un réglage compréhensible.
+- [~] **L4.3** Ray marching dans la couche, éclairage Beer + powder + Henyey-Greenstein double lobe,
       ambiance issue de l'atmosphère.
+      Fait (première version) : `js/clouds/VolumetricClouds.js`, modèle de takram three-clouds porté en
+      TSL (trois couches, fonction de forme en demi-cercle, érosion par la forme et le détail, marche
+      vers la lumière en 6 pas croissants de 40 m, ≈ 2,5 km, au lieu de leur carte d'ombre BSM,
+      diffusion multiple de Wrenninge en 8 octaves, poudre, intégration de Frostbite), lumière du
+      soleil (ou de la lune) et du ciel aux altitudes basse et haute des couches tirées des tables de
+      takram au point d'entrée du rayon, perspective aérienne à la distance moyenne pondérée par
+      l'opacité. Coquilles centrées sur le centre de la Terre sous la caméra (même courbure que le
+      terrain). Passe à 0,5 × la résolution de la passe de scène, composée dans la passe d'atmosphère
+      (`_overScene`) devant la scène et le ciel. Vue 5 : coût GPU 8,75 ms (≈ +4,8 ms), image granuleuse
+      (bruit bleu du point de départ non accumulé). Reste : réglages fins (cirrus gris, contraste de
+      l'ombre propre, rebond du sol), coût (L4.4).
 - [ ] **L4.4** Rendu à 1/4 de résolution + reprojection temporelle, composition tenant compte de la
       profondeur du terrain.
 - [ ] **L4.5** Ombres des nuages sur le terrain.
@@ -806,11 +834,25 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 | 2026-11-24 | Courbure de la Terre | Terrain abaissé de d²/2R autour de la caméra dans le nuanceur de sommets (suggestion de l'utilisateur), positions horizontales inchangées | La carte plate ne rejoignait pas l'horizon de la sphère de l'atmosphère et plaçait les sommets lointains trop haut (3 km à 200 km). Repère local recalé sous la caméra : rien ne change près de l'avion (altitude sol, collisions) ; écart corde/arc 4 m à 200 km ; vecteurs de mouvement du TAAU sans la variation de la courbure (0,07 m à 100 km par frame à 560 m/s, sous le pixel) ; la sphère englobante de three, déjà démesurée, ne coupe aucune tuile |
 | 2026-11-24 | Sol au-delà des tuiles | Sol diffus de l'ellipsoïde calculé dans la passe du ciel (éclairement et diffusion jusqu'au point de takram) plutôt que la luminance du ciel de takram sous l'horizon | Sous l'horizon, takram ne rend que la lumière diffusée le long du rayon, avec un saut de sa table de diffusion à l'horizon (trait clair) ; un maillage de sol supplémentaire coûterait des draw calls et de la géométrie pour un rendu identique |
 | 2026-11-24 | Adaptation aux lumières des villes | Moyenne logarithmique de leur luminance sur la zone en vue, calculée sur le CPU depuis la mosaïque Black Marble, ajoutée à l'éclairement de la pré-exposition | Déterministe comme la pré-exposition (pas de relecture GPU ni de boucle) ; la moyenne arithmétique laissait une ville lointaine assombrir tout un paysage au clair de lune, la moyenne logarithmique (comme l'adaptation de l'œil et le tone mapping de Reinhard) ne compte une ville que si elle remplit la vue |
+| 2026-11-25 | Nuages volumétriques | Implémentation propre en TSL, portée du modèle de takram three-clouds 0.7.6 (MIT) | takram three-clouds n'a pas de version WebGPU/TSL (effet `postprocessing` sur le renderer WebGL) ; son modèle (Schneider, Hillaire, Wrenninge) et ses paramètres par défaut sont éprouvés et s'éclairent avec le même contexte d'atmosphère que le reste de la scène |
+| 2026-11-25 | Repère des nuages | Coquilles sphériques centrées sur le centre de la Terre sous la caméra, coordonnées de texture tirées des x, z de la carte et de l'altitude, origine réduite modulo la répétition sur le CPU | Même courbure que le terrain (abaissé de d²/2R autour de la caméra) ; pas de coutures de projection cube-sphère ; précision des flottants conservée loin de l'origine de la carte |
+| 2026-11-25 | Reconstruction de l'atmosphère en cours de vol | Le TAAU marque ses matériaux internes à recompiler quand la passe d'atmosphère change | `TAAUNode.setup()` leur donne de nouveaux nœuds sans les marquer : couper la brume de distance, la brume de chaleur ou le volume de perspective aérienne depuis le menu ne s'appliquait qu'au rechargement (défaut antérieur, trouvé avec les nuages) |
 | 2026-11-23 | Vitesse par défaut | 560 m/s | Vitesse réelle de l'ancien défaut (800 unités Mercator/s) : benchmarks comparables à la baseline |
 
 ## Journal des sessions
 
 <!-- Entrée la plus récente en haut. -->
+
+### 2026-11-25 (19)
+- `feat/flight-model` (lots G0 à G2) fusionnée dans `main` (avance rapide) et poussée à la demande de
+  l'utilisateur ; lot 4 commencé sur `feat/render-clouds`.
+- takram three-clouds n'existe qu'en WebGL : modèle porté en TSL (voir **Décisions**).
+- Fait : L4.1 ; premières versions de L4.2 (carte météo, couverture, vent) et L4.3 (ray marching,
+  éclairage, perspective aérienne). Corrigé au passage : les changements de la passe d'atmosphère après
+  la première frame n'atteignaient pas le TAAU.
+- Mesures : `benchmarks/render/clouds-1` (vues 3,55 / 3,98 / 3,86 / 3,99 / 8,75 / 3,67 ms ; seule la
+  vue 5 a des nuages).
+- Prochaine étape : L4.4 (voir État courant).
 
 ### 2026-11-24 (18)
 - Décision de l'utilisateur sur le p1 du plan 1 : réduire le coût. Profil CPU en vol contre `main`

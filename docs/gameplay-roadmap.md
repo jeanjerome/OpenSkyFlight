@@ -11,7 +11,7 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
 ## État courant (mis à jour le 2026-11-25)
 
 - **Statut** : plan validé le 2026-11-25 (voir **Décisions**). **G0, G1 et G2 (sauf l'option G2.7)
-  faits et commités** sur la branche `feat/flight-model` (non fusionnée, non poussée), sauf le préchargement et les requêtes par lot de G0.4 (reportés à
+  faits et commités**, fusionnés dans `main` et poussés le 2026-11-25 (branche `feat/flight-model` supprimée), sauf le préchargement et les requêtes par lot de G0.4 (reportés à
   G3 et G5) et la récupération automatique de G1.2 (reportée). Prochaine étape : alterner avec les
   lots de rendu (lot 4, nuages volumétriques), puis G3 (décollage et atterrissage).
 - **Vue orbite** (demandée par l'utilisateur, hors lots) : `CONFIG.cameraMode = 'orbit'`, entre la
@@ -100,18 +100,12 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
   - Le modèle vient de CGTrader (modèle gratuit « Dassault Rafale B ») sous licence Royalty Free,
     incompatible avec sa présence dans le dépôt public (voir Décisions, « Encore ouvert ») : laissé
     tel quel à la demande de l'utilisateur, le 2026-11-25.
-- **Prochaine session** : sur `feat/flight-model` (ni fusionnée ni poussée).
-  1. Recueillir le ressenti de l'utilisateur en vol : brume de chaleur (force `HAZE_BEND`, vitesse
-     `HAZE_FLOW` dans `js/aircraft/EngineExhaust.js`), visée souris (revue le 2026-11-25, voir
-     **Mesures** ; convergence latérale encore lente, `SIDE_BANK_GAIN`), roulis clavier
-     (`KEY_STICK_TIME` de `js/flight/SimulatedFlight.js`, `KEYBOARD_STICK` de
-     `js/constants/controls.js`), son moteur (niveaux dans `EngineSound.update`), flamme (poids et
-     couleurs dans `EngineExhaust._emission`), sens de la souris en vue orbite.
-  2. Clôture des lots G0 à G2 : proposer à l'utilisateur de fusionner `feat/flight-model` dans `main`
-     (convention : fusion à la clôture) et de pousser ; c'est sa décision.
-  3. Puis lot 4 du rendu (nuages volumétriques, L4.1) sur `feat/render-clouds` depuis `main`, en
-     suivant `docs/rendering-roadmap.md` (État courant : la référence des vues a changé avec la brume
-     de chaleur) ; G3 (décollage et atterrissage) ensuite.
+- **Prochaine session de vol** : le 2026-11-25, l'utilisateur n'a rien demandé à régler après ses vols
+  (brume, visée souris, son, flamme, vue orbite) ; G0 à G2 fusionnés dans `main` et poussés. Le lot 4
+  du rendu (nuages volumétriques) est en cours sur `feat/render-clouds` ; G3 (décollage et
+  atterrissage) vient ensuite, depuis `main`. Points de réglage connus si l'utilisateur les demande :
+  convergence latérale de la visée souris (`SIDE_BANK_GAIN`), roulis clavier (`KEY_STICK_TIME`),
+  force de la brume (`HAZE_BEND`, `HAZE_FLOW`).
 - **Outils** : `npm test` (tests Node, dont le banc du modèle de vol et l'instructeur de visée),
   `npm run flight:bench` (tableau du banc), scripts Playwright ad hoc dans le scratchpad de session
   (vue orbite par `?cameraMode=orbit` et la molette pour cadrer l'avion, `window.osf.setConfig(clé,
