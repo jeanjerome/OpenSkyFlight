@@ -573,7 +573,9 @@ async function initApp() {
         pitchRate: flight.pitchRate,
         quaternion: aircraftPose.quaternion,
         thrust: flight.thrusting,
-        engines: simulated ? { thrust: model.engines.core, afterburner: model.engines.reheat } : null,
+        engines: simulated
+          ? { core: model.engines.core, reheat: model.engines.reheat, mach: model.mach, running: model.fuel > 0 }
+          : null,
         // Flight data for the HUD and the control surfaces, in the Simulation mode
         model: simulated ? model : null,
         aim: simulated && simulation.aiming ? simulation.aim.direction : null,

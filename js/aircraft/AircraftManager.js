@@ -3,6 +3,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import Logger from '../utils/Logger.js';
 import { CONFIG } from '../utils/config.js';
 import AircraftLights from './AircraftLights.js';
+import EngineExhaust from './EngineExhaust.js';
+import { exhaustJet } from '../flight/exhaust.js';
 import ControlSurfaces from './ControlSurfaces.js';
 import {
   AIRCRAFT_TARGET_LENGTH,
@@ -14,6 +16,12 @@ import {
   AFTERBURNER_SPEED,
 } from '../constants/aircraft.js';
 
+/** Time constant of the engines' power changes in the Exploration mode (s) */
+const EXPLORATION_SPOOL_TIME = 0.8;
+
+/** Speed of sound for the Exploration mode's Mach number (m/s), at about 6 000 m */
+const SPEED_OF_SOUND = 316;
+
 export default class AircraftManager {
   /**
    * @param {THREE.Scene} scene
@@ -24,6 +32,11 @@ export default class AircraftManager {
     this.scene = scene;
     this.rendering = rendering;
     this.lights = null;
+    this.exhaust = null;
+    /** Engines as shown and heard: core power, afterburner stage, flight Mach number, running */
+    this.engines = { core: 0, reheat: 0, mach: 0, running: true };
+    /** Exhaust jet of each engine (see flight/exhaust.js) */
+    this.jet = exhaustJet(0, 0, 0);
     this._bufferSize = new THREE.Vector2();
     this.mesh = null;
     this.ready = false;
@@ -100,6 +113,7 @@ export default class AircraftManager {
     });
 
     this.lights = new AircraftLights(this.mesh, this.rendering);
+    this.exhaust = new EngineExhaust(this.mesh, this.rendering);
     this.surfaces = new ControlSurfaces(this.mesh);
 
     this.group.traverse((child) => {
@@ -141,15 +155,32 @@ export default class AircraftManager {
     // Control surfaces as the flight control system moves them, neutral in free flight
     this.surfaces.update(dt, state.model ? state.model.surfaces : null);
 
-    // Engines of the flight model, or full power while pushed forward in the
-    // Exploration mode, with afterburner at high speed
-    const engines = state.engines ?? {
-      thrust: state.thrust ? 1 : 0,
-      afterburner: state.thrust && CONFIG.cameraSpeed >= AFTERBURNER_SPEED ? 1 : 0,
-    };
+    this._updateEngines(state, dt);
+    exhaustJet(this.engines.core, this.engines.reheat, this.engines.mach, this.jet);
+    this.exhaust.update(dt, this.engines, this.jet);
     const { camera, renderer } = this.rendering;
     renderer.getDrawingBufferSize(this._bufferSize);
-    this.lights.update(dt, engines, camera, this._bufferSize.y);
+    this.lights.update(dt, camera, this._bufferSize.y);
+  }
+
+  /**
+   * Engines of the flight model; in the Exploration mode and along imposed
+   * paths, full power while pushed forward, with the afterburner at high
+   * speed, spooling at about the real engines' pace
+   */
+  _updateEngines(state, dt) {
+    const engines = this.engines;
+    if (state.engines) {
+      Object.assign(engines, state.engines);
+      return;
+    }
+    const core = state.thrust ? 1 : 0.3;
+    const reheat = state.thrust && CONFIG.cameraSpeed >= AFTERBURNER_SPEED ? 1 : 0;
+    const rate = Math.min(1, dt / EXPLORATION_SPOOL_TIME);
+    engines.core += (core - engines.core) * rate;
+    engines.reheat += (Math.min(reheat, engines.core) - engines.reheat) * rate;
+    engines.mach = state.thrust ? CONFIG.cameraSpeed / SPEED_OF_SOUND : 0.3;
+    engines.running = true;
   }
 
   setVisible(visible) {

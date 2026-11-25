@@ -135,6 +135,16 @@ export const SETTINGS = [
     persist: true,
   },
   {
+    key: 'afterburnerLight',
+    tab: 'graphics',
+    section: 'Light',
+    label: 'Afterburner light',
+    help: 'The afterburner flame lights the aircraft and, low over it, the ground.',
+    type: 'toggle',
+    impact: { cost: 1, gain: 1, note: 'About 0.1 to 0.2 ms of GPU time per frame, with or without afterburner.' },
+    persist: true,
+  },
+  {
     key: 'autoExposure',
     tab: 'graphics',
     section: 'Light',

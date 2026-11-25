@@ -33,6 +33,7 @@ import { SETTINGS_BY_KEY } from './settingsSchema.js';
  * @property {boolean} dynamicResolution      - Lower the scene resolution when the GPU exceeds the 60 FPS budget (default: true)
  * @property {boolean} autoExposure           - Adapt the exposure to the scene brightness (default: true)
  * @property {boolean} bloomEnabled           - Glow around the sun and its specular reflections (default: true)
+ * @property {boolean} afterburnerLight       - The afterburner flame lights the aircraft and the ground (default: false, on in the Ultra preset)
  *
  * Atmosphere:
  * @property {number}  timeOfDay              - Local solar time in hours, 12 when the sun crosses the meridian, range [0..24[ (default: 10.9167, sun at 35° bearing 160° at the default place)
@@ -78,6 +79,7 @@ const CONFIG = {
   dynamicResolution: true,
   autoExposure: true,
   bloomEnabled: true,
+  afterburnerLight: false,
   lat: 45.8326, // Mont Blanc default
   lon: 6.8652,
   zoom: 15,

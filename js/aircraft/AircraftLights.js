@@ -1,30 +1,19 @@
 import * as THREE from 'three';
 import { MeshBasicNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
-  Discard,
   Fn,
-  If,
   cameraFar,
   cameraNear,
   cameraProjectionMatrix,
-  cos,
   exp,
   float,
   getScreenPosition,
   instanceIndex,
   max,
-  mix,
   modelViewMatrix,
-  normalView,
   perspectiveDepthToViewZ,
   positionGeometry,
-  positionView,
-  pow,
   select,
-  sin,
-  smoothstep,
-  time,
   uniform,
   uniformArray,
   uv,
@@ -34,18 +23,7 @@ import {
 } from 'three/tsl';
 import { GLOW_LAYER, SCENE_UNIT_LUMINANCE } from '../constants/rendering.js';
 import { CONFIG } from '../utils/config.js';
-import {
-  AIRCRAFT_LIGHTS,
-  AFTERBURNER_FLAME_LENGTH,
-  AFTERBURNER_LUMINANCE,
-  ENGINE_NOZZLES,
-  GLOW_MIN_PIXELS,
-  LIGHT_LENS_RADIUS,
-  NOZZLE_GLOW_LUMINANCE,
-} from '../constants/aircraft.js';
-
-/** Material of the engine nozzles: bare steel and titanium, darkened by heat */
-const NOZZLE_METAL = new MeshStandardNodeMaterial({ color: 0x4a4744, metalness: 0.85, roughness: 0.42 });
+import { AIRCRAFT_LIGHTS, GLOW_MIN_PIXELS, LIGHT_LENS_RADIUS } from '../constants/aircraft.js';
 
 /** Distance by which a light may lie behind the scene and still show: its own lens covers it */
 const OCCLUSION_BIAS = 0.3;
@@ -70,7 +48,7 @@ function lensLuminance(candelas) {
 }
 
 /**
- * Position lights, anti-collision lights and engine glow of the aircraft.
+ * Position lights and anti-collision lights of the aircraft.
  *
  * Each light is a glass lens added to the model (lit by day, emissive when on)
  * and a halo drawn by the glow pass (see ScenePipeline.setGlowLayer): the glare
@@ -81,12 +59,8 @@ function lensLuminance(candelas) {
  * the fin and under the fuselage, double white strobes on the wingtips. The
  * flashing lights (anti-collision) have their own switch (CONFIG.antiCollisionLights).
  *
- * The engines glow from inside their nozzles with thrust, and the afterburner
- * adds a flame with shock diamonds, also drawn by the glow pass.
- *
- * Four draw calls in all, since each object costs main-thread time: the lenses
- * and the halos are instanced (per-light values in uniform arrays), the two
- * nozzles' glow and flames are merged.
+ * Two draw calls in all, since each object costs main-thread time: the lenses
+ * and the halos are instanced (per-light values in uniform arrays).
  *
  * Positions are in the model's own frame (metres, x left, y up, z forward).
  * Luminances are in the scene unit, multiplied by the night exposure of light
@@ -103,8 +77,6 @@ export default class AircraftLights {
     this.sceneDepth = sceneDepth;
 
     this._time = 0;
-    this._throttle = 0;
-    this._afterburner = 0;
     this._toCamera = new THREE.Vector3();
     this._axis = new THREE.Vector3();
     this._worldPosition = new THREE.Vector3();
@@ -123,10 +95,6 @@ export default class AircraftLights {
     );
     this._createLenses();
     this._createHalos();
-
-    this._engineThrottle = uniform(0);
-    this._engineAfterburner = uniform(0);
-    this._createEngines();
   }
 
   _createLenses() {
@@ -185,103 +153,14 @@ export default class AircraftLights {
     this.model.add(halos);
   }
 
-  _createEngines() {
-    const throttle = this._engineThrottle;
-    const afterburner = this._engineAfterburner;
-    const discs = [];
-    const flames = [];
-    const length = AFTERBURNER_FLAME_LENGTH;
-    const exitZ = ENGINE_NOZZLES[0].position[2];
-    for (const { position, radius, mesh } of ENGINE_NOZZLES) {
-      const [x, y, z] = position;
-      // The model paints its nozzles like the airframe: bare, heat-tinted metal instead
-      const nozzle = this.model.getObjectByName(mesh);
-      if (nozzle?.isMesh) nozzle.material = NOZZLE_METAL;
-
-      const disc = new THREE.CircleGeometry(radius * 1.2, 24);
-      disc.rotateY(Math.PI); // facing aft
-      disc.translate(x, y, z + 0.6);
-      discs.push(disc);
-
-      const flame = new THREE.CylinderGeometry(radius * 0.35, radius * 0.95, length, 24, 24, true);
-      flame.rotateX(-Math.PI / 2); // axis along z, top (narrow end) aft
-      flame.translate(x, y, z - length / 2);
-      flames.push(flame);
-    }
-
-    // Hot turbine and flame holder seen through the nozzle, dark metal by day:
-    // barely glowing at idle, dull orange at full dry thrust, white-yellow with
-    // the afterburner
-    const discMaterial = new MeshStandardNodeMaterial({ color: 0x15130f, metalness: 0.8, roughness: 0.5 });
-    discMaterial.emissiveNode = Fn(() => {
-      const r = uv().sub(0.5).length().mul(2);
-      const core = smoothstep(0.2, 1, r).oneMinus();
-      const heat = throttle.mul(0.95).add(0.05).add(afterburner.mul(2));
-      const color = mix(vec3(0.9, 0.18, 0.03), vec3(1.0, 0.75, 0.4), afterburner.add(core.mul(0.3)).min(1));
-      const glow = mix(float(NOZZLE_GLOW_LUMINANCE), float(AFTERBURNER_LUMINANCE), afterburner);
-      return color.mul(core.mul(0.7).add(0.3)).mul(heat).mul(glow).mul(this.exposure);
-    })();
-    const disc = new THREE.Mesh(mergeGeometries(discs), discMaterial);
-    disc.name = 'NozzleGlow';
-    this.model.add(disc);
-
-    // Afterburner flames: cones from the nozzle exits, brighter where the line
-    // of sight crosses more of them, with shock diamonds fading downstream
-    const flameMaterial = new MeshBasicNodeMaterial({
-      transparent: true,
-      depthWrite: false,
-      depthTest: false,
-      side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending,
-    });
-    flameMaterial.colorNode = Fn(() => {
-      If(inFrontOfScene(this.sceneDepth, positionView).not(), () => {
-        Discard();
-      });
-      // 0 at the nozzle exit, 1 at the tip
-      const t = positionGeometry.z.sub(exitZ).negate().div(length).clamp(0, 1);
-      const facing = normalView.dot(positionView.normalize().negate()).abs();
-      const thickness = pow(facing, 1.5);
-      const diamonds = pow(cos(t.mul(length / 0.75).mul(Math.PI * 2)).max(0), 6).mul(t.oneMinus());
-      const fade = pow(t.oneMinus(), 1.4).mul(smoothstep(0, 0.04, t));
-      const flicker = sin(time.mul(53).add(t.mul(17)))
-        .mul(0.06)
-        .add(0.94);
-      const color = mix(vec3(1.0, 0.42, 0.1), vec3(1.0, 0.82, 0.55), diamonds.add(thickness.mul(0.4)).min(1));
-      const luminance = afterburner.mul(AFTERBURNER_LUMINANCE).mul(this.exposure);
-      return vec4(
-        color
-          .mul(thickness.mul(0.35).add(diamonds.mul(1.6)))
-          .mul(fade)
-          .mul(flicker)
-          .mul(luminance),
-        1,
-      );
-    })();
-    this._flame = new THREE.Mesh(mergeGeometries(flames), flameMaterial);
-    this._flame.layers.set(GLOW_LAYER);
-    this._flame.frustumCulled = false;
-    this._flame.name = 'AfterburnerFlames';
-    this.model.add(this._flame);
-  }
-
   /**
    * @param {number} dt - seconds
-   * @param {{thrust: number, afterburner: number}} engines - engine power, 0 idle to 1 full dry, and
-   *   afterburner stage, 0 off to 1 full
    * @param {THREE.Camera} camera
    * @param {number} viewportHeight - pixels
    */
-  update(dt, { thrust, afterburner }, camera, viewportHeight) {
+  update(dt, camera, viewportHeight) {
     this._time += dt;
     this._pixelAngle.value = (2 * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1, viewportHeight);
-
-    // Smoothed: the hot parts take time to glow and cool
-    this._throttle += (thrust - this._throttle) * Math.min(1, dt * 2.5);
-    this._afterburner += (afterburner - this._afterburner) * Math.min(1, dt * 6);
-    this._engineThrottle.value = this._throttle;
-    this._engineAfterburner.value = this._afterburner;
-    this._flame.visible = this._afterburner > 0.01;
 
     // The model's world matrix of the previous frame: a frame late at most
     this._normalMatrix.getNormalMatrix(this.model.matrixWorld);

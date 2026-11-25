@@ -53,6 +53,9 @@ const MOONLIGHT_DOMINANCE = 4;
 const SOLAR_ILLUMINANCE_LUX = 128000;
 const SOLAR_ILLUMINANCE_UNIT = 1.77;
 
+/** Illuminance in the scene's unit of one lux, before the night pre-exposure */
+export const SCENE_ILLUMINANCE_PER_LUX = SOLAR_ILLUMINANCE_UNIT / SOLAR_ILLUMINANCE_LUX;
+
 /** Color of the light of a moonless sky, bluish as night vision sees it (linear) */
 const NIGHT_SKY_COLOR = new THREE.Color(0.55, 0.7, 1);
 

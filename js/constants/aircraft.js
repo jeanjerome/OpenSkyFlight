@@ -104,15 +104,30 @@ export const GLOW_MIN_PIXELS = 6;
 
 /** Nozzle exits, in the model's frame: centre (m), radius (m) and the model's nozzle mesh */
 export const ENGINE_NOZZLES = [
-  { position: [0.69, 1.977, -6.6], radius: 0.37, mesh: 'EngineL' },
-  { position: [-0.69, 1.977, -6.6], radius: 0.37, mesh: 'EngineR' },
+  { position: [0.693, 1.974, -6.64], radius: 0.37, mesh: 'EngineL' },
+  { position: [-0.693, 1.974, -6.64], radius: 0.37, mesh: 'EngineR' },
 ];
+
+/**
+ * Convergent flaps of the model's nozzles: they hinge on the ring at this z
+ * (m) and close toward the exit, whose inner radius (m) the model draws
+ * at the opening of full afterburner
+ */
+export const NOZZLE_FLAP_HINGE_Z = -6.15;
+export const NOZZLE_MODEL_EXIT_RADIUS = 0.36;
 
 /** Luminance (scene unit) of the hot turbine seen through the nozzle at full dry thrust: 3 cd/m² */
 export const NOZZLE_GLOW_LUMINANCE = 3 / 72000;
 
+/**
+ * Luminous intensity of the two afterburner flames at full afterburner (cd),
+ * as a light on the airframe and the ground: about 20 000 cd/m² seen across
+ * some 8 m² of flame [estimate]
+ */
+export const AFTERBURNER_INTENSITY = 160000;
+
+/** Color of the afterburner's light (linear): the orange of its soot */
+export const AFTERBURNER_LIGHT_COLOR = [1.0, 0.55, 0.25];
+
 /** Luminance (scene unit) of the afterburner flame's core: 100 000 cd/m² */
 export const AFTERBURNER_LUMINANCE = 100000 / 72000;
-
-/** Length of the afterburner flame (m) */
-export const AFTERBURNER_FLAME_LENGTH = 4.5;

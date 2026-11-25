@@ -17,6 +17,7 @@ export const QUALITY_PRESETS = {
     terrainDetail: 'normal',
     bloomEnabled: false,
     autoExposure: true,
+    afterburnerLight: false,
   },
   medium: {
     imageSharpness: 'high',
@@ -24,6 +25,7 @@ export const QUALITY_PRESETS = {
     terrainDetail: 'high',
     bloomEnabled: true,
     autoExposure: true,
+    afterburnerLight: false,
   },
   high: {
     imageSharpness: 'maximum',
@@ -31,6 +33,7 @@ export const QUALITY_PRESETS = {
     terrainDetail: 'high',
     bloomEnabled: true,
     autoExposure: true,
+    afterburnerLight: false,
   },
   ultra: {
     imageSharpness: 'maximum',
@@ -38,14 +41,16 @@ export const QUALITY_PRESETS = {
     terrainDetail: 'maximum',
     bloomEnabled: true,
     autoExposure: true,
+    afterburnerLight: true,
   },
 };
 
 /**
  * GPU time of each preset relative to High, averaged over the six reference views at a
- * fixed scale (docs/rendering-roadmap.md, L2.7), shown on the preset cards of the menu
+ * fixed scale, shown on the preset cards of the menu (Ultra includes the afterburner light,
+ * about 4 % of a frame)
  */
-export const PRESET_GPU_COST = { low: 0.55, medium: 0.85, high: 1, ultra: 1.12 };
+export const PRESET_GPU_COST = { low: 0.55, medium: 0.85, high: 1, ultra: 1.16 };
 
 /** Highest resolution of the scene pass, relative to the output (TAAU reconstructs the rest) */
 export const IMAGE_SHARPNESS = {
