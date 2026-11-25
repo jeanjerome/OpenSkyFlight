@@ -16,3 +16,12 @@ Thumbs.db
 
 # Node
 node_modules/
+
+# Source files of the Rafale model (Cheetah3D original and exports), kept locally
+assets/models/rafale/Rafale.jas
+assets/models/rafale/Rafale.dae
+assets/models/rafale/Rafale.fbx
+assets/models/rafale/Rafale.obj
+assets/models/rafale/Rafale.mtl
+assets/models/rafale/Rafale-2.gltf
+assets/models/rafale/Textures.zip
