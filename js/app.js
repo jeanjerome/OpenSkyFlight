@@ -391,6 +391,8 @@ async function initApp() {
     update('timeOfDay', view.timeOfDay);
     update('showClouds', view.showClouds);
     if (view.cloudAltitude !== undefined) update('cloudAltitude', view.cloudAltitude);
+    // Clouds where the wind had not yet carried them
+    volumetricClouds?.resetWind();
     update('cameraMode', view.cameraMode);
 
     flight.teleport(position, -view.heading * DEG2RAD, view.pitch * DEG2RAD);

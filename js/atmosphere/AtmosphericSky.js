@@ -347,7 +347,7 @@ export default class AtmosphericSky {
     this.renderer.toneMapping = THREE.AgXToneMapping;
     this.renderer.toneMappingExposure = TONE_MAPPING_EXPOSURE;
 
-    const clouds = this.clouds && CONFIG.showClouds ? (depth, reversed) => this.clouds.node(depth, reversed) : null;
+    const clouds = this.clouds && CONFIG.showClouds ? (depth, reversed) => this.clouds.pass(depth, reversed) : null;
     this.pipeline.setAtmosphere((color, depth, cloudsPass) => this._overScene(color, depth, cloudsPass), clouds);
     this.pipeline.setNightVision(this.preExposure);
     this.pipeline.setBloom(CONFIG.bloomEnabled);

@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import {
   Break,
-  Fn,
   If,
   Loop,
   dot,
@@ -21,7 +20,6 @@ import {
   texture,
   texture3D,
   uniform,
-  uv,
   vec2,
   vec3,
   vec4,
@@ -30,6 +28,7 @@ import { getIndirectLuminanceToPoint, getSplitScalarIlluminance } from '@takram/
 import { stbn } from '@takram/three-geospatial/webgpu';
 import { EARTH_RADIUS } from 'three-tile';
 import CloudTextures from './CloudTextures.js';
+import CloudsTemporalNode from './CloudsTemporalNode.js';
 import {
   CLOUD_DEFAULT_COVERAGE,
   CLOUD_DETAIL_DISTANCE,
@@ -49,6 +48,7 @@ import {
   CLOUD_POWDER_SCALE,
   CLOUD_SCATTERING_OCTAVES,
   CLOUD_SHAPE_TILE,
+  CLOUD_SKY_DISTANCE,
   CLOUD_SKY_LIGHT_SCALE,
   CLOUD_STEP_GROWTH,
   CLOUD_WEATHER_TILE,
@@ -83,8 +83,8 @@ function henyeyGreenstein(g, cosTheta) {
 
 /**
  * Volumetric clouds: layers of cumulus, mid-level clouds and cirrus in shells
- * around the Earth, ray marched through their density at every pixel of a pass
- * of their own (see node()).
+ * around the Earth, ray marched through their density along the view rays of a
+ * pass of their own (see march() and CloudsTemporalNode).
  *
  * The density follows Schneider's model (Horizon Zero Dawn, 2015) as takram's
  * three-clouds implements it (MIT): a weather map tells where each layer forms,
@@ -149,6 +149,11 @@ export default class VolumetricClouds {
     this._layerTops.value.set(...tops, 1);
     this._minHeight.value = Math.min(...bottoms);
     this._maxHeight.value = Math.max(...tops);
+  }
+
+  /** Bring the clouds back to where they were before the wind carried them */
+  resetWind() {
+    this._drift.set(0, 0);
   }
 
   /** @param {THREE.WebGPURenderer} renderer */
@@ -264,150 +269,173 @@ export default class VolumetricClouds {
   }
 
   /**
-   * The clouds in front of the scene, premultiplied: light reaching the camera
-   * from them (rgb) and their opacity (a), the air in front of them included
-   * @param {Node} depthNode - scene depth
+   * Direction of the view ray through a point of the screen (world)
+   * @param {Node} screen - vec2, uv with y down
+   */
+  viewDirection(screen) {
+    const ndc = vec2(screen.x, screen.y.oneMinus()).mul(2).sub(1);
+    const target = this._projectionInverse.mul(vec4(ndc, 0.5, 1));
+    return this._cameraWorld.mul(vec4(target.xyz.div(target.w).normalize(), 0)).xyz.normalize();
+  }
+
+  /**
+   * Distance from the camera to the scene through a point of the screen (m),
+   * CLOUD_SKY_DISTANCE where the scene pass left the sky
+   * @param {Node} screen - vec2, uv with y down
+   * @param {Node} depth - scene depth there
    * @param {boolean} reversedDepth
    */
-  node(depthNode, reversedDepth) {
+  sceneDistance(screen, depth, reversedDepth) {
+    const ndc = vec2(screen.x, screen.y.oneMinus()).mul(2).sub(1);
+    const point = this._projectionInverse.mul(vec4(ndc, depth, 1));
+    const empty = reversedDepth ? depth.lessThanEqual(0) : depth.greaterThanEqual(1);
+    return select(empty, CLOUD_SKY_DISTANCE, min(point.xyz.div(point.w).length(), CLOUD_SKY_DISTANCE));
+  }
+
+  /**
+   * The clouds in front of the scene along one view ray, to call inside a
+   * shader function: their light, premultiplied (rgb) and opacity (a), the
+   * air in front of them included, and the distance of their front, weighted
+   * by their opacity (the scene distance where the ray meets none)
+   * @param {Node} direction - vec3, view ray (world)
+   * @param {Node} sceneDistance - m
+   * @returns {{color: Node, front: Node}}
+   */
+  march(direction, sceneDistance) {
     const { atmosphere } = this.sky;
     const lightECEF = this.sky.lightDirectionECEF;
     const lightScale = this.sky.lightScale;
 
-    return Fn(() => {
-      const screen = uv();
-      const ndc = vec2(screen.x, screen.y.oneMinus()).mul(2).sub(1);
-      const target = this._projectionInverse.mul(vec4(ndc, 0.5, 1));
-      const direction = this._cameraWorld.mul(vec4(target.xyz.div(target.w).normalize(), 0)).xyz.normalize().toConst();
-      const origin = vec3(0, this._cameraHeight.add(R), 0).toConst();
-      const lightDirection = atmosphere.matrixECEFToWorld.mul(vec4(lightECEF, 0)).xyz.normalize().toConst();
-      const cosTheta = dot(direction, lightDirection).toConst();
+    direction = vec3(direction).toConst();
+    const origin = vec3(0, this._cameraHeight.add(R), 0).toConst();
+    const lightDirection = atmosphere.matrixECEFToWorld.mul(vec4(lightECEF, 0)).xyz.normalize().toConst();
+    const cosTheta = dot(direction, lightDirection).toConst();
 
-      // Distance to the scene, unlimited where the scene pass left the sky
-      const depth = depthNode.sample(screen).r;
-      const scenePoint = this._projectionInverse.mul(vec4(ndc, depth, 1));
-      const empty = reversedDepth ? depth.lessThanEqual(0) : depth.greaterThanEqual(1);
-      const sceneDistance = select(empty, 1e12, scenePoint.xyz.div(scenePoint.w).length());
-
-      // Part of the ray in the shell of the layers
-      const ground = this._sphere(direction, float(0));
-      const bottom = this._sphere(direction, this._minHeight);
-      const top = this._sphere(direction, this._maxHeight);
-      const hitsGround = ground.hit.and(ground.far.greaterThan(0));
-      const hitsBottom = bottom.hit.and(bottom.near.greaterThan(0));
-      const near = float(-1).toVar();
-      const far = float(-1).toVar();
-      If(this._cameraHeight.lessThan(this._minHeight), () => {
-        If(hitsGround.not(), () => {
-          near.assign(bottom.far);
-          far.assign(top.far);
-        });
+    // Part of the ray in the shell of the layers
+    const ground = this._sphere(direction, float(0));
+    const bottom = this._sphere(direction, this._minHeight);
+    const top = this._sphere(direction, this._maxHeight);
+    const hitsGround = ground.hit.and(ground.far.greaterThan(0));
+    const hitsBottom = bottom.hit.and(bottom.near.greaterThan(0));
+    const near = float(-1).toVar();
+    const far = float(-1).toVar();
+    If(this._cameraHeight.lessThan(this._minHeight), () => {
+      If(hitsGround.not(), () => {
+        near.assign(bottom.far);
+        far.assign(top.far);
+      });
+    })
+      .ElseIf(this._cameraHeight.lessThan(this._maxHeight), () => {
+        near.assign(0);
+        far.assign(select(hitsBottom, bottom.near, top.far));
       })
-        .ElseIf(this._cameraHeight.lessThan(this._maxHeight), () => {
-          near.assign(0);
+      .Else(() => {
+        If(top.hit.and(top.near.greaterThan(0)), () => {
+          near.assign(top.near);
           far.assign(select(hitsBottom, bottom.near, top.far));
-        })
-        .Else(() => {
-          If(top.hit.and(top.near.greaterThan(0)), () => {
-            near.assign(top.near);
-            far.assign(select(hitsBottom, bottom.near, top.far));
-          });
-        });
-      far.assign(min(far, min(sceneDistance, near.add(CLOUD_MAX_DISTANCE))));
-
-      const color = vec4(0).toVar();
-      If(far.greaterThan(near).and(far.greaterThan(0)), () => {
-        const jitter = stbn;
-        const start = origin.add(direction.mul(near)).toConst();
-
-        // Sunlight and sky light at the bottom and the top of the layers, above the entry point
-        const up = normalize(start);
-        const irradiance = (height) => {
-          const point = this._toAtmosphere(up.mul(height.add(R)).sub(origin)).add(atmosphere.altitudeCorrectionUnit);
-          const light = getSplitScalarIlluminance(point, lightECEF).toConst();
-          return { sun: light.get('direct').mul(lightScale), sky: light.get('indirect').mul(lightScale) };
-        };
-        const low = irradiance(this._minHeight);
-        const high = irradiance(this._maxHeight);
-        const sunLow = vec3(low.sun).toConst();
-        const sunHigh = vec3(high.sun).toConst();
-        const skyLow = vec3(low.sky).toConst();
-        const skyHigh = vec3(high.sky).toConst();
-
-        // Phase of each octave of the multiple scattering: the anisotropy halves with each
-        const phases = [];
-        for (let i = 0; i < CLOUD_SCATTERING_OCTAVES; i++) {
-          const attenuation = 0.5 ** i;
-          phases.push(
-            mix(
-              henyeyGreenstein(float(CLOUD_PHASE_G[0] * attenuation), cosTheta),
-              henyeyGreenstein(float(CLOUD_PHASE_G[1] * attenuation), cosTheta),
-              CLOUD_PHASE_MIX,
-            ).toConst(),
-          );
-        }
-        const multipleScattering = (opticalDepth) =>
-          phases.reduce((sum, phase, i) => sum.add(exp(opticalDepth.mul(-(0.5 ** i))).mul(phase).mul(0.5 ** i)), float(0));
-
-        const radiance = vec3(0).toVar();
-        const transmittance = float(1).toVar();
-        const weightedDistance = float(0).toVar();
-        const weightSum = float(0).toVar();
-        const span = far.sub(near).toConst();
-        const step = float(CLOUD_MIN_STEP).add(near.mul(CLOUD_STEP_GROWTH - 1)).toVar();
-        const t = step.mul(jitter).toVar();
-
-        Loop(CLOUD_MAX_STEPS, () => {
-          If(t.greaterThan(span), () => Break());
-          const position = start.add(direction.mul(t)).toConst();
-          const height = length(position).sub(R).toConst();
-          const weather = this._weather(position, height);
-          If(weather.density.greaterThan(vec4(MIN_DENSITY)).any(), () => {
-            const media = this._media(weather, position, height, near.add(t).lessThan(CLOUD_DETAIL_DISTANCE));
-            const extinction = media.extinction;
-            If(extinction.greaterThan(MIN_EXTINCTION), () => {
-              const alpha = remapClamp(height, this._minHeight, this._maxHeight);
-              const opticalDepth = this._opticalDepthToLight(position, lightDirection, jitter);
-              const skyGradient = dot(weather.fraction.mul(0.5).add(0.5), media.weight);
-              const scattered = mix(sunLow, sunHigh, alpha)
-                .mul(multipleScattering(opticalDepth))
-                .add(mix(skyLow, skyHigh, alpha).mul(RECIPROCAL_PI4 * CLOUD_SKY_LIGHT_SCALE).mul(skyGradient))
-                .mul(extinction)
-                .mul(exp(extinction.mul(-CLOUD_POWDER_EXPONENT)).mul(CLOUD_POWDER_SCALE).oneMinus());
-              // Scattered light integrated over the step (energy conserving)
-              const stepTransmittance = exp(extinction.mul(step).negate()).toConst();
-              radiance.addAssign(transmittance.mul(scattered.sub(scattered.mul(stepTransmittance)).div(extinction)));
-              transmittance.mulAssign(stepTransmittance);
-              weightedDistance.addAssign(near.add(t).mul(transmittance));
-              weightSum.addAssign(transmittance);
-            });
-          });
-          If(transmittance.lessThanEqual(CLOUD_MIN_TRANSMITTANCE), () => Break());
-          step.assign(min(step.mul(CLOUD_STEP_GROWTH), CLOUD_MAX_STEP));
-          t.addAssign(step);
-        });
-
-        If(weightSum.greaterThan(0), () => {
-          // The air between the camera and the clouds, at their mean distance
-          const distance = weightedDistance.div(weightSum);
-          const front = this._toAtmosphere(direction.mul(distance));
-          const air = getIndirectLuminanceToPoint(
-            atmosphere.cameraPositionUnit.add(atmosphere.altitudeCorrectionUnit),
-            front.add(atmosphere.altitudeCorrectionUnit),
-            vec2(0),
-            lightECEF,
-          ).toConst();
-          const opacity = remapClamp(transmittance, 1, CLOUD_MIN_TRANSMITTANCE);
-          color.assign(
-            vec4(
-              radiance.mul(air.get('transmittance')).add(air.get('luminance').mul(lightScale).mul(opacity)),
-              opacity,
-            ),
-          );
         });
       });
-      return color;
-    })();
+    far.assign(min(far, min(sceneDistance, near.add(CLOUD_MAX_DISTANCE))));
+
+    const color = vec4(0).toVar();
+    const front = float(sceneDistance).toVar();
+    If(far.greaterThan(near).and(far.greaterThan(0)), () => {
+      const jitter = stbn;
+      const start = origin.add(direction.mul(near)).toConst();
+
+      // Sunlight and sky light at the bottom and the top of the layers, above the entry point
+      const up = normalize(start);
+      const irradiance = (height) => {
+        const point = this._toAtmosphere(up.mul(height.add(R)).sub(origin)).add(atmosphere.altitudeCorrectionUnit);
+        const light = getSplitScalarIlluminance(point, lightECEF).toConst();
+        return { sun: light.get('direct').mul(lightScale), sky: light.get('indirect').mul(lightScale) };
+      };
+      const low = irradiance(this._minHeight);
+      const high = irradiance(this._maxHeight);
+      const sunLow = vec3(low.sun).toConst();
+      const sunHigh = vec3(high.sun).toConst();
+      const skyLow = vec3(low.sky).toConst();
+      const skyHigh = vec3(high.sky).toConst();
+
+      // Phase of each octave of the multiple scattering: the anisotropy halves with each
+      const phases = [];
+      for (let i = 0; i < CLOUD_SCATTERING_OCTAVES; i++) {
+        const attenuation = 0.5 ** i;
+        phases.push(
+          mix(
+            henyeyGreenstein(float(CLOUD_PHASE_G[0] * attenuation), cosTheta),
+            henyeyGreenstein(float(CLOUD_PHASE_G[1] * attenuation), cosTheta),
+            CLOUD_PHASE_MIX,
+          ).toConst(),
+        );
+      }
+      const multipleScattering = (opticalDepth) =>
+        phases.reduce((sum, phase, i) => sum.add(exp(opticalDepth.mul(-(0.5 ** i))).mul(phase).mul(0.5 ** i)), float(0));
+
+      const radiance = vec3(0).toVar();
+      const transmittance = float(1).toVar();
+      const weightedDistance = float(0).toVar();
+      const weightSum = float(0).toVar();
+      const span = far.sub(near).toConst();
+      const step = float(CLOUD_MIN_STEP).add(near.mul(CLOUD_STEP_GROWTH - 1)).toVar();
+      const t = step.mul(jitter).toVar();
+
+      Loop(CLOUD_MAX_STEPS, () => {
+        If(t.greaterThan(span), () => Break());
+        const position = start.add(direction.mul(t)).toConst();
+        const height = length(position).sub(R).toConst();
+        const weather = this._weather(position, height);
+        If(weather.density.greaterThan(vec4(MIN_DENSITY)).any(), () => {
+          const media = this._media(weather, position, height, near.add(t).lessThan(CLOUD_DETAIL_DISTANCE));
+          const extinction = media.extinction;
+          If(extinction.greaterThan(MIN_EXTINCTION), () => {
+            const alpha = remapClamp(height, this._minHeight, this._maxHeight);
+            const opticalDepth = this._opticalDepthToLight(position, lightDirection, jitter);
+            const skyGradient = dot(weather.fraction.mul(0.5).add(0.5), media.weight);
+            const scattered = mix(sunLow, sunHigh, alpha)
+              .mul(multipleScattering(opticalDepth))
+              .add(mix(skyLow, skyHigh, alpha).mul(RECIPROCAL_PI4 * CLOUD_SKY_LIGHT_SCALE).mul(skyGradient))
+              .mul(extinction)
+              .mul(exp(extinction.mul(-CLOUD_POWDER_EXPONENT)).mul(CLOUD_POWDER_SCALE).oneMinus());
+            // Scattered light integrated over the step (energy conserving)
+            const stepTransmittance = exp(extinction.mul(step).negate()).toConst();
+            radiance.addAssign(transmittance.mul(scattered.sub(scattered.mul(stepTransmittance)).div(extinction)));
+            transmittance.mulAssign(stepTransmittance);
+            weightedDistance.addAssign(near.add(t).mul(transmittance));
+            weightSum.addAssign(transmittance);
+          });
+        });
+        If(transmittance.lessThanEqual(CLOUD_MIN_TRANSMITTANCE), () => Break());
+        step.assign(min(step.mul(CLOUD_STEP_GROWTH), CLOUD_MAX_STEP));
+        t.addAssign(step);
+      });
+
+      If(weightSum.greaterThan(0), () => {
+        // The air between the camera and the clouds, at their mean distance
+        const distance = weightedDistance.div(weightSum).toConst();
+        const air = getIndirectLuminanceToPoint(
+          atmosphere.cameraPositionUnit.add(atmosphere.altitudeCorrectionUnit),
+          this._toAtmosphere(direction.mul(distance)).add(atmosphere.altitudeCorrectionUnit),
+          vec2(0),
+          lightECEF,
+        ).toConst();
+        const opacity = remapClamp(transmittance, 1, CLOUD_MIN_TRANSMITTANCE);
+        color.assign(
+          vec4(radiance.mul(air.get('transmittance')).add(air.get('luminance').mul(lightScale).mul(opacity)), opacity),
+        );
+        front.assign(min(distance, sceneDistance));
+      });
+    });
+    return { color, front };
+  }
+
+  /**
+   * The pass drawing the clouds in front of the scene (see CloudsTemporalNode)
+   * @param {Node} depthNode - scene depth
+   * @param {boolean} reversedDepth
+   */
+  pass(depthNode, reversedDepth) {
+    return new CloudsTemporalNode(this, depthNode, reversedDepth);
   }
 
   dispose() {

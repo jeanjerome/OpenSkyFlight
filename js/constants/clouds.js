@@ -67,5 +67,18 @@ export const CLOUD_SKY_LIGHT_SCALE = 1;
 export const CLOUD_POWDER_SCALE = 0.8;
 export const CLOUD_POWDER_EXPONENT = 150;
 
-/** Resolution of the cloud pass relative to the scene pass */
-export const CLOUD_RESOLUTION_SCALE = 0.5;
+/** Distance standing for the sky, where the scene pass drew nothing (m) */
+export const CLOUD_SKY_DISTANCE = 1e7;
+
+/**
+ * Temporal upscaling of the clouds: each frame marches one pixel of every 4×4
+ * block of the scene pass, and the image of the previous frames is reprojected
+ * for the others. The history of a pixel is kept while the scene distance there
+ * changes by less than this share, and clipped to the spread of the clouds
+ * marched around it, widened by this factor (variance clipping)
+ */
+export const CLOUD_HISTORY_DEPTH_TOLERANCE = 0.1;
+export const CLOUD_VARIANCE_GAMMA = 2;
+
+/** Share of a freshly marched pixel blended into its history (the rest of the noise averages out over the frames) */
+export const CLOUD_CURRENT_WEIGHT = 0.5;

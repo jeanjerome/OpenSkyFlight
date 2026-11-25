@@ -12,7 +12,6 @@ import {
   NIGHT_VISION_SCOTOPIC_LUMINANCE,
   SCENE_UNIT_LUMINANCE,
 } from '../constants/rendering.js';
-import { CLOUD_RESOLUTION_SCALE } from '../constants/clouds.js';
 import AutoExposureNode from './AutoExposureNode.js';
 
 /**
@@ -230,10 +229,10 @@ export default class ScenePipeline {
    *   depth, and the clouds' pass when there is one, or null for none. The
    *   result is rendered at the scene pass resolution and fed to the
    *   anti-aliasing in place of the scene color.
-   * @param {?function(TextureNode, boolean): Node} clouds - builds the clouds in
-   *   front of the scene (premultiplied luminance and opacity) from the scene
-   *   depth and whether it is reversed, rendered by a pass of its own at
-   *   CLOUD_RESOLUTION_SCALE of the scene pass; null for none
+   * @param {?function(TextureNode, boolean): Node} clouds - builds the pass
+   *   of the clouds in front of the scene (a node with getTextureNode(), whose
+   *   texture holds their premultiplied luminance and opacity at the scene pass
+   *   resolution) from the scene depth and whether it is reversed; null for none
    */
   setAtmosphere(apply, clouds = null) {
     this._atmosphereApply = apply;
@@ -258,11 +257,9 @@ export default class ScenePipeline {
         depth = this._sceneDepth.sample(bent);
       }
       if (this._clouds) {
-        this._cloudsNode = rtt(this._clouds(this._sceneDepth, this._renderer.reversedDepthBuffer), null, null, {
-          resolutionScale: this.scenePass.getResolutionScale() * CLOUD_RESOLUTION_SCALE,
-        });
+        this._cloudsNode = this._clouds(this._sceneDepth, this._renderer.reversedDepthBuffer);
       }
-      const node = apply(color, depth, this._cloudsNode);
+      const node = apply(color, depth, this._cloudsNode?.getTextureNode() ?? null);
       // The atmosphere covers every pixel (sky included): opaque
       this._atmosphereNode = rtt(vec4(node.rgb, 1), null, null, {
         resolutionScale: this.scenePass.getResolutionScale(),
@@ -286,7 +283,6 @@ export default class ScenePipeline {
   setRenderScale(scale) {
     this.scenePass.setResolutionScale(scale);
     this._atmosphereNode?.setResolutionScale(scale);
-    this._cloudsNode?.setResolutionScale(scale * CLOUD_RESOLUTION_SCALE);
   }
 
   /** @returns {number} */
