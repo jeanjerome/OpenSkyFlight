@@ -6,7 +6,7 @@ contrainte : l'application doit continuer à fonctionner dans un navigateur (Web
 Ce document est la **source de vérité de l'avancement**. Il est lu en début de session et mis à jour
 en fin de session.
 
-## État courant (mis à jour le 2026-11-25, session 19)
+## État courant (mis à jour le 2026-11-25, session 20)
 
 - **Lots terminés** : 0 à 3, fusionnés dans `main` (lots 2 et 3 le 2026-11-24). Lot 3 : bilan dans
   **Mesures** (lignes « Clôture du lot 3 ») et constats visuels sous les tableaux. Lot 2 : toutes les tâches faites sauf le reste optionnel de
@@ -84,16 +84,18 @@ en fin de session.
     l'autre touchent aussi l'ancien code : seules des captures alternées (worktree de l'ancien état
     sur le port 3001, ou `--set` d'un réglage sur le même code) tranchent une régression.
 - **Lot 4 en cours** sur `feat/render-clouds` (depuis `main`, après la fusion de `feat/flight-model`
-  le 2026-11-25). Fait : L4.1, et premières versions de L4.2 et L4.3 (voir les tâches). Le réglage
+  le 2026-11-25). Fait : L4.1, L4.4, et premières versions de L4.2 et L4.3 (voir les tâches). Le réglage
   « Clouds » (`showClouds`) dessine les nuages volumétriques en WebGPU (la couche plane `CloudLayer`
   reste en WebGL2 jusqu'à L4.8) ; `cloudAltitude` fixe la base des cumulus. Code : `js/clouds/`,
-  `js/constants/clouds.js`, passe des nuages dans `ScenePipeline.setAtmosphere(apply, clouds)`,
-  composition dans `AtmosphericSky._overScene`. Référence des vues : `benchmarks/render/clouds-1`
-  (vues sans nuages identiques à `haze-true-*` au bruit près ; vue 5 avec nuages 8,75 ms).
-- **Prochaine étape** : L4.4 (passe des nuages à 1/4 de résolution par axe avec reprojection
-  temporelle et motif de Bayer 4×4, à la manière de takram, puis suréchantillonnage tenant compte de la
-  profondeur aux silhouettes du relief) pour ramener la vue 5 sous le budget de 3 ms, puis réglage
-  du rendu avec l'utilisateur.
+  `js/constants/clouds.js`, passe des nuages (`CloudsTemporalNode`) dans
+  `ScenePipeline.setAtmosphere(apply, clouds)`, composition dans `AtmosphericSky._overScene`. Référence
+  des vues : `benchmarks/render/clouds-2` (vue 5 : 6,44 ms, dont ≈ 2,65 ms de nuages contre 3,79 ms
+  sans ; les vues de référence remettent le vent à zéro, sinon la couverture en vue dérive pendant une
+  capture et le coût de la vue 5 varie de ±0,6 ms).
+- **Prochaine étape** : réglage du rendu avec l'utilisateur (L4.2, L4.3 : cirrus gris, contraste de
+  l'ombre propre, rebond du sol, couverture dans le menu), dont le grain des nuages proches en
+  mouvement rapide (points sombres : bruit du ray marching lui-même, le détail de 170 m étant
+  sous-échantillonné par des pas de 60 m ; invisible à l'arrêt, le TAAU l'accumule), puis L4.5.
 - **Suite** : lot 4 (nuages volumétriques). Points ouverts : culling des tuiles par three presque
   inopérant (sphère englobante calculée en coordonnées locales où l'épaisseur est en mètres et la
   largeur en tuiles : rayon démesuré une fois mis à l'échelle), piste CPU et GPU pour le lot 5 ; coût CPU de soumission (≈ 5 µs par
@@ -572,9 +574,22 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       terrain). Passe à 0,5 × la résolution de la passe de scène, composée dans la passe d'atmosphère
       (`_overScene`) devant la scène et le ciel. Vue 5 : coût GPU 8,75 ms (≈ +4,8 ms), image granuleuse
       (bruit bleu du point de départ non accumulé). Reste : réglages fins (cirrus gris, contraste de
-      l'ombre propre, rebond du sol), coût (L4.4).
-- [ ] **L4.4** Rendu à 1/4 de résolution + reprojection temporelle, composition tenant compte de la
+      l'ombre propre, rebond du sol), grain des nuages proches en mouvement. Coût et grain à l'arrêt
+      traités par L4.4.
+- [x] **L4.4** Rendu à 1/4 de résolution + reprojection temporelle, composition tenant compte de la
       profondeur du terrain.
+      `js/clouds/CloudsTemporalNode.js` : chaque frame marche un pixel de chaque bloc 4×4 de la passe
+      de scène (ordre de Bayer, comme takram) dans une cible qui garde aussi la distance du front des
+      nuages et de la scène ; la résolution, à la pleine résolution de la passe de scène, reprojette
+      l'image précédente au point que montre chaque pixel (distance de sa propre scène ou du front des
+      nuages voisins, la plus proche), la garde si la distance de scène qu'elle avait concorde à 10 %,
+      la borne à l'étendue des nuages marchés autour (variance × 2), et mêle à 50 % les pixels marchés
+      dans la frame. Sinon (désocclusion, bords) : moyenne des voisins pondérée par la ressemblance de
+      leur distance de scène, ceux dont les nuages commencent derrière la surface du pixel comptant
+      pour clairs (sans quoi un liseré de nuage bordait l'avion en roulis). Historique en ping-pong
+      (les deux copies plein écran coûtaient de l'ordre de 0,5 à 0,75 ms, mesure faite avant la remise à
+      zéro du vent). Vue 5 : nuages ≈ 2,65 ms (≈ 4,8 ms avant), essentiellement la marche. Vérifié en roulis rapide : pas de traînée ni de halo aux
+      silhouettes de l'avion et du relief.
 - [ ] **L4.5** Ombres des nuages sur le terrain.
 - [ ] **L4.6** Traversée des nuages (caméra dans la couche).
 - [ ] **L4.7** Rayons crépusculaires (`GodraysNode`) et reflet d'objectif (`LensflareNode`).
@@ -836,12 +851,21 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 | 2026-11-24 | Adaptation aux lumières des villes | Moyenne logarithmique de leur luminance sur la zone en vue, calculée sur le CPU depuis la mosaïque Black Marble, ajoutée à l'éclairement de la pré-exposition | Déterministe comme la pré-exposition (pas de relecture GPU ni de boucle) ; la moyenne arithmétique laissait une ville lointaine assombrir tout un paysage au clair de lune, la moyenne logarithmique (comme l'adaptation de l'œil et le tone mapping de Reinhard) ne compte une ville que si elle remplit la vue |
 | 2026-11-25 | Nuages volumétriques | Implémentation propre en TSL, portée du modèle de takram three-clouds 0.7.6 (MIT) | takram three-clouds n'a pas de version WebGPU/TSL (effet `postprocessing` sur le renderer WebGL) ; son modèle (Schneider, Hillaire, Wrenninge) et ses paramètres par défaut sont éprouvés et s'éclairent avec le même contexte d'atmosphère que le reste de la scène |
 | 2026-11-25 | Repère des nuages | Coquilles sphériques centrées sur le centre de la Terre sous la caméra, coordonnées de texture tirées des x, z de la carte et de l'altitude, origine réduite modulo la répétition sur le CPU | Même courbure que le terrain (abaissé de d²/2R autour de la caméra) ; pas de coutures de projection cube-sphère ; précision des flottants conservée loin de l'origine de la carte |
+| 2026-11-25 | Suréchantillonnage temporel des nuages | Un pixel sur 16 marché par frame (Bayer 4×4), reprojection par pixel à la distance de sa scène ou du front des nuages, rejet de l'historique sur la distance de scène, repli pondéré par la ressemblance de profondeur | Comme takram pour le coût (marche à 1/16 des pixels) ; leur vitesse prise au fragment le plus proche d'un voisinage basse résolution laisse des halos aux silhouettes en mouvement, la reprojection à la profondeur pleine résolution de chaque pixel les évite |
 | 2026-11-25 | Reconstruction de l'atmosphère en cours de vol | Le TAAU marque ses matériaux internes à recompiler quand la passe d'atmosphère change | `TAAUNode.setup()` leur donne de nouveaux nœuds sans les marquer : couper la brume de distance, la brume de chaleur ou le volume de perspective aérienne depuis le menu ne s'appliquait qu'au rechargement (défaut antérieur, trouvé avec les nuages) |
 | 2026-11-23 | Vitesse par défaut | 560 m/s | Vitesse réelle de l'ancien défaut (800 unités Mercator/s) : benchmarks comparables à la baseline |
 
 ## Journal des sessions
 
 <!-- Entrée la plus récente en haut. -->
+
+### 2026-11-25 (20)
+- Lot 4 jusqu'ici commité sur `feat/render-clouds` (correction du TAAU, nuages, documentation).
+- Fait : L4.4 (passe temporelle des nuages, voir la tâche). Les vues de référence remettent le vent à
+  zéro pour des mesures comparables.
+- Mesures : `benchmarks/render/clouds-2` (vues 3,57 / 3,54 / 3,61 / 3,53 / 6,44 / 4,09 ms ; vue 5 sans
+  nuages 3,79 ms).
+- Prochaine étape : réglage du rendu avec l'utilisateur (voir État courant).
 
 ### 2026-11-25 (19)
 - `feat/flight-model` (lots G0 à G2) fusionnée dans `main` (avance rapide) et poussée à la demande de
