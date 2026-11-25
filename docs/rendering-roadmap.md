@@ -66,7 +66,10 @@ en fin de session.
   call) : tout uniforme commun à la frame doit passer en `renderGroup` ; le ray marching de takram lit
   un bruit bleu à `screenCoordinate`, absent d'un compute (`raymarchSampleOffset`) ; comparer
   WebGPU et WebGL2 avec `autoExposure=false` (exposition automatique WebGPU seulement).
-- **Prochaine session** : lot 4, en commençant par L4.1 (textures de bruit 3D par compute). La
+- **En pause depuis le 2026-11-25** : les lots G0 à G2 de `docs/gameplay-roadmap.md` (socle de
+  simulation, modèle de vol, réacteurs et jets) passent avant le lot 4 ; les lots de vol et de rendu
+  alternent ensuite.
+- **Prochaine session de rendu** : lot 4, en commençant par L4.1 (textures de bruit 3D par compute). La
   couche nuageuse plane actuelle suit déjà la courbure de la Terre (sous-divisée) ; les nuages
   volumétriques devront faire de même (couche sphérique autour de la caméra) et reprendre le
   contexte takram pour leur éclairage.
