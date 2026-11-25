@@ -10,20 +10,43 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
 
 ## État courant (mis à jour le 2026-11-25)
 
-- **Statut** : plan validé le 2026-11-25 (voir **Décisions**) ; rien n'est implémenté. Prochaine
-  étape : G0 sur une branche `feat/flight-model` créée depuis `main`, puis G1 et G2, avant d'alterner
-  avec les lots de rendu (lot 4, nuages volumétriques).
-- **Point de départ dans le code** :
-  - `js/camera/FlightController.js` est une caméra libre : la souris donne le cap et l'assiette, `W`/`S`
-    avancent à la vitesse fixe `CONFIG.cameraSpeed` (1 à 4 000 m/s), le roulis est cosmétique
-    (`app.js`, dérivé du taux de lacet). Aucune gravité, aucune collision avec le sol.
+- **Statut** : plan validé le 2026-11-25 (voir **Décisions**). **G0 fait** sur la branche
+  `feat/flight-model` (non fusionnée, non poussée), sauf le préchargement et les requêtes par lot de
+  G0.4, reportés à G3 et G5 où ils servent. Prochaine étape : G1 (modèle de vol) sur la même
+  branche, puis G2, avant d'alterner avec les lots de rendu (lot 4, nuages volumétriques).
+- **Socle de simulation (G0)** :
+  - `js/sim/SimulationClock.js` : pas fixe de 240 Hz (`SIMULATION_RATE`), au plus
+    `MAX_DELTA_TIME × 240` pas par frame, fraction restante `alpha` pour interpoler la pose rendue.
+  - `js/flight/AircraftState.js` : état de l'avion (position, vitesse, quaternion, cap et assiette
+    scalaires) séparé de la caméra ; `interpolate(alpha)` donne la pose que lisent la caméra, le
+    modèle, le HUD et la mini-carte.
+  - `js/flight/ExplorationFlight.js` : l'ancien vol libre (`FlightController`, supprimé) devenu le mode
+    Exploration ; il garde l'interface que lisent le benchmark et les plans de vol (`position`, `yaw`,
+    `pitch`, `enabled`, `yawRate`, `pitchRate`) et ajoute `teleport()`.
+  - `js/input/ControlInputs.js` : clavier, souris (verrouillage du pointeur) et manette en
+    disposition standard, rassemblés une fois par frame en commandes (`lookYaw`, `lookPitch`,
+    `yawRate`, `pitchRate`, `forward`, `strafe`) ; boutons de manette par `onButton()` (Y : vue,
+    Menu : pause). Réglages « Stick sensitivity » et « Invert stick pitch » (onglet Flight).
+  - `GeoTerrainManager.groundHeight(x, z)` : altitude du sol **telle que dessinée** (triangles de la
+    tuile affichée la plus fine, grille de hauteurs gardée sur le CPU par le chargeur Terrarium), repli
+    sur z12, `null` si rien n'est chargé ; l'ancien `getGroundElevation()` prend la valeur à renvoyer
+    quand la tuile manque. `window.osf.aircraft()` et `window.osf.groundHeight()` pour l'automatisation.
+  - `js/sim/atmosphere.js` (`isa()`), `js/sim/EntityRegistry.js` (pas fixe + grille de 2 km) ; tests
+    `npm test` (`tests/*.test.js`, exécuteur de Node).
+  - La courbure de la Terre est appliquée autour de la caméra au rendu seulement (terrain, nuages) : un
+    objet lointain (drone, site sol-air, G5) devra être abaissé de `d²/2R` au rendu pour rester posé
+    sur le relief dessiné ; la physique reste dans le plan tangent.
+- **Point de départ dans le code (avant G0)** :
+  - L'ancien `js/camera/FlightController.js` était une caméra libre : la souris donne le cap et
+    l'assiette, `W`/`S` avancent à la vitesse fixe `CONFIG.cameraSpeed` (1 à 4 000 m/s), le roulis est
+    cosmétique (`app.js`, dérivé du taux de lacet). Aucune gravité, aucune collision avec le sol.
   - `AircraftManager` lit `position`, `quaternion`, `yawRate`, `pitchRate`, `thrust` ; la
     post-combustion s'allume au-dessus de 300 m/s (`AFTERBURNER_SPEED`), pas selon une manette.
   - Le benchmark (`BenchmarkRunner`) et le pilote automatique (`FlightPlanRecorder`) imposent position
     et orientation : ils doivent rester cinématiques pour que les mesures de rendu restent comparables.
-  - `GeoTerrainManager.getGroundElevation()` lit les cartes d'altitude z12 décodées sur le CPU
-    (≈ 25–38 m par pixel) et **renvoie 0 si la tuile n'est pas chargée** : inutilisable tel quel pour
-    un contact au sol ou une détection de crash.
+  - `GeoTerrainManager.getGroundElevation()` lisait les cartes d'altitude z12 décodées sur le CPU
+    (≈ 25–38 m par pixel) et **renvoyait 0 si la tuile n'était pas chargée** (remplacé par
+    `groundHeight()`, voir ci-dessus).
   - Le glTF du Rafale (`assets/models/rafale/Rafale.gltf`, export Cheetah3D) contient des maillages
     séparés pour canards, becs, volets, élevons, gouverne de direction, tuyères, train complet
     (roues, jambes, contrefiches, trappes, puits), crosse, pylônes, MICA, Meteor, Exocet et GBU-24.
@@ -90,23 +113,30 @@ sol) ; les nuages volumétriques (lot 4) n'ont pas de dépendance avec ces lots.
 
 ## Lot G0 — Socle de simulation
 
-- [ ] **G0.1** Boucle de simulation à pas fixe (240 Hz, accumulateur, interpolation de l'état rendu),
+- [x] **G0.1** Boucle de simulation à pas fixe (240 Hz, accumulateur, interpolation de l'état rendu),
       séparée de la boucle de rendu ; `MAX_DELTA_TIME` borne le nombre de pas par frame.
-- [ ] **G0.2** Séparer l'**état de l'avion** (position ECEF/locale, vitesse, quaternion, vitesse
+- [x] **G0.2** Séparer l'**état de l'avion** (position ECEF/locale, vitesse, quaternion, vitesse
       angulaire, masse, carburant, manette) de la **caméra**. `FlightController` devient le mode
       « Exploration » (vol libre actuel, vitesse jusqu'à 4 000 m/s, sans collision), conservé pour
       voyager vite et pour les vues de référence.
-- [ ] **G0.3** Couche d'entrée unique produisant des commandes normalisées (tangage, roulis, lacet,
+- [x] **G0.3** Couche d'entrée unique produisant des commandes normalisées (tangage, roulis, lacet,
       manette, freins, armes…) depuis clavier, souris et manette (Gamepad API `mapping: "standard"`,
       zones mortes, inversion, courbes) ; profils mémorisés dans `settingsStore`. HOTAS hors périmètre
       pour l'instant (axes arbitraires en `mapping: ""`, demanderait un assistant de calibration).
-- [ ] **G0.4** Altitude du sol fiable : interpolation sur la meilleure carte d'altitude chargée (pas
+      Fait pour le mode Exploration (commandes de visée, avance, glissement, boutons) ; les commandes
+      de tangage, roulis, manette des gaz et armes s'ajouteront avec G1 et G5.
+- [~] **G0.4** Altitude du sol fiable : interpolation sur la meilleure carte d'altitude chargée (pas
       seulement z12), état « inconnu » au lieu de 0, préchargement des tuiles sous et devant l'avion,
       requête par lot pour les points de contact (roues, saumons, nez) et les sondes de l'IA.
-- [ ] **G0.5** Atmosphère standard (ISA : température, pression, densité, vitesse du son selon
+      Fait : altitude telle que dessinée, repli z12, `null` si inconnue. Reste : préchargement devant
+      l'avion (avec G3, quand l'approche descend vite vers des tuiles fines) et requêtes par lot (avec
+      G5, quand l'IA sonde le relief).
+- [x] **G0.5** Atmosphère standard (ISA : température, pression, densité, vitesse du son selon
       l'altitude), partagée par l'avion, l'IA et les missiles ; vent global optionnel (repris du lot 4).
-- [ ] **G0.6** Registre d'entités minimal (avion joueur, puis IA, missiles, cibles) avec mise à jour
+- [x] **G0.6** Registre d'entités minimal (avion joueur, puis IA, missiles, cibles) avec mise à jour
       au pas fixe et grille spatiale pour les requêtes de voisinage ; vecteurs préalloués.
+      Fait (registre vide branché sur le pas fixe) ; l'abaissement des objets lointains par la courbure
+      au rendu viendra avec le premier objet lointain (G5).
 
 ## Lot G1 — Modèle de vol physique et commandes
 
@@ -395,8 +425,24 @@ https://github.com/AlexF0643/missile-intercept-tracker, https://github.com/PSamu
 | Mirage 2000 / Eurofighter JSBSim | coefficients de référence | GPL : ne pas reprendre |
 | F-16 Stevens & Lewis (F16Model.jl…) | tables aérodynamiques de référence | MIT (Julia) |
 
+## Mesures
+
+Preset High, écran intégré 120 Hz, mêmes protocoles que `docs/rendering-roadmap.md`.
+
+| Date | État | Vues : coût GPU (ms) 1 / 2 / 3 / 4 / 5 / 6 | Vol plan 1 : FPS · p5 · p1 · images lentes | Notes |
+|---|---|---|---|---|
+| 2026-11-24 | Référence (clôture du lot 3 : `lot3-cap2`, `lot3`) | 3,44 / 3,43 / 3,49 / 3,40 / 3,80 / 3,48 | 119,2 · 105,3 · 64,1 · 1 | |
+| 2026-11-25 | G0 (`benchmarks/render/g0`) | 3,45 / 3,44 / 3,51 / 3,40 / 3,81 / 3,54 | 119,5 · 103,1 · 65,4 · 0 | Draw calls identiques ; écarts dans le bruit (± 0,4 ms) |
+
+Vérifications de G0 dans Chrome (`?view=1`, manette simulée en disposition standard) : avance au
+clavier 1 120 m en 2,0 s simulées (560 m/s, la vitesse réglée) ; demi-gâchette 280 m/s ; manche à fond
+1 s : cap −1,21 rad (1,2 rad/s attendu) ; Y bascule en vue cockpit, Menu ouvre les réglages ; altitude
+du sol connue sur 169 points à ±3 km (720 à 2 238 m), 979 m sous l'avion contre 969 m en z12 ; aucune
+erreur console.
+
 ## Journal des sessions
 
 | Date | Fait | Reste / prochaine étape |
 |---|---|---|
+| 2026-11-25 | G0 : horloge à pas fixe, état de l'avion, mode Exploration, entrées clavier/souris/manette, altitude du sol telle que dessinée, atmosphère standard, registre d'entités, tests Node ; vérifié dans Chrome, vues et vol identiques à la référence | G1 sur `feat/flight-model` : modèle 6 DDL, commandes de vol électriques, souris « mouse aim », banc de vérification |
 | 2026-11-25 | Revue du code existant (vol, lumières, modèle, altitude du sol) ; recherches web sur le modèle de vol, les jets, le radar, les aéroports, les missiles et les drones ; rédaction de cette feuille de route ; décisions d'ordre, de réalisme, de mode Exploration et de périphériques | G0 sur `feat/flight-model` ; vérifier la licence du modèle Rafale |
