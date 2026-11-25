@@ -11,10 +11,17 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
 ## État courant (mis à jour le 2026-11-25)
 
 - **Statut** : plan validé le 2026-11-25 (voir **Décisions**). **G0, G1 et G2 (sauf G2.4 et l'option
-  G2.7) faits** sur la branche `feat/flight-model` (non fusionnée, non poussée ; le travail de G2 n'est
-  pas encore commité au 2026-11-25), sauf le préchargement et les requêtes par lot de G0.4 (reportés à
+  G2.7) faits** sur la branche `feat/flight-model` (non fusionnée, non poussée), sauf le préchargement et les requêtes par lot de G0.4 (reportés à
   G3 et G5) et la récupération automatique de G1.2 (reportée). Prochaine étape : G2.4 (brume de
   chaleur), puis alterner avec les lots de rendu (lot 4).
+- **Vue orbite** (demandée par l'utilisateur, hors lots) : `CONFIG.cameraMode = 'orbit'`, entre la
+  poursuite et le cockpit (`V`), `js/camera/OrbitCameraController.js`. La caméra tourne autour de
+  l'avion dans son repère (roulis compris, rattrapé comme la poursuite liée), vise 3 m derrière son
+  centre ; souris (pointeur verrouillé) ou stick droit pour tourner (`ControlInputs.freeLook` les
+  détourne de la visée, du palonnier et du glissement), molette pour la distance (8 à 150 m) ; HUD
+  masqué ; l'avion garde sa visée, les touches et le stick gauche le pilotent toujours. Vérifié dans
+  Chrome avec une manette simulée et la molette (le verrouillage du pointeur est refusé à
+  l'automatisation : le sens de la souris est à confirmer en vol).
 - **Réacteurs et jets (G2)** :
   - `js/flight/exhaust.js` (`exhaustJet()` : rapport de pression de tuyère, Mach du jet, diamètre de
     sortie, espacement des cellules de choc, premier disque de Mach, niveau et longueur de flamme),
@@ -91,15 +98,12 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
     incompatible avec sa présence dans le dépôt public (voir Décisions, « Encore ouvert ») : laissé
     tel quel à la demande de l'utilisateur, le 2026-11-25.
 - **Prochaine session** : sur `feat/flight-model` (ni fusionnée ni poussée).
-  1. Faire commiter le travail de G2 (deux commits : jets et lumière de PC, son moteur).
-  2. G2.4 : brume de chaleur en espace écran (tampon de décalage avant le TAAU), preset High et plus.
-  3. Recueillir le ressenti de l'utilisateur : visée souris et roulis clavier (gains dans
+  1. G2.4 : brume de chaleur en espace écran (tampon de décalage avant le TAAU), preset High et plus.
+  2. Recueillir le ressenti de l'utilisateur : visée souris et roulis clavier (gains dans
      `js/flight/MouseAim.js`, `KEY_STICK_TIME` de `js/flight/SimulatedFlight.js`, `KEYBOARD_STICK`
      de `js/constants/controls.js`), son moteur à l'oreille (niveaux dans `EngineSound.update`),
-     aspect de la flamme (poids et couleurs dans `EngineExhaust._emission`).
-  4. Proposé par l'utilisateur (il a aimé les cadrages des scripts de test) : une vue extérieure
-     libre qui tourne autour de l'avion.
-  5. Puis lot 4 du rendu (nuages volumétriques) en alternance.
+     aspect de la flamme (poids et couleurs dans `EngineExhaust._emission`), vue orbite.
+  4. Puis lot 4 du rendu (nuages volumétriques) en alternance.
 - **Outils** : `npm test` (tests Node, dont le banc du modèle de vol), `npm run flight:bench`
   (tableau du banc), scripts Playwright ad hoc dans le scratchpad de session (manette simulée par
   `navigator.getGamepads` injecté avec `addInitScript` ; `window.osf.aircraft()` donne mode, Mach,
@@ -589,6 +593,7 @@ piqué dans le relief : crash et redémarrage ; aucune erreur console.
 
 | Date | Fait | Reste / prochaine étape |
 |---|---|---|
+| 2026-11-25 | G2 commité (jets et lumière de PC, son, doc) ; vue orbite autour de l'avion (souris, stick droit, molette) | G2.4 (brume de chaleur) ; ressenti en vol |
 | 2026-11-25 | Écarts de G1 levés (bruit, mesures en alternance avec un worktree de G0) ; G2 : modèle du jet, volets de tuyère, flamme volumique avec diamants de choc intégrés exactement, lumière de PC (preset Ultra), son moteur synthétisé ; vérifié dans Chrome de jour et de nuit | Commiter G2 ; G2.4 (brume de chaleur) ; ressenti en vol (visée, son, flamme) ; vue extérieure libre proposée |
 | 2026-11-25 | G1 : modèle de vol 6 DDL avec commandes de vol électriques, moteurs M88-2 (Mattingly), banc de vérification (14 cas, `npm run flight:bench`), visée souris, manette des gaz à cran, aérofrein, gouvernes animées, HUD de vol, caméra liée à la cellule, modes Simulation / Exploration (`F`) ; échelle du HUD corrigée | G2 (jets selon la poussée) ; à affiner en vol : sensations de la visée souris et du roulis clavier |
 | 2026-11-25 | G0 : horloge à pas fixe, état de l'avion, mode Exploration, entrées clavier/souris/manette, altitude du sol telle que dessinée, atmosphère standard, registre d'entités, tests Node ; vérifié dans Chrome, vues et vol identiques à la référence | G1 sur `feat/flight-model` : modèle 6 DDL, commandes de vol électriques, souris « mouse aim », banc de vérification |
