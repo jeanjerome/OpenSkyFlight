@@ -18,6 +18,7 @@ import {
   getScreenPosition,
   int,
   max,
+  mx_noise_vec3,
   min,
   mix,
   perspectiveDepthToViewZ,
@@ -37,7 +38,7 @@ import {
   vec3,
   vec4,
 } from 'three/tsl';
-import { GLOW_LAYER } from '../constants/rendering.js';
+import { GLOW_LAYER, HEAT_LAYER } from '../constants/rendering.js';
 import { CONFIG, onChange } from '../utils/config.js';
 import { SCENE_ILLUMINANCE_PER_LUX } from '../atmosphere/AtmosphericSky.js';
 import {
@@ -69,6 +70,32 @@ const MAX_SAMPLES = 24;
 const DIAMOND_COUNT = 8;
 const CELL_SHORTENING = 0.05;
 
+/**
+ * Heat haze: radius and length (m) of the volume it is drawn in, width (1/e,
+ * m) of the hot column at the exit and its spread per metre downstream,
+ * distance (m) over which it cools by e, size of the turbulent eddies (m)
+ * and their speed downstream (m/s), samples along a line of sight
+ */
+const HAZE_RADIUS = 1.6;
+const HAZE_LENGTH = 22;
+const HAZE_WIDTH = 0.35;
+const HAZE_SPREAD = 0.05;
+const HAZE_COOLING = 8;
+const HAZE_EDDY = 0.3;
+const HAZE_FLOW = 6;
+const HAZE_SAMPLES = 6;
+
+/**
+ * Bend of the light (rad) per metre of hot column crossed at its centre, at
+ * full dry power. Hot air at about 1 000 K has a refractive index lower than
+ * the ambient air's by about 2·10⁻⁴, and turbulent cells of a few decimetres
+ * bend the light by about 10⁻³ rad over a metre [estimate]. Raised about
+ * fourfold so that the shimmer still shows through the temporal
+ * anti-aliasing, which averages it over several frames: a few pixels near
+ * the nozzles, about twice as much at full afterburner.
+ */
+const HAZE_BEND = 0.01;
+
 /** Share (as a power) of the night exposure of light sources the flame takes */
 const FLAME_EXPOSURE_SHARE = 0.35;
 
@@ -92,7 +119,9 @@ const DIAMOND_COLOR = [1.0, 0.75, 0.45];
  * - the afterburner flame, a glowing volume integrated along each line of
  *   sight: a white-yellow core, a mantle of orange soot, a faint blue-violet
  *   sheath (visible at night), and the shock diamonds of the underexpanded jet
- *   at their physical spacing, cells shortening downstream.
+ *   at their physical spacing, cells shortening downstream;
+ * - the heat haze of the hot exhaust (see _createHaze);
+ * - the afterburner's light (see _createLight).
  *
  * The flame is drawn by the glow pass (see ScenePipeline.setGlowLayer) on a
  * cylinder around each nozzle axis: each fragment marches its line of sight
@@ -125,10 +154,17 @@ export default class EngineExhaust {
     // Camera position in the model's frame, set as the flame is drawn
     this._camera = uniform(new THREE.Vector3());
     this._inverse = new THREE.Matrix4();
+    this._placeCamera = (renderer, scene, camera) => {
+      this._inverse.copy(this.model.matrixWorld).invert();
+      this._camera.value.setFromMatrixPosition(camera.matrixWorld).applyMatrix4(this._inverse);
+    };
+    // Heat of the exhaust, relative to full dry power
+    this._hazeLevel = uniform(0);
 
     this._createNozzles();
     this._createGlow();
     this._createFlames();
+    this._createHaze();
     this._createLight();
   }
 
@@ -201,24 +237,7 @@ export default class EngineExhaust {
   }
 
   _createFlames() {
-    const volumes = ENGINE_NOZZLES.map(({ position: [x, y, z] }, i) => {
-      const volume = new THREE.CylinderGeometry(
-        FLAME_VOLUME_RADIUS,
-        FLAME_VOLUME_RADIUS,
-        FLAME_VOLUME_LENGTH,
-        24,
-        1,
-        false,
-      );
-      volume.rotateX(Math.PI / 2); // axis along z
-      volume.translate(x, y, z - FLAME_VOLUME_LENGTH / 2);
-      volume.setAttribute(
-        'nozzle',
-        new THREE.Float32BufferAttribute(new Array(volume.attributes.position.count).fill(i), 1),
-      );
-      return volume;
-    });
-
+    const volumes = nozzleVolumes(FLAME_VOLUME_RADIUS, FLAME_VOLUME_LENGTH);
     const material = new MeshBasicNodeMaterial({
       transparent: true,
       depthWrite: false,
@@ -226,35 +245,7 @@ export default class EngineExhaust {
       blending: THREE.AdditiveBlending,
     });
     material.colorNode = Fn(() => {
-      // Line of sight in the frame of this nozzle (x, y across, z forward,
-      // origin at the exit centre): P(t) = origin + t·dir, t = 1 at this fragment
-      const first = attribute('nozzle', 'float').lessThan(0.5);
-      const centre = select(first, vec3(...ENGINE_NOZZLES[0].position), vec3(...ENGINE_NOZZLES[1].position));
-      const origin = this._camera.sub(centre).toVar();
-      const dir = positionGeometry.sub(this._camera).toVar();
-
-      // Entry and exit of the cylinder around the axis...
-      const a = dir.xy.dot(dir.xy).max(1e-8);
-      const b = origin.xy.dot(dir.xy);
-      const c = origin.xy.dot(origin.xy).sub(FLAME_VOLUME_RADIUS * FLAME_VOLUME_RADIUS);
-      const disc = b.mul(b).sub(a.mul(c));
-      If(disc.lessThan(0), () => {
-        Discard();
-      });
-      const root = disc.sqrt();
-      // ...between the exit plane and the tip of the flame...
-      const dz = select(dir.z.abs().lessThan(1e-6), float(1e-6), dir.z);
-      const tExitPlane = origin.z.negate().div(dz);
-      const tEnd = this._flameLength.negate().sub(origin.z).div(dz);
-      const tIn = max(max(b.negate().sub(root).div(a), min(tExitPlane, tEnd)), 0);
-      // ...and in front of the scene drawn at this pixel (same ratio in view space)
-      const screen = getScreenPosition(positionView, cameraProjectionMatrix);
-      const sceneZ = perspectiveDepthToViewZ(this.sceneDepth.sample(screen).r, cameraNear, cameraFar);
-      const tOut = min(min(b.negate().add(root).div(a), max(tExitPlane, tEnd)), sceneZ.div(positionView.z));
-      If(tOut.lessThanEqual(tIn), () => {
-        Discard();
-      });
-
+      const { origin, dir, tIn, tOut } = this._lineOfSight(FLAME_VOLUME_RADIUS, this._flameLength);
       const metres = dir.length();
       const count = clamp(ceil(tOut.sub(tIn).mul(metres).div(SAMPLE_STEP)), 4, MAX_SAMPLES);
       const step = tOut.sub(tIn).div(count);
@@ -279,11 +270,100 @@ export default class EngineExhaust {
     this._flameMesh.frustumCulled = false;
     this._flameMesh.name = 'AfterburnerFlames';
     // The camera as this frame draws it, in the model's frame
-    this._flameMesh.onBeforeRender = (renderer, scene, camera) => {
-      this._inverse.copy(this._flameMesh.matrixWorld).invert();
-      this._camera.value.setFromMatrixPosition(camera.matrixWorld).applyMatrix4(this._inverse);
-    };
+    this._flameMesh.onBeforeRender = this._placeCamera;
     this.model.add(this._flameMesh);
+  }
+
+  /**
+   * Line of sight of this fragment through the volume around its nozzle's
+   * axis (see nozzleVolumes), in the frame of the nozzle (x, y across, z
+   * forward, origin at the exit centre): P(t) = origin + t·dir, t = 1 at the
+   * fragment. tIn and tOut bound the part inside a cylinder of `radius`,
+   * between the exit plane and `length` downstream, and in front of the
+   * scene drawn at this pixel; the fragment is discarded when there is none.
+   * @param {number} radius - m
+   * @param {Node} length - m
+   */
+  _lineOfSight(radius, length) {
+    const first = attribute('nozzle', 'float').lessThan(0.5);
+    const centre = select(first, vec3(...ENGINE_NOZZLES[0].position), vec3(...ENGINE_NOZZLES[1].position));
+    const origin = this._camera.sub(centre).toVar();
+    const dir = positionGeometry.sub(this._camera).toVar();
+
+    // Entry and exit of the cylinder around the axis...
+    const a = dir.xy.dot(dir.xy).max(1e-8);
+    const b = origin.xy.dot(dir.xy);
+    const c = origin.xy.dot(origin.xy).sub(radius * radius);
+    const disc = b.mul(b).sub(a.mul(c));
+    If(disc.lessThan(0), () => {
+      Discard();
+    });
+    const root = disc.sqrt();
+    // ...between the exit plane and the far end...
+    const dz = select(dir.z.abs().lessThan(1e-6), float(1e-6), dir.z);
+    const tExitPlane = origin.z.negate().div(dz);
+    const tEnd = length.negate().sub(origin.z).div(dz);
+    const tIn = max(max(b.negate().sub(root).div(a), min(tExitPlane, tEnd)), 0).toVar();
+    // ...and in front of the scene drawn at this pixel (same ratio in view space)
+    const screen = getScreenPosition(positionView, cameraProjectionMatrix);
+    const sceneZ = perspectiveDepthToViewZ(this.sceneDepth.sample(screen).r, cameraNear, cameraFar);
+    const tOut = min(min(b.negate().add(root).div(a), max(tExitPlane, tEnd)), sceneZ.div(positionView.z)).toVar();
+    If(tOut.lessThanEqual(tIn), () => {
+      Discard();
+    });
+    return { origin, dir, tIn, tOut };
+  }
+
+  /**
+   * Heat haze: the hot exhaust, a column of air around each nozzle axis,
+   * bends the light through it. Drawn into the heat haze's buffer of screen
+   * offsets (see ScenePipeline.setHeatLayer), always, the engines being hot
+   * even at idle. The bend grows with the hot air crossed along the line of
+   * sight (a Gaussian column widening and cooling downstream, integrated in
+   * HAZE_SAMPLES steps), its direction follows turbulence drifting downstream
+   * with the jet. It is an angle, independent of the distance, turned into a
+   * screen offset by the projection; zero at the column's edges.
+   */
+  _createHaze() {
+    const material = new MeshBasicNodeMaterial({
+      transparent: true,
+      depthWrite: false,
+      depthTest: false,
+      blending: THREE.AdditiveBlending,
+    });
+    material.colorNode = Fn(() => {
+      const { origin, dir, tIn, tOut } = this._lineOfSight(HAZE_RADIUS, float(HAZE_LENGTH));
+      const step = tOut.sub(tIn).div(HAZE_SAMPLES);
+      const metres = dir.length();
+      const hot = float(0).toVar();
+      const centre = vec3(0).toVar();
+      Loop(HAZE_SAMPLES, ({ i }) => {
+        const q = origin.add(dir.mul(tIn.add(float(i).add(0.5).mul(step))));
+        const x = q.z.negate();
+        const width = x.mul(HAZE_SPREAD).add(HAZE_WIDTH);
+        // Spreading keeps the heat across the column, cooling downstream
+        const heat = exp(q.xy.dot(q.xy).div(width.mul(width)).negate())
+          .mul(HAZE_WIDTH)
+          .div(width)
+          .mul(exp(x.div(HAZE_COOLING).negate()));
+        hot.addAssign(heat);
+        centre.addAssign(q.mul(heat));
+      });
+      // Turbulence where most of the heat was crossed, carried downstream by the jet
+      const at = centre.div(hot.max(1e-6));
+      const eddies = vec3(at.xy.div(HAZE_EDDY), at.z.add(time.mul(HAZE_FLOW)).div(HAZE_EDDY * 2));
+      const swirl = mx_noise_vec3(eddies).xy;
+      const bend = hot.mul(step.mul(metres)).mul(this._hazeLevel).mul(HAZE_BEND);
+      // Angle to screen offset (uv): half the projection's scale on each axis
+      const scale = vec2(cameraProjectionMatrix.element(0).x, cameraProjectionMatrix.element(1).y).mul(0.5);
+      return vec4(swirl.mul(bend).mul(scale), 0, 1);
+    })();
+    this._hazeMesh = new THREE.Mesh(mergeGeometries(nozzleVolumes(HAZE_RADIUS, HAZE_LENGTH)), material);
+    this._hazeMesh.layers.set(HEAT_LAYER);
+    this._hazeMesh.frustumCulled = false;
+    this._hazeMesh.name = 'HeatHaze';
+    this._hazeMesh.onBeforeRender = this._placeCamera;
+    this.model.add(this._hazeMesh);
   }
 
   /**
@@ -380,6 +460,9 @@ export default class EngineExhaust {
     this._flameLength.value = Math.max(0.1, jet.flameLength);
     this._updateDiamonds(jet, exitRadius);
     this._flameMesh.visible = jet.flame > 0.01;
+    // Exhaust temperature above the air's, as a share of that at full dry
+    // power: about 450 K at idle, 750 K at full dry, 1 700 K at full afterburner
+    this._hazeLevel.value = 0.6 + 0.4 * core + 1.3 * reheat;
     // Under the flame's own exposure, so that what it lights is no brighter than the flame itself
     const exposure = this.exposure.value ** FLAME_EXPOSURE_SHARE;
     this._light.intensity = AFTERBURNER_INTENSITY * jet.flame * SCENE_ILLUMINANCE_PER_LUX * exposure;
@@ -412,4 +495,23 @@ export default class EngineExhaust {
 /** Smoothstep from 0 to 1 */
 function smooth(t) {
   return t * t * (3 - 2 * t);
+}
+
+/**
+ * Closed cylinders around the nozzle axes, from the exits downstream, merged:
+ * each vertex knows its nozzle (attribute 'nozzle', 0 or 1)
+ * @param {number} radius - m
+ * @param {number} length - m
+ */
+function nozzleVolumes(radius, length) {
+  return ENGINE_NOZZLES.map(({ position: [x, y, z] }, i) => {
+    const volume = new THREE.CylinderGeometry(radius, radius, length, 24, 1, false);
+    volume.rotateX(Math.PI / 2); // axis along z
+    volume.translate(x, y, z - length / 2);
+    volume.setAttribute(
+      'nozzle',
+      new THREE.Float32BufferAttribute(new Array(volume.attributes.position.count).fill(i), 1),
+    );
+    return volume;
+  });
 }

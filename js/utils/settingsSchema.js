@@ -135,6 +135,16 @@ export const SETTINGS = [
     persist: true,
   },
   {
+    key: 'heatHaze',
+    tab: 'graphics',
+    section: 'Light',
+    label: 'Heat haze',
+    help: 'The hot exhaust behind the engines makes the view through it shimmer.',
+    type: 'toggle',
+    impact: { cost: 1, gain: 1 },
+    persist: true,
+  },
+  {
     key: 'afterburnerLight',
     tab: 'graphics',
     section: 'Light',

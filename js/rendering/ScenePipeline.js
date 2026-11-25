@@ -1,11 +1,12 @@
 import * as THREE from 'three';
-import { clamp, log2, luminance, mix, mrt, output, pass, rtt, smoothstep, vec3, vec4, velocity } from 'three/tsl';
+import { clamp, log2, luminance, mix, mrt, output, pass, rtt, smoothstep, uv, vec3, vec4, velocity } from 'three/tsl';
 import { taau } from 'three/addons/tsl/display/TAAUNode.js';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import {
   BLOOM_STRENGTH,
   BLOOM_RADIUS,
   GLOW_RESOLUTION_SCALE,
+  HEAT_RESOLUTION_SCALE,
   NIGHT_VISION_COLOR,
   NIGHT_VISION_PHOTOPIC_LUMINANCE,
   NIGHT_VISION_SCOTOPIC_LUMINANCE,
@@ -44,6 +45,13 @@ import AutoExposureNode from './AutoExposureNode.js';
  * setGlowLayer): additive and transparent, they would otherwise take the
  * aerial perspective and the motion of the scenery behind them.
  *
+ * Heat haze: the hot air behind the engines bends the light through it. A
+ * pass of its own draws the objects of a layer into a buffer of screen
+ * offsets, at half resolution (see setHeatLayer); the atmosphere pass then
+ * reads the scene's color and depth at the offset positions, before the
+ * anti-aliasing. It adds no full-screen pass: the atmosphere pass reads the
+ * scene anyway.
+ *
  * Night vision: below a few candelas per square metre the eye's rods take
  * over from its cones, and colors fade into a bluish grey (see setNightVision).
  *
@@ -76,6 +84,8 @@ export default class ScenePipeline {
     this._autoExposureEnabled = false;
     this._preExposure = null;
     this._glowPass = null;
+    this._heatPass = null;
+    this._atmosphereApply = null;
 
     this._pipeline = new THREE.RenderPipeline(renderer);
     this._pipeline.outputNode = this._buildOutput();
@@ -134,6 +144,26 @@ export default class ScenePipeline {
     this._glowPass.getLayers().set(layer);
     this._glowPass.setResolutionScale(GLOW_RESOLUTION_SCALE);
     this._rebuild();
+  }
+
+  /**
+   * Render the objects of a layer (and only them) into the heat haze's buffer
+   * of screen offsets (uv units, in its red and green), or stop the heat haze.
+   * Applied through the atmosphere: without one (SAR mode), there is no haze.
+   * @param {THREE.Scene} scene
+   * @param {THREE.Camera} camera
+   * @param {?number} layer - null to stop
+   */
+  setHeatLayer(scene, camera, layer) {
+    this._heatPass?.dispose();
+    this._heatPass = null;
+    if (layer !== null) {
+      this._heatPass = pass(scene, camera, { samples: 0 });
+      this._heatPass.setLayers(new THREE.Layers());
+      this._heatPass.getLayers().set(layer);
+      this._heatPass.setResolutionScale(HEAT_RESOLUTION_SCALE);
+    }
+    this._applyAtmosphere();
   }
 
   /** Scene depth, for the glow materials' own occlusion test */
@@ -199,11 +229,25 @@ export default class ScenePipeline {
    *   anti-aliasing in place of the scene color.
    */
   setAtmosphere(apply) {
+    this._atmosphereApply = apply;
+    this._applyAtmosphere();
+  }
+
+  _applyAtmosphere() {
+    const apply = this._atmosphereApply;
     this._atmosphereNode?.dispose();
     this._atmosphereNode = null;
     let input = this._sceneColor;
     if (apply) {
-      const node = apply(this._sceneColor, this._sceneDepth);
+      let color = this._sceneColor;
+      let depth = this._sceneDepth;
+      if (this._heatPass) {
+        // Seen through the heat haze: the scene where the bent ray lands
+        const bent = uv().add(this._heatPass.getTextureNode().sample(uv()).xy);
+        color = this._sceneColor.sample(bent);
+        depth = this._sceneDepth.sample(bent);
+      }
+      const node = apply(color, depth);
       // The atmosphere covers every pixel (sky included): opaque
       this._atmosphereNode = rtt(vec4(node.rgb, 1), null, null, {
         resolutionScale: this.scenePass.getResolutionScale(),
@@ -257,6 +301,7 @@ export default class ScenePipeline {
     this.taauNode.dispose();
     this._atmosphereNode?.dispose();
     this._glowPass?.dispose();
+    this._heatPass?.dispose();
     this.scenePass.dispose();
   }
 }

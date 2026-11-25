@@ -5,6 +5,7 @@ import { bindQualitySettings } from './utils/qualityPresets.js';
 import {
   CLOUD_RENDER_ORDER,
   GLOW_LAYER,
+  HEAT_LAYER,
   REALWORLD_FAR_PLANE,
   CLIP_PLANE_EPSILON,
 } from './constants/rendering.js';
@@ -70,6 +71,12 @@ async function initApp() {
     (x, z) => geoTerrainManager.worldToGeo(x, z),
   );
   scenePipeline.setGlowLayer(scene, camera, GLOW_LAYER);
+  // The hot exhaust bends the view through it (see EngineExhaust)
+  const applyHeatHaze = () => scenePipeline.setHeatLayer(scene, camera, CONFIG.heatHaze ? HEAT_LAYER : null);
+  applyHeatHaze();
+  onChange((key) => {
+    if (key === 'heatHaze') applyHeatHaze();
+  });
   const cityLights = new CityLights(geoTerrainManager, atmosphericSky.preExposure);
   geoTerrainManager.setEmissiveNode(cityLights.node);
   const cloudLayer = new CloudLayer(scene);

@@ -33,6 +33,7 @@ import { SETTINGS_BY_KEY } from './settingsSchema.js';
  * @property {boolean} dynamicResolution      - Lower the scene resolution when the GPU exceeds the 60 FPS budget (default: true)
  * @property {boolean} autoExposure           - Adapt the exposure to the scene brightness (default: true)
  * @property {boolean} bloomEnabled           - Glow around the sun and its specular reflections (default: true)
+ * @property {boolean} heatHaze               - The hot exhaust makes the view through it shimmer (default: true, off in the Low and Medium presets)
  * @property {boolean} afterburnerLight       - The afterburner flame lights the aircraft and the ground (default: false, on in the Ultra preset)
  *
  * Atmosphere:
@@ -80,6 +81,7 @@ const CONFIG = {
   autoExposure: true,
   bloomEnabled: true,
   afterburnerLight: false,
+  heatHaze: true,
   lat: 45.8326, // Mont Blanc default
   lon: 6.8652,
   zoom: 15,

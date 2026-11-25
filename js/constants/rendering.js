@@ -166,6 +166,12 @@ export const GLOW_RESOLUTION_SCALE = 0.5;
 /** Layer of the objects rendered by the glow pass only */
 export const GLOW_LAYER = 2;
 
+/** Resolution of the heat haze's buffer of screen offsets relative to the output */
+export const HEAT_RESOLUTION_SCALE = 0.5;
+
+/** Layer of the objects rendered into the heat haze's buffer only */
+export const HEAT_LAYER = 3;
+
 /** Share of the night exposure (in stops) applied to light sources: see AtmosphericSky.emissiveExposure */
 export const EMISSIVE_EXPOSURE_SHARE = 0.5;
 

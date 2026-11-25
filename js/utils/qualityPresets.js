@@ -17,6 +17,7 @@ export const QUALITY_PRESETS = {
     terrainDetail: 'normal',
     bloomEnabled: false,
     autoExposure: true,
+    heatHaze: false,
     afterburnerLight: false,
   },
   medium: {
@@ -25,6 +26,7 @@ export const QUALITY_PRESETS = {
     terrainDetail: 'high',
     bloomEnabled: true,
     autoExposure: true,
+    heatHaze: false,
     afterburnerLight: false,
   },
   high: {
@@ -33,6 +35,7 @@ export const QUALITY_PRESETS = {
     terrainDetail: 'high',
     bloomEnabled: true,
     autoExposure: true,
+    heatHaze: true,
     afterburnerLight: false,
   },
   ultra: {
@@ -41,6 +44,7 @@ export const QUALITY_PRESETS = {
     terrainDetail: 'maximum',
     bloomEnabled: true,
     autoExposure: true,
+    heatHaze: true,
     afterburnerLight: true,
   },
 };
