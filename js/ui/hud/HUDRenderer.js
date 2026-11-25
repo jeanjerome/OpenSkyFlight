@@ -1,4 +1,4 @@
-import { CONFIG } from '../../utils/config.js';
+import * as THREE from 'three';
 import {
   HUD_COLOR,
   HUD_ALPHA,
@@ -29,14 +29,110 @@ import {
 export default class HUDRenderer {
   constructor(ctx) {
     this._ctx = ctx;
+    this._point = new THREE.Vector3();
+    this._direction = new THREE.Vector3();
   }
 
-  drawInstruments(w, h, yaw, pitch, altY, groundElevation, speed) {
+  /**
+   * @param {number} roll - bank of the pitch ladder (rad, right wing down positive)
+   * @param {string} speedLabel - title of the speed tape
+   */
+  drawInstruments(w, h, yaw, pitch, altY, groundElevation, speed, roll = 0, speedLabel = 'SPD') {
     const ctx = this._ctx;
     this._drawCompass(ctx, w, yaw);
-    this._drawHorizon(ctx, w, h, pitch);
+    this._drawHorizon(ctx, w, h, pitch, roll);
     this._drawAltimeter(ctx, w, h, altY, groundElevation);
-    this._drawSpeed(ctx, w, h, speed);
+    this._drawSpeed(ctx, w, h, speed, speedLabel);
+  }
+
+  /**
+   * Flight data of the Simulation mode: Mach, load factor and angle of attack
+   * below the speed tape, throttle and fuel below the altimeter; flight path
+   * marker (where the aircraft goes), nose cross (where it points) and the
+   * mouse aim circle, projected through the camera
+   * @param {THREE.Camera} camera
+   * @param {{position: THREE.Vector3, quaternion: THREE.Quaternion, model: import('../../flight/FlightModel.js').default, aim: THREE.Vector3|null}} state
+   */
+  drawFlightData(w, h, camera, state) {
+    const ctx = this._ctx;
+    const m = state.model;
+    ctx.save();
+    this._applyHudShadow(ctx);
+    ctx.globalAlpha = HUD_ALPHA;
+    ctx.strokeStyle = HUD_COLOR;
+    ctx.fillStyle = HUD_COLOR;
+    ctx.font = 'bold 13px Courier New';
+    ctx.textBaseline = 'middle';
+
+    const below = h / 2 + INSTRUMENT_SCALE_HEIGHT / 2;
+    const left = w / 2 - INSTRUMENT_OFFSET_X;
+    ctx.textAlign = 'right';
+    ctx.fillText(`M ${m.mach.toFixed(2)}`, left, below + 20);
+    ctx.fillText(`G ${m.loadFactor.toFixed(1)}  ${m.peakLoadFactor.toFixed(1)}`, left, below + 38);
+    ctx.fillText(`\u03b1 ${Math.round((m.alpha * 180) / Math.PI)}\u00b0`, left, below + 56);
+
+    const right = w / 2 + INSTRUMENT_OFFSET_X - 10;
+    const engines = m.engines;
+    ctx.textAlign = 'left';
+    const power =
+      engines.reheat > 0.02
+        ? `AB ${Math.round(engines.reheat * 100)} %`
+        : `THR ${Math.round((m.controls.lever / 0.8) * 100)} %`;
+    ctx.fillText(power, right, below + 38);
+    ctx.fillStyle = m.fuel < 600 ? WARN_COLOR : HUD_COLOR;
+    ctx.fillText(`FUEL ${Math.round(m.fuel)} kg`, right, below + 56);
+    ctx.fillStyle = HUD_COLOR;
+    if (m.controls.airbrake) ctx.fillText('AIRBRAKE', right, below + 74);
+
+    ctx.lineWidth = 1.5;
+    // Flight path marker: circle with wings and fin
+    const fpm = this._project(camera, state.position, this._direction.copy(m.velocity).normalize(), w, h);
+    if (fpm) {
+      ctx.beginPath();
+      ctx.arc(fpm.x, fpm.y, 7, 0, Math.PI * 2);
+      ctx.moveTo(fpm.x - 7, fpm.y);
+      ctx.lineTo(fpm.x - 18, fpm.y);
+      ctx.moveTo(fpm.x + 7, fpm.y);
+      ctx.lineTo(fpm.x + 18, fpm.y);
+      ctx.moveTo(fpm.x, fpm.y - 7);
+      ctx.lineTo(fpm.x, fpm.y - 14);
+      ctx.stroke();
+    }
+    // Nose cross
+    const nose = this._project(
+      camera,
+      state.position,
+      this._direction.set(0, 0, -1).applyQuaternion(state.quaternion),
+      w,
+      h,
+    );
+    if (nose) {
+      ctx.beginPath();
+      ctx.moveTo(nose.x - 9, nose.y);
+      ctx.lineTo(nose.x + 9, nose.y);
+      ctx.moveTo(nose.x, nose.y - 9);
+      ctx.lineTo(nose.x, nose.y + 9);
+      ctx.stroke();
+    }
+    // Mouse aim
+    if (state.aim) {
+      const aim = this._project(camera, camera.position, state.aim, w, h);
+      if (aim) {
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.arc(aim.x, aim.y, 12, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+    ctx.restore();
+  }
+
+  /** Screen position of a direction seen from a point, far away; null behind the camera */
+  _project(camera, from, direction, w, h) {
+    const p = this._point.copy(from).addScaledVector(direction, 5000).project(camera);
+    if (p.z > 1 || p.z < -1) return null;
+    return { x: ((p.x + 1) / 2) * w, y: ((1 - p.y) / 2) * h };
   }
 
   drawBadges(w, benchmarkRunner, isRecording, wpCount, isAutopilot, fpRec) {
@@ -134,7 +230,7 @@ export default class HUDRenderer {
     ctx.fillText(hdgStr, cx, COMPASS_BAND_Y + COMPASS_BAND_HEIGHT + 4);
   }
 
-  _drawHorizon(ctx, w, h, pitch) {
+  _drawHorizon(ctx, w, h, pitch, roll = 0) {
     const cx = w / 2;
     const cy = h / 2;
     // Normalize pitch to [-180, 180] for continuous 360° display
@@ -143,13 +239,20 @@ export default class HUDRenderer {
     if (pitchDeg < -180) pitchDeg += 360;
 
     ctx.save();
+    // The ladder turns against the bank, as the horizon does seen from the cockpit
+    if (roll) {
+      ctx.translate(cx, cy);
+      ctx.rotate(-roll);
+      ctx.translate(-cx, -cy);
+    }
     this._applyHudShadow(ctx);
     ctx.globalAlpha = HUD_ALPHA;
     ctx.strokeStyle = HUD_COLOR;
     ctx.fillStyle = HUD_COLOR;
     ctx.lineWidth = 1.5;
 
-    const horizonY = cy - pitchDeg * HORIZON_PX_PER_DEG;
+    // Nose up: the horizon lies below the centre of the view
+    const horizonY = cy + pitchDeg * HORIZON_PX_PER_DEG;
 
     ctx.beginPath();
     ctx.moveTo(cx - HORIZON_LINE_WIDTH, horizonY);
@@ -270,16 +373,12 @@ export default class HUDRenderer {
     ctx.fillText('ALT m', x, cy - INSTRUMENT_SCALE_HEIGHT / 2 - 14);
 
     ctx.font = 'bold 13px Courier New';
-    ctx.fillText(
-      'AGL ' + Math.round(Math.max(0, agl)) + ' m',
-      x - 10,
-      cy + INSTRUMENT_SCALE_HEIGHT / 2 + 20,
-    );
+    ctx.fillText('AGL ' + Math.round(Math.max(0, agl)) + ' m', x - 10, cy + INSTRUMENT_SCALE_HEIGHT / 2 + 20);
 
     ctx.restore();
   }
 
-  _drawSpeed(ctx, w, h, speed) {
+  _drawSpeed(ctx, w, h, speed, label = 'SPD') {
     const x = w / 2 - INSTRUMENT_OFFSET_X;
     const cy = h / 2;
 
@@ -312,7 +411,7 @@ export default class HUDRenderer {
 
     ctx.font = 'bold 12px Courier New';
     ctx.textAlign = 'right';
-    ctx.fillText('SPD', x, cy - INSTRUMENT_SCALE_HEIGHT / 2 - 14);
+    ctx.fillText(label, x, cy - INSTRUMENT_SCALE_HEIGHT / 2 - 14);
 
     ctx.restore();
   }

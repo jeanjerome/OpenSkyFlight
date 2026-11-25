@@ -78,8 +78,13 @@ export default class HUD {
     const isAutopilot = fpRec ? fpRec.autopilotActive : false;
     const wpCount = fpRec ? fpRec.getWaypointCount() : 0;
 
+    // Simulation: indicated airspeed, banked ladder and flight data, redrawn every frame
+    const model = aircraftState?.model;
+    const shownSpeed = model ? model.indicatedAirspeed * 3.6 : speed;
+
     // Dirty-flag — skip redraw if nothing significant changed
     if (
+      !model &&
       !this._forceRedraw &&
       Math.abs(yaw - this._prevYaw) < DIRTY_YAW_THRESHOLD &&
       Math.abs(pitch - this._prevPitch) < DIRTY_PITCH_THRESHOLD &&
@@ -107,7 +112,20 @@ export default class HUD {
 
     this.ctx.clearRect(0, 0, this.w, this.h);
 
-    this._renderer.drawInstruments(this.w, this.h, yaw, pitch, altY, groundElevation, speed);
+    this._renderer.drawInstruments(
+      this.w,
+      this.h,
+      yaw,
+      pitch,
+      altY,
+      groundElevation,
+      shownSpeed,
+      model ? model.bank : 0,
+      model ? 'IAS km/h' : 'SPD',
+    );
+    if (model) this._renderer.drawFlightData(this.w, this.h, camera, aircraftState);
+    // Leaving the Simulation mode redraws without its flight data
+    if (model) this._forceRedraw = true;
     this._renderer.drawBadges(this.w, benchmarkRunner, isRecording, wpCount, isAutopilot, fpRec);
   }
 

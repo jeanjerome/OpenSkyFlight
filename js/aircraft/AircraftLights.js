@@ -267,7 +267,8 @@ export default class AircraftLights {
 
   /**
    * @param {number} dt - seconds
-   * @param {{thrust: boolean, afterburner: boolean}} engines - engine commands
+   * @param {{thrust: number, afterburner: number}} engines - engine power, 0 idle to 1 full dry, and
+   *   afterburner stage, 0 off to 1 full
    * @param {THREE.Camera} camera
    * @param {number} viewportHeight - pixels
    */
@@ -275,9 +276,9 @@ export default class AircraftLights {
     this._time += dt;
     this._pixelAngle.value = (2 * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1, viewportHeight);
 
-    // Engines spool up in about a second, the afterburner lights faster
-    this._throttle += ((thrust ? 1 : 0) - this._throttle) * Math.min(1, dt * 2.5);
-    this._afterburner += ((thrust && afterburner ? 1 : 0) - this._afterburner) * Math.min(1, dt * 6);
+    // Smoothed: the hot parts take time to glow and cool
+    this._throttle += (thrust - this._throttle) * Math.min(1, dt * 2.5);
+    this._afterburner += (afterburner - this._afterburner) * Math.min(1, dt * 6);
     this._engineThrottle.value = this._throttle;
     this._engineAfterburner.value = this._afterburner;
     this._flame.visible = this._afterburner > 0.01;

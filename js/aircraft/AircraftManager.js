@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import Logger from '../utils/Logger.js';
 import { CONFIG } from '../utils/config.js';
 import AircraftLights from './AircraftLights.js';
+import ControlSurfaces from './ControlSurfaces.js';
 import {
   AIRCRAFT_TARGET_LENGTH,
   VISUAL_ROLL_FACTOR,
@@ -99,6 +100,7 @@ export default class AircraftManager {
     });
 
     this.lights = new AircraftLights(this.mesh, this.rendering);
+    this.surfaces = new ControlSurfaces(this.mesh);
 
     this.group.traverse((child) => {
       child.frustumCulled = false;
@@ -136,14 +138,18 @@ export default class AircraftManager {
     this._qVisualPitch.setFromAxisAngle(this._axisX, this._visualPitch);
     this.group.quaternion.multiply(this._qVisualPitch);
 
+    // Control surfaces as the flight control system moves them, neutral in free flight
+    this.surfaces.update(dt, state.model ? state.model.surfaces : null);
+
+    // Engines of the flight model, or full power while pushed forward in the
+    // Exploration mode, with afterburner at high speed
+    const engines = state.engines ?? {
+      thrust: state.thrust ? 1 : 0,
+      afterburner: state.thrust && CONFIG.cameraSpeed >= AFTERBURNER_SPEED ? 1 : 0,
+    };
     const { camera, renderer } = this.rendering;
     renderer.getDrawingBufferSize(this._bufferSize);
-    this.lights.update(
-      dt,
-      { thrust: Boolean(state.thrust), afterburner: CONFIG.cameraSpeed >= AFTERBURNER_SPEED },
-      camera,
-      this._bufferSize.y,
-    );
+    this.lights.update(dt, engines, camera, this._bufferSize.y);
   }
 
   setVisible(visible) {
