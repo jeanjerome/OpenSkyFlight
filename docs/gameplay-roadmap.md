@@ -99,7 +99,7 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
     tel quel à la demande de l'utilisateur, le 2026-11-25.
 - **Prochaine session** : sur `feat/flight-model` (ni fusionnée ni poussée).
   1. G2.4 : brume de chaleur en espace écran (tampon de décalage avant le TAAU), preset High et plus.
-  2. Recueillir le ressenti de l'utilisateur : visée souris et roulis clavier (gains dans
+  2. Recueillir le ressenti de l'utilisateur : visée souris (revue le 2026-11-25, voir **Mesures**) et roulis clavier (gains dans
      `js/flight/MouseAim.js`, `KEY_STICK_TIME` de `js/flight/SimulatedFlight.js`, `KEYBOARD_STICK`
      de `js/constants/controls.js`), son moteur à l'oreille (niveaux dans `EngineSound.update`),
      aspect de la flamme (poids et couleurs dans `EngineExhaust._emission`), vue orbite.
@@ -577,7 +577,31 @@ Masse : base + emports + moitié du carburant interne (13,25 t) sauf mention.
 | Traction pleine lente : incidence max (q > 1 500 Pa) | 29,6° | 29 ± 1 | limite d'essai |
 | Manche au neutre 30 s / inclinaison 45° 20 s : écart d'altitude | +7 m / +13 m | 0 ± 30 / ± 40 | tenue de trajectoire |
 
-Instructeur de visée (Node, 220 m/s à 5 000 m) : visée à 90° à droite rejointe à 11° en 3 s puis
+Instructeur de visée revu le 2026-11-25 après les essais de l'utilisateur (l'avion se mettait sur le
+dos puis oscillait en pendule) : il roulait sur le dos dès qu'on visait plus de 15° sous le nez, son
+roulis cible de ±180° changeait de signe au moindre écart latéral, et il mélangeait entre 8° et 20°
+de la visée deux cibles opposées (sur le dos pour tirer, ailes à plat). Désormais : visée presque
+sous le plancher (à 40° près) et moins de 40° sous les ailes, il pousse sans rouler ; sinon il roule
+pour mettre la visée au-dessus de la verrière et tire, sans jamais pousser loin de la visée ; sur le
+dos, il ne revient à l'endroit qu'une fois le nez à moins de 3° de la visée ; le sens d'un roulis de
+±180° est gardé ; l'inclinaison latérale près de la visée suit l'écart angulaire (écart de cap ×
+cos de l'assiette visée). Tests `tests/mouseAim.test.js`. Mesures (balayage de la visée en 0,3 s,
+puis visée à moins de 3°) :
+
+| Visée | Avant | Après |
+|---|---|---|
+| 20° dessous | 6,1 s, inclinaison 96° | 2,5 s, 0° |
+| 30° dessous | 8,8 s, 172°, 4 inversions de roulis | 3,4 s, 0° |
+| 60° dessous | 13,9 s, 180°, 8 inversions | 3,5 s, 180° (demi-tonneau), 1 inversion |
+| 20° droite, 20° dessous | 7,6 s, 131°, 5 inversions | 2,0 s, 133°, 2 inversions |
+| 40° gauche, 30° dessous | 9,2 s, 129°, 7 inversions | 2,7 s, 127°, 3 inversions |
+| 30° droite, 60° dessus | 3,7 s, 54°, 12 inversions | 3,3 s, 30°, 3 inversions |
+| Plein arrière | 14,7 s, 105° | 9,6 s, 134° (un dépassement de 17° en fin de virage sur la tranche) |
+
+Encore lent : rejoindre une visée à 45° ou 90° sur le côté prend 6,8 et 8,4 s (inclinaison
+proportionnelle à l'écart près de la visée, `SIDE_BANK_GAIN`), à régler selon le ressenti.
+
+Premiers essais de l'instructeur (Node, 220 m/s à 5 000 m) : visée à 90° à droite rejointe à 11° en 3 s puis
 5° à 7 s ; 30° à gauche à 2° en 7 s ; 20° au-dessus à 0,8° en 3 s ; 5° en dessous à 0,5° en 3 s (en
 poussant) ; plein arrière : demi-boucle puis retour sur le dos à l'endroit, à 4° en 13 s (lent à basse
 vitesse en haut de la boucle, à affiner en vol). En dessous de ≈ 65 kt, les gouvernes manquent
@@ -593,6 +617,7 @@ piqué dans le relief : crash et redémarrage ; aucune erreur console.
 
 | Date | Fait | Reste / prochaine étape |
 |---|---|---|
+| 2026-11-25 | Visée souris : l'avion ne se met plus sur le dos pour une visée modérément basse et n'oscille plus en pendule (poussée sans roulis, retour à l'endroit nez sur la visée, sens de roulis gardé) ; tests | Ressenti en vol ; convergence latérale lente à régler si besoin ; G2.4 |
 | 2026-11-25 | G2 commité (jets et lumière de PC, son, doc) ; vue orbite autour de l'avion (souris, stick droit, molette) | G2.4 (brume de chaleur) ; ressenti en vol |
 | 2026-11-25 | Écarts de G1 levés (bruit, mesures en alternance avec un worktree de G0) ; G2 : modèle du jet, volets de tuyère, flamme volumique avec diamants de choc intégrés exactement, lumière de PC (preset Ultra), son moteur synthétisé ; vérifié dans Chrome de jour et de nuit | Commiter G2 ; G2.4 (brume de chaleur) ; ressenti en vol (visée, son, flamme) ; vue extérieure libre proposée |
 | 2026-11-25 | G1 : modèle de vol 6 DDL avec commandes de vol électriques, moteurs M88-2 (Mattingly), banc de vérification (14 cas, `npm run flight:bench`), visée souris, manette des gaz à cran, aérofrein, gouvernes animées, HUD de vol, caméra liée à la cellule, modes Simulation / Exploration (`F`) ; échelle du HUD corrigée | G2 (jets selon la poussée) ; à affiner en vol : sensations de la visée souris et du roulis clavier |
