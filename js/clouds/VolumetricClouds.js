@@ -178,12 +178,14 @@ export default class VolumetricClouds {
     this._drift.y += CLOUD_WIND[1] * dt;
     this._cameraHeight.value = cameraPosition.y;
     // Texture coordinates of the point below the camera (the samples add
-    // their offset from it), wrapped while still in doubles
+    // their offset from it), wrapped while still in doubles. The wind carries
+    // the detail noise along with the clouds, or their eroded edges would
+    // stay put while the clouds slide under them
     const x = cameraPosition.x - this._drift.x;
     const z = cameraPosition.z - this._drift.y;
     this._weatherOrigin.value.set(fract(x / CLOUD_WEATHER_TILE), fract(z / CLOUD_WEATHER_TILE));
     this._shapeOrigin.value.set(fract(x / CLOUD_SHAPE_TILE), fract(z / CLOUD_SHAPE_TILE), 0);
-    this._detailOrigin.value.set(fract(cameraPosition.x / CLOUD_DETAIL_TILE), fract(cameraPosition.z / CLOUD_DETAIL_TILE), 0);
+    this._detailOrigin.value.set(fract(x / CLOUD_DETAIL_TILE), fract(z / CLOUD_DETAIL_TILE), 0);
   }
 
   /**

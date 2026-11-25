@@ -48,6 +48,12 @@ const DEPTH_SHARPNESS = 8;
 /** Scene distances are kept in the history in km, within the range of half floats */
 const HISTORY_DISTANCE_SCALE = 1e-3;
 
+/**
+ * Relative precision of the history, kept in half floats (2^-11, doubled): the
+ * clipping box is at least this wide around its centre
+ */
+const HISTORY_PRECISION = 2 ** -10;
+
 const _quad = /* @__PURE__ */ new QuadMesh();
 const _position = /* @__PURE__ */ new THREE.Vector3();
 const _translation = /* @__PURE__ */ new THREE.Matrix4();
@@ -64,12 +70,16 @@ function isFinite4(value) {
 
 /**
  * History clipped to a box (all four channels): toward the centre of the box
- * until it is inside
+ * until it is inside. A channel of no spread (the opacity of the clouds' cores,
+ * all exactly 1) would clip the history wherever its rounding to half floats
+ * moved it, and drag the other channels onto this frame's noise: the box is
+ * widened by the precision of the history.
  */
 function clipToBox(history, low, high) {
   const centre = high.add(low).mul(0.5).toConst();
   const offset = history.sub(centre).toConst();
-  const units = abs(offset.div(high.sub(low).mul(0.5).add(1e-7))).toConst();
+  const extent = high.sub(low).mul(0.5).add(abs(centre).mul(HISTORY_PRECISION)).add(1e-7);
+  const units = abs(offset.div(extent)).toConst();
   const largest = max(max(units.x, units.y), max(units.z, units.w));
   return select(largest.greaterThan(1), centre.add(offset.div(largest)), history);
 }

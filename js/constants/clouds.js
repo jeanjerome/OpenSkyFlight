@@ -80,5 +80,9 @@ export const CLOUD_SKY_DISTANCE = 1e7;
 export const CLOUD_HISTORY_DEPTH_TOLERANCE = 0.1;
 export const CLOUD_VARIANCE_GAMMA = 2;
 
-/** Share of a freshly marched pixel blended into its history (the rest of the noise averages out over the frames) */
-export const CLOUD_CURRENT_WEIGHT = 0.5;
+/**
+ * Share of a freshly marched pixel blended into its history (the rest of the
+ * noise averages out over the frames): a pixel is marched every sixteen frames,
+ * so that its history spans about five of its samples
+ */
+export const CLOUD_CURRENT_WEIGHT = 0.2;

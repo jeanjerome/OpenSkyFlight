@@ -93,9 +93,9 @@ en fin de session.
   sans ; les vues de référence remettent le vent à zéro, sinon la couverture en vue dérive pendant une
   capture et le coût de la vue 5 varie de ±0,6 ms).
 - **Prochaine étape** : réglage du rendu avec l'utilisateur (L4.2, L4.3 : cirrus gris, contraste de
-  l'ombre propre, rebond du sol, couverture dans le menu), dont le grain des nuages proches en
-  mouvement rapide (points sombres : bruit du ray marching lui-même, le détail de 170 m étant
-  sous-échantillonné par des pas de 60 m ; invisible à l'arrêt, le TAAU l'accumule), puis L4.5.
+  l'ombre propre, rebond du sol, couverture dans le menu), puis L4.5. Le scintillement de la
+  surface des nuages venait du rognage de l'historique (voir L4.4) ; revoir en vol rapide s'il
+  reste un grain des nuages proches.
 - **Suite** : lot 4 (nuages volumétriques). Points ouverts : culling des tuiles par three presque
   inopérant (sphère englobante calculée en coordonnées locales où l'épaisseur est en mètres et la
   largeur en tuiles : rayon démesuré une fois mis à l'échelle), piste CPU et GPU pour le lot 5 ; coût CPU de soumission (≈ 5 µs par
@@ -583,13 +583,21 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       nuages et de la scène ; la résolution, à la pleine résolution de la passe de scène, reprojette
       l'image précédente au point que montre chaque pixel (distance de sa propre scène ou du front des
       nuages voisins, la plus proche), la garde si la distance de scène qu'elle avait concorde à 10 %,
-      la borne à l'étendue des nuages marchés autour (variance × 2), et mêle à 50 % les pixels marchés
-      dans la frame. Sinon (désocclusion, bords) : moyenne des voisins pondérée par la ressemblance de
+      la borne à l'étendue des nuages marchés autour (variance × 2, élargie de la précision des
+      demi-flottants de l'historique), et mêle à 20 % les pixels marchés dans la frame. Sinon (désocclusion, bords) : moyenne des voisins pondérée par la ressemblance de
       leur distance de scène, ceux dont les nuages commencent derrière la surface du pixel comptant
       pour clairs (sans quoi un liseré de nuage bordait l'avion en roulis). Historique en ping-pong
       (les deux copies plein écran coûtaient de l'ordre de 0,5 à 0,75 ms, mesure faite avant la remise à
       zéro du vent). Vue 5 : nuages ≈ 2,65 ms (≈ 4,8 ms avant), essentiellement la marche. Vérifié en roulis rapide : pas de traînée ni de halo aux
       silhouettes de l'avion et du relief.
+      Scintillement de la surface des nuages corrigé ensuite : au cœur des nuages, l'opacité de
+      tous les voisins vaut exactement 1 (étendue nulle) et l'historique, arrondi en demi-flottant,
+      en sortait toujours, si bien que la boîte ramenait à chaque frame toute la couleur sur le bruit
+      de la frame. Mesure (vue 5, caméra fixe, écart moyen de luminance entre captures à ≈ 120 ms,
+      sur 255) : cumulus 2,77 → 0,50, horizon 2,86 → 1,57 (relief seul : 1,07 et 1,20). Le bruit de
+      détail suit désormais le vent avec la forme (il restait fixe, et les nuages glissaient dessous).
+      Un rognage limité aux pixels marchés, essayé d'abord, laissait en vol une trame de nuage périmé
+      sur le relief découvert : le rognage à chaque frame reste nécessaire.
 - [ ] **L4.5** Ombres des nuages sur le terrain.
 - [ ] **L4.6** Traversée des nuages (caméra dans la couche).
 - [ ] **L4.7** Rayons crépusculaires (`GodraysNode`) et reflet d'objectif (`LensflareNode`).
