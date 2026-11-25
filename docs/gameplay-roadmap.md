@@ -10,10 +10,28 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
 
 ## État courant (mis à jour le 2026-11-25)
 
-- **Statut** : plan validé le 2026-11-25 (voir **Décisions**). **G0 fait** sur la branche
+- **Statut** : plan validé le 2026-11-25 (voir **Décisions**). **G0 et G1 faits** sur la branche
   `feat/flight-model` (non fusionnée, non poussée), sauf le préchargement et les requêtes par lot de
-  G0.4, reportés à G3 et G5 où ils servent. Prochaine étape : G1 (modèle de vol) sur la même
-  branche, puis G2, avant d'alterner avec les lots de rendu (lot 4, nuages volumétriques).
+  G0.4 (reportés à G3 et G5) et la récupération automatique de G1.2 (reportée). Prochaine étape :
+  G2 (réacteurs et jets) sur la même branche, puis alterner avec les lots de rendu (lot 4).
+- **Modèle de vol (G1)** :
+  - `js/constants/rafale.js` (chiffres et estimations calées), `js/flight/aerodynamics.js` (CL en
+    sinus jusqu'à CLmax 1,7 à 32°, facteur de Mach, polaire `CD0(M) + k(M)·CL²`),
+    `js/flight/Engines.js` (deux M88-2, chute de poussée de Mattingly, perte en air raréfié sous 12 %
+    de la pression au sol, montée en régime, PC au-delà du cran, consommation),
+    `js/flight/FlightModel.js` (6 DDL : translation physique, rotation par les commandes de vol
+    électriques — demande de g, tenue de pente au neutre, limiteurs, roulis autour de la trajectoire,
+    dérapage nul), `js/flight/performance.js` et `js/flight/benchmarks.js` (banc :
+    `npm run flight:bench`, repris par `npm test`).
+  - `js/flight/MouseAim.js` (instructeur de visée), `js/flight/SimulatedFlight.js` (mode Simulation :
+    manche clavier adouci, manette des gaz à cran, aérofrein, crash au sol en attendant G3),
+    `js/aircraft/ControlSurfaces.js` (charnières calculées, gouvernes animées).
+  - `CONFIG.flightMode` (`simulation` par défaut, `F` bascule) ; les vues de référence passent en
+    Exploration (réglage mémorisé) ; `render:benchmark` ouvre l'app en Exploration pour que le vol par
+    défaut parte du même point. Caméra de poursuite : derrière la visée souris, ou liée à la cellule
+    (roulis compris) au clavier et à la manette.
+  - Corrigé au passage : l'échelle de tangage du HUD était inversée (horizon au-dessus du centre nez
+    en piqué).
 - **Socle de simulation (G0)** :
   - `js/sim/SimulationClock.js` : pas fixe de 240 Hz (`SIMULATION_RATE`), au plus
     `MAX_DELTA_TIME × 240` pas par frame, fraction restante `alpha` pour interpoler la pose rendue.
@@ -140,33 +158,41 @@ sol) ; les nuages volumétriques (lot 4) n'ont pas de dépendance avec ces lots.
 
 ## Lot G1 — Modèle de vol physique et commandes
 
-- [ ] **G1.1** Corps rigide à 6 degrés de liberté : forces de portance `CL(α, M)`, traînée
+- [x] **G1.1** Corps rigide à 6 degrés de liberté : forces de portance `CL(α, M)`, traînée
       `CD0(M) + k·CL²`, poussée `T(h, M, manette)`, gravité ; moments pilotés par les commandes de vol
       électriques (voir G1.2) plutôt que par des tables de moments ; Euler semi-implicite à 240 Hz,
       quaternion renormalisé.
-- [ ] **G1.2** Commandes de vol électriques « carefree » : demande de facteur de charge en tangage
+- [~] **G1.2** Commandes de vol électriques « carefree » : demande de facteur de charge en tangage
       (neutre = 1 g, auto-trim), limiteur d'incidence (≈ 29°) et de g (+9 / −3,2 en air-air, +5,5 en
       charges lourdes), demande de taux de roulis (270°/s, réduit selon la pression dynamique),
       dérapage maintenu à zéro, réponse courte période du 2ᵉ ordre (ω ≈ 4 rad/s, ζ ≈ 0,7).
       Récupération automatique (remise en montée à 5° et 350 kt) sur une touche.
-- [ ] **G1.3** Moteurs M88-2 : 2 × 50 kN à sec, 2 × 75 kN avec post-combustion, poussée selon
+      Fait, sauf la récupération automatique et le mode charges lourdes (avec G5). Neutre : tenue de
+      la pente du moment où le manche est relâché, virage en palier jusqu'à 60° d'inclinaison.
+- [x] **G1.3** Moteurs M88-2 : 2 × 50 kN à sec, 2 × 75 kN avec post-combustion, poussée selon
       densité et Mach (`T = T_SL·σ^0,7·(1 + aM)`, `a` calé pour Mach 1,8 en altitude et 1,1 au sol),
       retard du 1ᵉʳ ordre (ralenti → PC plein ≈ 4 s), consommation (22 / 47 g/(kN·s)), masse variable.
-- [ ] **G1.4** Contrôles : « mouse aim » par défaut (la souris désigne une direction, un instructeur
+      Fait avec la chute de poussée de Mattingly plutôt que `σ^0,7` : la limite de température totale
+      d'entrée (rapport 1,07) donne d'elle-même Mach 1,82 à 11 km et 714 kt au sol.
+- [x] **G1.4** Contrôles : « mouse aim » par défaut (la souris désigne une direction, un instructeur
       PD la convertit en roulis et demande de g dans les limites de l'avion), clavier direct, manette
       de jeu ; manette des gaz à crans (ralenti, plein sec ≈ 80 %, cran à franchir, PC min → max) ;
       aérofrein (canards et élevons braqués ensemble) ; la vitesse fixe disparaît du mode Simulation.
-- [ ] **G1.5** Animation des gouvernes depuis les sorties des commandes de vol : pivots calculés par
+- [x] **G1.5** Animation des gouvernes depuis les sorties des commandes de vol : pivots calculés par
       pièce, canards (−25° / +20°), élevons ±25° (symétriques en tangage, différentiels en roulis),
       gouverne de direction ±30°, becs 0–20° selon l'incidence, vitesse d'actionneur 60–100°/s.
-- [ ] **G1.6** HUD de vol : marqueur de vecteur vitesse, Mach, facteur de charge et g max, incidence,
+      Fait (100°/s ; aérofrein : canards bord d'attaque −40°, élevons +12°).
+- [x] **G1.6** HUD de vol : marqueur de vecteur vitesse, Mach, facteur de charge et g max, incidence,
       manette et PC, carburant ; caméra de poursuite qui suit le roulis réel.
-- [ ] **G1.7** Banc de vérification : virage instantané ≈ 30°/s à Mach 0,5 et soutenu ≈ 24°/s à
+- [x] **G1.7** Banc de vérification : virage instantané ≈ 30°/s à Mach 0,5 et soutenu ≈ 24°/s à
       Mach 0,6 au niveau de la mer, accélération ≈ 30 kt/s (200 → 500 kt, 5 000 ft, PC), Mach 1,8 en
       altitude, approche 125 kt à 16° d'incidence pour 15 t, plafond ≈ 15 km.
-- [ ] **G1.8** Benchmark et pilote automatique : trajectoires toujours imposées (cinématiques), avec
+      Fait (voir **Mesures**) ; l'accélération publiée est jugée douteuse (voir Données de référence).
+- [~] **G1.8** Benchmark et pilote automatique : trajectoires toujours imposées (cinématiques), avec
       manette et PC déduits de la vitesse pour l'animation des jets ; pilote automatique « vrai »
       (suivi de cap et d'altitude par les commandes de vol) reporté à G3.
+      Fait pour les trajectoires imposées ; la manette et la PC déduites de la vitesse viendront avec
+      G2 (les jets suivent aujourd'hui l'ancienne règle : PC au-dessus de 300 m/s).
 
 ## Lot G2 — Réacteurs et jets selon la poussée
 
@@ -296,6 +322,9 @@ sol) ; les nuages volumétriques (lot 4) n'ont pas de dépendance avec ces lots.
 | 2026-11-25 | Niveau de réalisme | Simulation « carefree » : physique calée sur les chiffres réels, commandes de vol électriques qui protègent l'avion | Fidèle au vrai Rafale et facile à piloter |
 | 2026-11-25 | Vol libre actuel | Conservé comme mode Exploration | Voyage rapide, vues de référence ; le benchmark garde de toute façon sa trajectoire imposée |
 | 2026-11-25 | Périphériques | Souris + clavier (« mouse aim » par défaut) et manette (Gamepad API, mapping standard) ; pas de HOTAS pour l'instant | Choix de l'utilisateur ; la couche d'entrée unique de G0.3 laisse la porte ouverte |
+| 2026-11-25 | Rotation de la cellule | Imposée par les commandes de vol (suivi de la trajectoire + corrections d'incidence, de roulis et de dérapage, sous limites d'accélération angulaire) plutôt que par des tables de moments | Aucune donnée de moments du Rafale n'est publique ; les commandes de vol électriques masquent de toute façon la dynamique naturelle ; réponses calées sur les chiffres d'essai |
+| 2026-11-25 | Poussée | Chute de poussée de Mattingly (turbofan à faible taux de dilution, PC) + perte en air raréfié | Donne d'elle-même les vitesses max publiées à 11 km et au sol (même température totale d'entrée) et un plafond de 17 km |
+| 2026-11-25 | Contact avec le sol | Crash (redémarrage 1 500 m au-dessus) en attendant le train et la physique au sol de G3 | Évite de voler sous le relief sans préjuger de G3 |
 
 ### Encore ouvert
 
@@ -321,7 +350,9 @@ Statuts : **[off]** Dassault/Safran/MBDA/Thales, **[FT]** essai en vol Flight In
   https://www.flightglobal.com/flight-test-dassault-rafale-rampant-rafale/90047.article
 - Roulis stabilisé 270°/s à 350 et 450 kt [FT] ; virage instantané ≈ 30°/s à Mach 0,5, soutenu
   ≈ 23,9°/s à Mach 0,6 au niveau de la mer, 50 % de carburant [faible].
-- Accélération 200 → 500 kt à 5 000 ft, PC, 1,8 t de carburant : ≈ 30 kt/s [FT].
+- Accélération 200 → 500 kt à 5 000 ft, PC, 1,8 t de carburant : ≈ 30 kt/s [FT, douteux] : il
+  faudrait un rapport poussée/poids ≈ 1,6 en vol, hors de portée de 2 × 75 kN pour ≈ 12,7 t ; le
+  modèle met 16 s (≈ 19 kt/s), toléré par le banc.
 - Approche < 120 kt [off], 125 kt à 16° d'incidence pour 15 t [FT] ; rotation à 125 kt ≈ 9 s après le
   lâcher des freins (16,1 t, PC) [FT] ; roulage à l'atterrissage 450 m sans parachute [off] ; train
   sorti ≤ 230 kt [FT] ; pas de décrochage franc, < 50 kt tenus en essais [FT].
@@ -433,6 +464,7 @@ Preset High, écran intégré 120 Hz, mêmes protocoles que `docs/rendering-road
 |---|---|---|---|---|
 | 2026-11-24 | Référence (clôture du lot 3 : `lot3-cap2`, `lot3`) | 3,44 / 3,43 / 3,49 / 3,40 / 3,80 / 3,48 | 119,2 · 105,3 · 64,1 · 1 | |
 | 2026-11-25 | G0 (`benchmarks/render/g0`) | 3,45 / 3,44 / 3,51 / 3,40 / 3,81 / 3,54 | 119,5 · 103,1 · 65,4 · 0 | Draw calls identiques ; écarts dans le bruit (± 0,4 ms) |
+| 2026-11-25 | G1 (`benchmarks/render/g1`, puis `g1-cap2`) | 3,44 / 3,43 / 3,50 / 3,87 / 3,94 / 3,68, puis 3,48 / 3,86 / 3,94 / 3,60 / 4,39 / 3,55 | 119,4 · 105,3 · 64,9 · 1 | Draw calls identiques ; les écarts changent de vue d'une série à l'autre (machine chaude après une longue série de mesures) : bruit thermique, le rendu n'a pas changé. À remesurer machine froide en début de G2 |
 
 Vérifications de G0 dans Chrome (`?view=1`, manette simulée en disposition standard) : avance au
 clavier 1 120 m en 2,0 s simulées (560 m/s, la vitesse réglée) ; demi-gâchette 280 m/s ; manche à fond
@@ -440,9 +472,41 @@ clavier 1 120 m en 2,0 s simulées (560 m/s, la vitesse réglée) ; demi-gâchet
 du sol connue sur 169 points à ±3 km (720 à 2 238 m), 979 m sous l'avion contre 969 m en z12 ; aucune
 erreur console.
 
+### Banc de vérification de G1 (`npm run flight:bench`, 2026-11-25)
+
+Masse : base + emports + moitié du carburant interne (13,25 t) sauf mention.
+
+| Cas | Modèle | Cible | Source |
+|---|---|---|---|
+| Virage instantané, niveau de la mer, Mach 0,5 | 29,5°/s (9 g) | 30 ± 3 | estimation |
+| Virage soutenu, niveau de la mer, Mach 0,6 | 23,5°/s (8,6 g) | 23,9 ± 2 | estimation |
+| Vitesse max à 11 000 m | Mach 1,82 | 1,8 ± 0,08 | officiel |
+| Vitesse max au niveau de la mer | 714 kt | 750 ± 50 | officiel |
+| Plafond pratique (100 ft/min) | 17 000 m | 16 000 ± 1 300 | officiel 15 240, essai 16 760 |
+| Approche, 16° d'incidence, 15 t | 127 kt | 125 ± 8 | essai |
+| Accélération 200 → 500 kt, 5 000 ft | 16,0 s | 10 ± 8 | essai, douteux |
+| Traction pleine à Mach 0,6 : temps jusqu'à 8,5 g / pic | 0,70 s / 9,09 g | 0,7 ± 0,5 / 9 ± 0,3 | limite officielle |
+| Roulis plein à 430 kt : 360° | 1,51 s | 1,45 ± 0,25 | essai 270°/s |
+| Poussée pleine : facteur de charge mini | −3,37 g | −3,2 ± 0,3 | limite officielle |
+| Traction pleine lente : incidence max (q > 1 500 Pa) | 29,6° | 29 ± 1 | limite d'essai |
+| Manche au neutre 30 s / inclinaison 45° 20 s : écart d'altitude | +7 m / +13 m | 0 ± 30 / ± 40 | tenue de trajectoire |
+
+Instructeur de visée (Node, 220 m/s à 5 000 m) : visée à 90° à droite rejointe à 11° en 3 s puis
+5° à 7 s ; 30° à gauche à 2° en 7 s ; 20° au-dessus à 0,8° en 3 s ; 5° en dessous à 0,5° en 3 s (en
+poussant) ; plein arrière : demi-boucle puis retour sur le dos à l'endroit, à 4° en 13 s (lent à basse
+vitesse en haut de la boucle, à affiner en vol). En dessous de ≈ 65 kt, les gouvernes manquent
+d'efficacité et l'incidence dépasse sa limite (jusqu'à 36°) : comportement voulu (alarme réelle à
+100 kt).
+
+Vérifications de G1 dans Chrome : départ en Simulation à 6 000 m, Mach 0,73, 1 g ; `W` s'arrête au
+plein sec (cran), un nouvel appui allume la PC (105 kN à 6 000 m) ; traction clavier 6,2 g, manette
+7,5 g ; caméra liée à la cellule en vol dos ; canards braqués en aérofrein ; `F` aller-retour ;
+piqué dans le relief : crash et redémarrage ; aucune erreur console.
+
 ## Journal des sessions
 
 | Date | Fait | Reste / prochaine étape |
 |---|---|---|
+| 2026-11-25 | G1 : modèle de vol 6 DDL avec commandes de vol électriques, moteurs M88-2 (Mattingly), banc de vérification (14 cas, `npm run flight:bench`), visée souris, manette des gaz à cran, aérofrein, gouvernes animées, HUD de vol, caméra liée à la cellule, modes Simulation / Exploration (`F`) ; échelle du HUD corrigée | G2 (jets selon la poussée) ; à affiner en vol : sensations de la visée souris et du roulis clavier |
 | 2026-11-25 | G0 : horloge à pas fixe, état de l'avion, mode Exploration, entrées clavier/souris/manette, altitude du sol telle que dessinée, atmosphère standard, registre d'entités, tests Node ; vérifié dans Chrome, vues et vol identiques à la référence | G1 sur `feat/flight-model` : modèle 6 DDL, commandes de vol électriques, souris « mouse aim », banc de vérification |
 | 2026-11-25 | Revue du code existant (vol, lumières, modèle, altitude du sol) ; recherches web sur le modèle de vol, les jets, le radar, les aéroports, les missiles et les drones ; rédaction de cette feuille de route ; décisions d'ordre, de réalisme, de mode Exploration et de périphériques | G0 sur `feat/flight-model` ; vérifier la licence du modèle Rafale |
