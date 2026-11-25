@@ -255,6 +255,11 @@ export default class ScenePipeline {
       input = this._atmosphereNode;
     }
     this.taauNode.beautyNode = input;
+    // The anti-aliasing builds its input into materials of its own when the
+    // pipeline is set up again, without marking them for recompilation: a
+    // change made after the first frame would otherwise never show
+    this.taauNode._resolveMaterial.needsUpdate = true;
+    this.taauNode._seedMaterial.needsUpdate = true;
     this._pipeline.needsUpdate = true;
   }
 
