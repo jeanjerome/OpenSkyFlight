@@ -106,7 +106,7 @@ export default class FlightPlan {
     this.pitch = lerp(this.pitch, targetPitch, PITCH_SMOOTH * dt);
     this.pitch = clamp(this.pitch, MIN_PITCH, MAX_PITCH);
 
-    // 6. Expose per-frame deltas (same scale as FlightController.yawRate/pitchRate)
+    // 6. Expose per-frame deltas (same scale as ExplorationFlight.yawRate/pitchRate)
     this.yawRate = angleDiff(this.yaw, prevYaw);
     this.pitchRate = this.pitch - prevPitch;
 

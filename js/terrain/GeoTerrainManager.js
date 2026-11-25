@@ -31,6 +31,7 @@ export default class GeoTerrainManager {
     /** @deprecated Alias for backwards compat — use tileMap */
     this.mapView = null;
     this.elevationProvider = new ElevationProvider();
+    this._groundPoint = new THREE.Vector3();
     /** Web Mercator units to world metres (cos of the map centre latitude) */
     this.horizontalScale = 1;
     this._effectiveViewDistance = 0;
@@ -421,11 +422,66 @@ export default class GeoTerrainManager {
   }
 
   /**
-   * Compute ground elevation at a world position.
-   * Uses CPU-decoded heightmaps from ElevationProvider (same approach as before).
+   * Height of the ground at a world position, as drawn: interpolated on the
+   * triangles of the finest displayed tile there, from the elevations its
+   * vertices are displaced by, so that contact with the ground matches the
+   * screen. Where no tile is displayed, from the zoom-12 elevations decoded on
+   * the CPU (fetched on first request). The curvature of the Earth, applied
+   * around the camera when drawing, is left out.
+   * @returns {number|null} altitude (m), null while no elevation is loaded there
    */
-  getGroundElevation(worldX, worldZ) {
-    if (!this._centerMercator || !this.tileMap) return 0;
+  groundHeight(worldX, worldZ) {
+    const tileMap = this.tileMap;
+    if (!tileMap) return null;
+
+    // World → map coordinates (projected metres), then → [0, 1] across the
+    // world, x eastward and y southward as the tile indices
+    const local = tileMap.worldToLocal(this._groundPoint.set(worldX, 0, worldZ));
+    const { mapWidth, mapHeight } = tileMap.projection;
+    const u = local.x / mapWidth + 0.5;
+    const v = 0.5 - local.y / mapHeight;
+    if (!(u >= 0 && u < 1 && v >= 0 && v < 1)) return null;
+
+    // Finest displayed tile containing the point, down the quadtree
+    let displayed = null;
+    let tile = tileMap.rootTile;
+    while (tile) {
+      if (tile.showing && tile.model.geometry.userData.heightTexture) displayed = tile;
+      const children = tile.subTiles;
+      if (!children) break;
+      const n = 2 ** (tile.z + 1);
+      const x = Math.floor(u * n);
+      const y = Math.floor(v * n);
+      tile = children.find((child) => child.x === x && child.y === y);
+    }
+    if (!displayed) return this.getGroundElevation(worldX, worldZ, null);
+
+    // Grid of size × size vertices over the tile, row 0 along the south edge;
+    // each cell is split along the diagonal from its south-east to its
+    // north-west vertex (three-tile's grid indices)
+    const texture = displayed.model.geometry.userData.heightTexture;
+    const { data, width: size } = texture.image;
+    const n = 2 ** displayed.z;
+    const gx = (u * n - displayed.x) * (size - 1);
+    const gy = (1 - (v * n - displayed.y)) * (size - 1);
+    const i = Math.min(size - 2, Math.max(0, Math.floor(gx)));
+    const j = Math.min(size - 2, Math.max(0, Math.floor(gy)));
+    const fx = gx - i;
+    const fy = gy - j;
+    const a = data[j * size + i];
+    const b = data[j * size + i + 1];
+    const c = data[(j + 1) * size + i];
+    const d = data[(j + 1) * size + i + 1];
+    return fx + fy <= 1 ? a + fx * (b - a) + fy * (c - a) : d + (1 - fx) * (c - d) + (1 - fy) * (b - d);
+  }
+
+  /**
+   * Ground elevation at a world position from the zoom-12 elevations decoded on
+   * the CPU (ElevationProvider); a missing tile is fetched.
+   * @param {number} [missing=0] - returned while the tile is not loaded
+   */
+  getGroundElevation(worldX, worldZ, missing = 0) {
+    if (!this._centerMercator || !this.tileMap) return missing;
 
     // World → Mercator: reverse the position offset + rotation
     // After rotateX(-PI/2): worldX = mapX, worldZ = -mapY
@@ -437,13 +493,13 @@ export default class GeoTerrainManager {
     try {
       geo = this.tileMap.world2geo(worldVec);
     } catch {
-      return 0;
+      return missing;
     }
 
     // geo = Vector3(lon, lat, alt)
     const longitude = geo.x;
     const latitude = geo.y;
-    if (isNaN(latitude) || isNaN(longitude)) return 0;
+    if (isNaN(latitude) || isNaN(longitude)) return missing;
 
     // Convert to tile coordinates for elevation lookup
     const zoom = Math.min(CONFIG.zoom || 12, 12);
@@ -456,7 +512,7 @@ export default class GeoTerrainManager {
     const heightmap = this.elevationProvider._cache.get(key);
     if (!heightmap) {
       this.elevationProvider.fetchHeightmap(tileX, tileY, zoom).catch(() => {});
-      return 0;
+      return missing;
     }
 
     const fracX = ((longitude + 180) / 360) * n - tileX;

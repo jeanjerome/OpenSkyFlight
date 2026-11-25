@@ -19,9 +19,9 @@ const ICONS = {
 const TABS = [
   { id: 'graphics', label: 'Graphics', help: 'Image quality and the cost of each setting.' },
   { id: 'world', label: 'World', help: 'Where to fly, the ground imagery, the sun, the sky and the clouds.' },
-  { id: 'flight', label: 'Flight', help: 'Speed, view, mouse and what is shown over the view.' },
+  { id: 'flight', label: 'Flight', help: 'Speed, view, mouse, gamepad and what is shown over the view.' },
   { id: 'audio', label: 'Audio', help: 'Volume of each kind of sound.' },
-  { id: 'controls', label: 'Controls', help: 'Keyboard and mouse controls in flight.' },
+  { id: 'controls', label: 'Controls', help: 'Keyboard, mouse and gamepad controls in flight.' },
   { id: 'dev', label: 'Developer', help: 'Measurements, reference views and raw rendering values.', dev: true },
 ];
 

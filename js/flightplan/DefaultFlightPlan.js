@@ -22,7 +22,7 @@ const FLIGHT_SEGMENTS = [
 
 /**
  * @param {{position: THREE.Vector3, yaw: number, pitch: number}} source - flight state the
- *   plan starts from (FlightController); FlightPlan also reads its yaw and pitch
+ *   plan starts from (ExplorationFlight); FlightPlan also reads its yaw and pitch
  */
 export function createDefaultFlightPlan(source) {
   const startX = source.position.x;

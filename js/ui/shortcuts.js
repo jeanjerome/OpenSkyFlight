@@ -16,6 +16,17 @@ export const SHORTCUTS = [
     ],
   },
   {
+    group: 'Gamepad',
+    items: [
+      { keys: ['Left stick'], action: 'Steer' },
+      { keys: ['RT'], action: 'Fly forward' },
+      { keys: ['LT'], action: 'Fly backward' },
+      { keys: ['Right stick'], action: 'Slide sideways' },
+      { keys: ['Y'], action: 'Chase or cockpit view' },
+      { keys: ['Menu'], action: 'Pause and open this menu, or resume' },
+    ],
+  },
+  {
     group: 'Display',
     items: [
       { keys: ['V'], action: 'Chase or cockpit view' },

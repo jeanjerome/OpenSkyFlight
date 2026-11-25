@@ -15,6 +15,8 @@ import { SETTINGS_BY_KEY } from './settingsSchema.js';
  * @property {number}  cameraSpeed            - Flight speed in m/s, range [1..4000] (default: 560)
  * @property {string}  cameraMode             - 'chase' | 'cockpit' (default: 'chase')
  * @property {number}  mouseSensitivity       - Mouse look sensitivity (default: 0.002)
+ * @property {number}  gamepadSensitivity     - Turn rate at full stick relative to the default, range [0.25..2] (default: 1)
+ * @property {boolean} invertStickPitch       - Pushing the stick forward raises the nose (default: false, pulling back raises it)
  * @property {boolean} antiCollisionLights    - Flashing red beacons and white wingtip strobes of the aircraft (default: true)
  *
  * Graphics (user-facing; each one drives technical settings, see qualityPresets.js):
@@ -61,6 +63,8 @@ const CONFIG = {
   cameraSpeed: 560,
   cameraMode: 'chase',
   mouseSensitivity: 0.002,
+  gamepadSensitivity: 1,
+  invertStickPitch: false,
   antiCollisionLights: true,
   quality: 'high',
   imageSharpness: 'maximum',

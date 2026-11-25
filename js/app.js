@@ -10,12 +10,18 @@ import {
 } from './constants/rendering.js';
 import { REALWORLD_START_ALTITUDE, DEFAULT_NEAR, MAX_ROLL, ROLL_SENSITIVITY, ROLL_DAMP_SPEED } from './constants/camera.js';
 import { MAX_DELTA_TIME } from './constants/physics.js';
+import { SIMULATION_RATE, ENTITY_GRID_CELL } from './constants/simulation.js';
+import { GAMEPAD } from './constants/controls.js';
 import { createRenderer, createScene, createCamera, setupResizeHandler } from './scene/SceneSetup.js';
 import AdaptiveQualityManager from './rendering/AdaptiveQualityManager.js';
 import ScenePipeline from './rendering/ScenePipeline.js';
 import InputManager from './input/InputManager.js';
 import GeoTerrainManager from './terrain/GeoTerrainManager.js';
-import FlightController from './camera/FlightController.js';
+import ControlInputs from './input/ControlInputs.js';
+import AircraftState from './flight/AircraftState.js';
+import ExplorationFlight from './flight/ExplorationFlight.js';
+import SimulationClock from './sim/SimulationClock.js';
+import EntityRegistry from './sim/EntityRegistry.js';
 import ControlPanel from './ui/ControlPanel.js';
 import HUD from './ui/HUD.js';
 import Minimap from './ui/Minimap.js';
@@ -66,8 +72,24 @@ async function initApp() {
   const cloudLayer = new CloudLayer(scene);
   cloudLayer.mesh.renderOrder = CLOUD_RENDER_ORDER;
 
+  // --- Simulation ---
+  // The aircraft is flown at fixed steps (SimulationClock) and drawn at a pose
+  // interpolated between the last two steps
+  const simulationClock = new SimulationClock(SIMULATION_RATE, Math.ceil(MAX_DELTA_TIME * SIMULATION_RATE));
+  const entities = new EntityRegistry(ENTITY_GRID_CELL);
+  const aircraft = new AircraftState();
+  aircraft.position.copy(camera.position);
+  const flight = new ExplorationFlight(aircraft);
+  const aircraftPose = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion(), yaw: 0, pitch: 0 };
+
   // --- Controllers ---
-  const flightController = new FlightController(camera, renderer.domElement);
+  const controls = new ControlInputs(renderer.domElement);
+  let lastControlDevice = controls.device;
+  controls.onGamepadChange = (pad) => {
+    if (!pad) showNotification('Gamepad disconnected');
+    else if (pad.mapping === 'standard') showNotification('Gamepad connected');
+    else showNotification('Gamepad connected — unknown layout, its sticks and buttons may be swapped');
+  };
   const chaseCameraController = new ChaseCameraController();
   const _qRoll = new THREE.Quaternion();
   const _axisZ = new THREE.Vector3(0, 0, 1);
@@ -91,8 +113,9 @@ async function initApp() {
   const adaptiveQuality = new AdaptiveQualityManager(scenePipeline, gpuTimer);
   const flightPlanRecorder = new FlightPlanRecorder();
 
-  // --- Ground elevation ---
+  // --- Ground elevation (last known while the tiles below load) ---
   let groundElevation = 0;
+  let aircraftGroundElevation = 0;
 
   // --- Stats.js ---
   const stats = new Stats();
@@ -168,10 +191,18 @@ async function initApp() {
     showNotification(`Texture: ${CONFIG.textureMode}`);
   });
 
-  input.onKey('v', () => {
+  const toggleView = () => {
     const next = CONFIG.cameraMode === 'chase' ? 'cockpit' : 'chase';
     update('cameraMode', next);
     Logger.info('App', `Camera mode: ${next}`);
+  };
+  input.onKey('v', toggleView);
+  controls.onButton(GAMEPAD.Y, () => {
+    if (!paused) toggleView();
+  });
+  controls.onButton(GAMEPAD.START, () => {
+    if (panel.isOpen) panel.resume();
+    else panel.open();
   });
 
   input.onKey('i', () => {
@@ -227,26 +258,25 @@ async function initApp() {
   });
 
   input.onKey('p', () => {
-    if (flightPlanRecorder.isRecording()) flightPlanRecorder.addWaypoint(flightController);
+    if (flightPlanRecorder.isRecording()) flightPlanRecorder.addWaypoint(flight);
   });
 
   input.onKey('g', () => {
     if (flightPlanRecorder.autopilotActive) {
       flightPlanRecorder.autopilotActive = false;
-      flightController.enabled = true;
+      flight.enabled = true;
       const plan = flightPlanRecorder.getPlan();
-      flightController.position.copy(plan.position);
-      flightController.setOrientation(plan.yaw, plan.pitch);
+      flight.teleport(plan.position, plan.yaw, plan.pitch);
       Logger.info('App', 'Autopilot disengaged');
     } else {
       if (!flightPlanRecorder.hasValidPlan()) {
         Logger.warn('App', 'Need at least 2 waypoints to engage autopilot');
         return;
       }
-      const plan = flightPlanRecorder.buildPlan(flightController);
+      const plan = flightPlanRecorder.buildPlan(flight);
       if (plan) {
         flightPlanRecorder.autopilotActive = true;
-        flightController.enabled = false;
+        flight.enabled = false;
         Logger.info('App', 'Autopilot engaged');
       }
     }
@@ -262,10 +292,10 @@ async function initApp() {
 
   function toggleBenchmark() {
     if (benchmarkRunner.isRunning()) {
-      benchmarkRunner.stop(flightController, renderer);
+      benchmarkRunner.stop(flight, renderer);
     } else {
-      const userPlan = flightPlanRecorder.hasValidPlan() ? flightPlanRecorder.buildPlan(flightController) : null;
-      benchmarkRunner.start(flightController, gpuTimer, userPlan);
+      const userPlan = flightPlanRecorder.hasValidPlan() ? flightPlanRecorder.buildPlan(flight) : null;
+      benchmarkRunner.start(flight, gpuTimer, userPlan);
     }
   }
 
@@ -285,7 +315,7 @@ async function initApp() {
     if (!position) return false;
 
     if (flightPlanRecorder.autopilotActive) flightPlanRecorder.autopilotActive = false;
-    flightController.enabled = true;
+    flight.enabled = true;
     // Sun fixed for reproducible captures
     update('timeSpeed', 0);
     update('dayOfYear', view.dayOfYear);
@@ -294,10 +324,9 @@ async function initApp() {
     if (view.cloudAltitude !== undefined) update('cloudAltitude', view.cloudAltitude);
     update('cameraMode', view.cameraMode);
 
-    flightController.position.copy(position);
-    flightController.setOrientation(-view.heading * DEG2RAD, view.pitch * DEG2RAD);
-    flightController.yawRate = 0;
-    flightController.pitchRate = 0;
+    flight.teleport(position, -view.heading * DEG2RAD, view.pitch * DEG2RAD);
+    flight.yawRate = 0;
+    flight.pitchRate = 0;
     chaseCameraController.reset();
     _bankRoll = 0;
     referenceViewIndex = index;
@@ -318,7 +347,7 @@ async function initApp() {
     devMode,
     actions: {
       resume: () => {
-        if (!flightController.locked) {
+        if (!controls.locked) {
           renderer.domElement.requestPointerLock()?.catch?.(() => {
             // Refused right after the mouse was released with Escape: a click on the scene takes it back
           });
@@ -328,7 +357,7 @@ async function initApp() {
         update('lat', lat);
         update('lon', lon);
         geoTerrainManager.reinit();
-        flightController.position.set(0, REALWORLD_START_ALTITUDE, 0);
+        flight.teleport(new THREE.Vector3(0, REALWORLD_START_ALTITUDE, 0));
       },
       reloadTerrain: () => geoTerrainManager.reinit(),
       referenceViews: REFERENCE_VIEWS.map((v) => v.name),
@@ -366,7 +395,7 @@ async function initApp() {
   const flyHint = document.getElementById('fly-hint');
   document.getElementById('menu-button').addEventListener('click', () => panel.open());
   function updateFlyHint() {
-    flyHint.hidden = panel.isOpen || flightController.locked || !CONFIG.showHud;
+    flyHint.hidden = panel.isOpen || controls.locked || controls.device === 'gamepad' || !CONFIG.showHud;
   }
   panel.onToggle((open) => {
     paused = open;
@@ -374,7 +403,7 @@ async function initApp() {
   });
   document.addEventListener('pointerlockchange', () => {
     // Escape releases the mouse before the page sees the key: open the menu then
-    if (flightController.locked) panel.close();
+    if (controls.locked) panel.close();
     else panel.open();
     updateFlyHint();
   });
@@ -392,6 +421,20 @@ async function initApp() {
     adaptedLuminance: () => scenePipeline.readAdaptedLuminance(),
     setRenderScale: (scale) => scenePipeline.setRenderScale(scale),
     pendingTileDownloads: () => geoTerrainManager.pendingDownloads,
+    // Simulated aircraft and the ground below it: as drawn (null while not loaded) and at zoom 12
+    aircraft: () => {
+      const { x, y, z } = aircraft.position;
+      return {
+        position: { x, y, z },
+        yaw: aircraft.yaw,
+        pitch: aircraft.pitch,
+        simulationTime: simulationClock.time,
+        groundHeight: geoTerrainManager.groundHeight(x, z),
+        groundHeightZoom12: geoTerrainManager.getGroundElevation(x, z, null),
+      };
+    },
+    // Ground as drawn at a world position (null while not loaded)
+    groundHeight: (x, z) => geoTerrainManager.groundHeight(x, z),
     // Displayed terrain tiles in the view, by zoom level
     tileLevels: () => geoTerrainManager.tileLevels(),
     lastGpuTimeMs: () => gpuTimer.getLastGPUTimeMs(),
@@ -422,8 +465,20 @@ async function initApp() {
     smoothedFrameMs += (frameTimeMs - smoothedFrameMs) * 0.05;
 
     // --- Input phase ---
-    flightController.update(dt);
-    benchmarkRunner.tickPath(dt, flightController, renderer);
+    const commands = controls.sample(dt);
+    if (controls.device !== lastControlDevice) {
+      lastControlDevice = controls.device;
+      updateFlyHint();
+    }
+    flight.applyControls(commands, dt);
+    benchmarkRunner.tickPath(dt, flight, renderer);
+
+    // --- Simulation phase ---
+    simulationClock.advance(dt, (step) => {
+      flight.step(step);
+      entities.fixedUpdate(step);
+    });
+    aircraft.interpolate(simulationClock.alpha, aircraftPose);
 
     // --- Aircraft state ---
     let aircraftState = null;
@@ -433,9 +488,8 @@ async function initApp() {
       const ok = plan.update(dt);
       if (!ok) {
         flightPlanRecorder.autopilotActive = false;
-        flightController.enabled = true;
-        flightController.position.copy(plan.position);
-        flightController.setOrientation(plan.yaw, plan.pitch);
+        flight.enabled = true;
+        flight.teleport(plan.position, plan.yaw, plan.pitch);
         Logger.info('App', 'Autopilot: flight plan completed');
       } else {
         _autopilotEuler.set(plan.pitch, plan.yaw, 0, 'YXZ');
@@ -465,13 +519,13 @@ async function initApp() {
       };
     } else if (!benchmarkRunner.isRunning()) {
       aircraftState = {
-        position: flightController.position,
-        yaw: flightController.yaw,
-        pitch: flightController.pitch,
-        yawRate: flightController.yawRate,
-        pitchRate: flightController.pitchRate,
-        quaternion: flightController.quaternion,
-        thrust: flightController.thrusting,
+        position: aircraftPose.position,
+        yaw: aircraftPose.yaw,
+        pitch: aircraftPose.pitch,
+        yawRate: flight.yawRate,
+        pitchRate: flight.pitchRate,
+        quaternion: aircraftPose.quaternion,
+        thrust: flight.thrusting,
       };
     }
 
@@ -516,7 +570,11 @@ async function initApp() {
       camera.updateProjectionMatrix();
       Logger.debug('App', 'Realworld clip planes updated', { near: DEFAULT_NEAR, far: farNeeded });
     }
-    groundElevation = geoTerrainManager.getGroundElevation(camera.position.x, camera.position.z);
+    groundElevation = geoTerrainManager.groundHeight(camera.position.x, camera.position.z) ?? groundElevation;
+    if (aircraftState) {
+      const { x, z } = aircraftState.position;
+      aircraftGroundElevation = geoTerrainManager.groundHeight(x, z) ?? aircraftGroundElevation;
+    }
 
     // --- Render phase ---
     atmosphericSky.groundLightsLuminance = cityLights.viewLuminance;
@@ -531,7 +589,7 @@ async function initApp() {
 
     // --- Overlay phase ---
     if (timer) timer.begin('hud');
-    hud.update(camera, groundElevation, benchmarkRunner, dt, flightPlanRecorder, aircraftState);
+    hud.update(camera, aircraftState ? aircraftGroundElevation : groundElevation, benchmarkRunner, dt, flightPlanRecorder, aircraftState);
     if (timer) timer.end('hud');
 
     if (timer) timer.begin('minimap');

@@ -19,7 +19,7 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 - **Adaptive LOD** — quadtree subdivision based on camera distance, with concentric view-center weighting for hi-res zoom levels
 - **Rafale aircraft** — 3D GLTF model with retracted landing gear, animated banking and pitch, chase camera (30 m behind)
 - **Cockpit / chase toggle** — press `V` to switch between first-person cockpit (roll applied to horizon) and third-person chase view
-- **Flight simulator controls** — 6-DOF camera with pointer lock, banking, pitch/yaw, full 360° looping
+- **Flight simulator controls** — free flight with pointer lock, banking, pitch/yaw, full 360° looping, simulated at a fixed 240 Hz step whatever the frame rate; keyboard, mouse and gamepad (standard layout)
 - **Aircraft-style HUD** — compass, artificial horizon, altimeter (MSL + AGL), speed indicator
 - **Settings menu** — `Esc` pauses the flight and opens a game-style menu (Graphics, World, Flight, Controls) over the live scene, driven by mouse or keyboard (`↑` `↓` select, `←` `→` change, `Q` / `E` switch tab, `R` restore the default), with the performance impact and visual gain of each graphics setting, synthesised interface sounds and an Audio tab (master, interface, engine and radio volumes); a quality preset (Low / Medium / High / Ultra) sets the graphics settings at once, settings are remembered across sessions and can be given in the URL (`?quality=low&showClouds=true`); `?dev=1` adds a Developer tab (live GPU figures, reference views, benchmark, raw rendering values)
 - **OSM minimap** — real-time 2D map overlay with airplane marker and independent zoom
@@ -76,6 +76,7 @@ Available scripts:
 | `npm run dev` | Start the dev server |
 | `npm run lint` | Run ESLint |
 | `npm run lint:fix` | Run ESLint with auto-fix |
+| `npm test` | Run the unit tests (Node test runner) |
 | `npm run format` | Format all files with Prettier |
 | `npm run format:check` | Check formatting without modifying files |
 | `npm run render:capture -- --out <dir>` | Screenshot every reference view in Chrome and measure frame pacing, draw calls and GPU cost (dev server must be running); `--views 1,6` selects views, `--set key=value` overrides a setting |
@@ -112,6 +113,8 @@ Available scripts:
 > **Developer mode:** open the app with `?dev=1` (remembered until `?dev=0`) to enable the developer shortcuts and the Developer tab of the settings menu.
 
 > **Keyboard layouts:** Flight controls (WASD) use physical key positions, so they map to ZQSD on AZERTY keyboards. All other shortcuts use the character printed on the key and work identically on any layout.
+
+> **Gamepad:** a gamepad in the standard layout (Xbox, PlayStation) flies without clicking the view: left stick to steer (pull back to raise the nose, invertible in the Flight tab), right trigger forward, left trigger backward, right stick to slide sideways, `Y` for the chase or cockpit view and the menu button to pause or resume. Its sensitivity is set in the Flight tab.
 
 The settings menu (`Esc`) also lists every shortcut in its Controls tab.
 
@@ -181,12 +184,14 @@ cache/
 │   ├── aircraft/              Rafale GLTF model loading & animation, aircraft lights & engine glow
 │   ├── atmosphere/            Atmospheric scattering, aerial perspective volume, sun & moon ephemerides, night exposure, cloud layer
 │   ├── benchmark/             Automated perf testing & baseline comparison
-│   ├── camera/                Flight controller (6-DOF), chase camera, springs
+│   ├── camera/                Chase camera, springs
 │   ├── constants/             Shared constants (camera, HUD, physics, terrain…)
+│   ├── flight/                Aircraft state, Exploration (free flight) mode
 │   ├── flightplan/            Waypoint recording, flight plan interpolation, autopilot
 │   ├── geo/                   Tile math, elevation provider, fetch limiter
-│   ├── input/                 Keyboard dispatch (e.code for flight, e.key for actions)
+│   ├── input/                 Keyboard dispatch (e.code for flight, e.key for actions), flight controls from keyboard, mouse and gamepad
 │   ├── rendering/             Render pipeline (HDR scene pass, TAAU, glow pass, bloom, night vision, tone mapping), dynamic resolution
+│   ├── sim/                   Fixed-step simulation clock, standard atmosphere, entity registry
 │   ├── scene/                 Renderer, scene, camera & lights factory
 │   ├── terrain/               Real-world terrain manager (three-tile integration), city lights
 │   ├── ui/                    HUD instruments, flight plan menu, minimap, settings menu
@@ -194,6 +199,7 @@ cache/
 ├── assets/
 │   ├── models/                3D models (Rafale GLTF)
 │   └── flightplans/           Saved flight plan JSON files
+├── tests/                     Unit tests of the simulation modules
 ├── scripts/
 │   ├── serve.js               Dev server with caching tile proxy
 │   ├── prefetch-tiles.js      Bulk tile downloader for offline use
@@ -204,6 +210,7 @@ cache/
 ├── vendor/takram/             Vendored takram atmosphere WebGPU builds, with local patches (see its README)
 ├── docs/
 │   ├── rendering-roadmap.md   Rendering overhaul plan, progress, measurements, decisions
+│   ├── gameplay-roadmap.md    Flight model, takeoff and landing, radar, weapons and drones plan, progress, decisions
 │   └── screenshots/           README screenshots, reference view captures per milestone
 ├── benchmarks/                Benchmark reports and full-resolution captures (git-ignored)
 └── cache/                     Local tile cache (git-ignored)
