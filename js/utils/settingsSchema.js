@@ -409,7 +409,7 @@ export const SETTINGS = [
     tab: 'audio',
     section: 'Volume',
     label: 'Engines',
-    help: 'Sound of the aircraft engines. The aircraft has no engine sound yet: this volume will apply to it.',
+    help: 'Sound of the aircraft engines: turbine whine, jet roar and afterburner rumble.',
     type: 'range',
     min: 0,
     max: 1,

@@ -36,6 +36,7 @@ import BenchmarkRunner from './benchmark/BenchmarkRunner.js';
 import BenchmarkComparator from './benchmark/BenchmarkComparator.js';
 import GPUTimer from './benchmark/GPUTimer.js';
 import AircraftManager from './aircraft/AircraftManager.js';
+import EngineSound from './audio/EngineSound.js';
 import ChaseCameraController from './camera/ChaseCameraController.js';
 import FlightPlanRecorder from './flightplan/FlightPlanRecorder.js';
 import Stats from 'stats.js';
@@ -119,6 +120,9 @@ async function initApp() {
   if (flight === simulation) simulation.teleport(aircraft.position.clone(), aircraft.yaw, 0);
   const _qRoll = new THREE.Quaternion();
   const _axisZ = new THREE.Vector3(0, 0, 1);
+  const _toListener = new THREE.Vector3();
+  const _nose = new THREE.Vector3();
+  const engineSound = new EngineSound();
   const _autopilotEuler = new THREE.Euler(0, 0, 0, 'YXZ');
   const _autopilotQuat = new THREE.Quaternion();
   const aircraftManager = new AircraftManager(scene, {
@@ -619,6 +623,20 @@ async function initApp() {
           chaseCameraController.update(aircraftState, camera, dt);
         }
       }
+    }
+
+    // --- Engine sound, heard from the camera ---
+    if (aircraftState && aircraftManager.ready && !paused) {
+      _toListener.subVectors(camera.position, aircraftState.position);
+      const distance = _toListener.length();
+      _nose.set(0, 0, -1).applyQuaternion(aircraftState.quaternion);
+      engineSound.update(dt, aircraftManager.engines, {
+        distance,
+        ahead: distance > 0 ? _nose.dot(_toListener) / distance : 0,
+        cockpit: CONFIG.cameraMode === 'cockpit',
+      });
+    } else {
+      engineSound.update(dt, null, { distance: 0, ahead: 0, cockpit: false });
     }
 
     // --- Environment phase ---
