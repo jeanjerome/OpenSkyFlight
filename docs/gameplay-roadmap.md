@@ -10,10 +10,10 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
 
 ## État courant (mis à jour le 2026-11-25)
 
-- **Statut** : plan validé le 2026-11-25 (voir **Décisions**). **G0, G1 et G2 (sauf G2.4 et l'option
-  G2.7) faits** sur la branche `feat/flight-model` (non fusionnée, non poussée), sauf le préchargement et les requêtes par lot de G0.4 (reportés à
-  G3 et G5) et la récupération automatique de G1.2 (reportée). Prochaine étape : G2.4 (brume de
-  chaleur), puis alterner avec les lots de rendu (lot 4).
+- **Statut** : plan validé le 2026-11-25 (voir **Décisions**). **G0, G1 et G2 (sauf l'option G2.7)
+  faits et commités** sur la branche `feat/flight-model` (non fusionnée, non poussée), sauf le préchargement et les requêtes par lot de G0.4 (reportés à
+  G3 et G5) et la récupération automatique de G1.2 (reportée). Prochaine étape : alterner avec les
+  lots de rendu (lot 4, nuages volumétriques), puis G3 (décollage et atterrissage).
 - **Vue orbite** (demandée par l'utilisateur, hors lots) : `CONFIG.cameraMode = 'orbit'`, entre la
   poursuite et le cockpit (`V`), `js/camera/OrbitCameraController.js`. La caméra tourne autour de
   l'avion dans son repère (roulis compris, rattrapé comme la poursuite liée), vise 3 m derrière son
@@ -26,8 +26,11 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
   - `js/flight/exhaust.js` (`exhaustJet()` : rapport de pression de tuyère, Mach du jet, diamètre de
     sortie, espacement des cellules de choc, premier disque de Mach, niveau et longueur de flamme),
     `js/aircraft/EngineExhaust.js` (volets de tuyère, lueur de la turbine, flamme volumique, lumière de
-    PC), `js/audio/EngineSound.js` (son synthétisé). `AircraftManager.engines` et `.jet` donnent le
-    régime affiché et entendu ; `AircraftLights` ne garde que les feux.
+    PC, brume de chaleur), `js/audio/EngineSound.js` (son synthétisé). `AircraftManager.engines` et
+    `.jet` donnent le régime affiché et entendu ; `AircraftLights` ne garde que les feux.
+  - Réglages graphiques ajoutés : « Heat haze » (High et Ultra, ≈ +0,1 ms) et « Afterburner light »
+    (Ultra, +0,1 à 0,2 ms même éteinte). Brume : `ScenePipeline.setHeatLayer()` et couche
+    `HEAT_LAYER` ; flamme : passe de halo (`GLOW_LAYER`).
   - La flamme est dessinée par la passe de halo : ses fragments partent de la position de la caméra
     dans le repère du modèle, prise dans `onBeforeRender` (la matrice monde de l'avion de la frame,
     pas celle d'avant : à 300 m/s, un retard d'une frame décale le rayon de 2,5 m).
@@ -98,15 +101,23 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
     incompatible avec sa présence dans le dépôt public (voir Décisions, « Encore ouvert ») : laissé
     tel quel à la demande de l'utilisateur, le 2026-11-25.
 - **Prochaine session** : sur `feat/flight-model` (ni fusionnée ni poussée).
-  1. G2.4 : brume de chaleur en espace écran (tampon de décalage avant le TAAU), preset High et plus.
-  2. Recueillir le ressenti de l'utilisateur : visée souris (revue le 2026-11-25, voir **Mesures**) et roulis clavier (gains dans
-     `js/flight/MouseAim.js`, `KEY_STICK_TIME` de `js/flight/SimulatedFlight.js`, `KEYBOARD_STICK`
-     de `js/constants/controls.js`), son moteur à l'oreille (niveaux dans `EngineSound.update`),
-     aspect de la flamme (poids et couleurs dans `EngineExhaust._emission`), vue orbite.
-  4. Puis lot 4 du rendu (nuages volumétriques) en alternance.
-- **Outils** : `npm test` (tests Node, dont le banc du modèle de vol), `npm run flight:bench`
-  (tableau du banc), scripts Playwright ad hoc dans le scratchpad de session (manette simulée par
-  `navigator.getGamepads` injecté avec `addInitScript` ; `window.osf.aircraft()` donne mode, Mach,
+  1. Recueillir le ressenti de l'utilisateur en vol : brume de chaleur (force `HAZE_BEND`, vitesse
+     `HAZE_FLOW` dans `js/aircraft/EngineExhaust.js`), visée souris (revue le 2026-11-25, voir
+     **Mesures** ; convergence latérale encore lente, `SIDE_BANK_GAIN`), roulis clavier
+     (`KEY_STICK_TIME` de `js/flight/SimulatedFlight.js`, `KEYBOARD_STICK` de
+     `js/constants/controls.js`), son moteur (niveaux dans `EngineSound.update`), flamme (poids et
+     couleurs dans `EngineExhaust._emission`), sens de la souris en vue orbite.
+  2. Clôture des lots G0 à G2 : proposer à l'utilisateur de fusionner `feat/flight-model` dans `main`
+     (convention : fusion à la clôture) et de pousser ; c'est sa décision.
+  3. Puis lot 4 du rendu (nuages volumétriques, L4.1) sur `feat/render-clouds` depuis `main`, en
+     suivant `docs/rendering-roadmap.md` (État courant : la référence des vues a changé avec la brume
+     de chaleur) ; G3 (décollage et atterrissage) ensuite.
+- **Outils** : `npm test` (tests Node, dont le banc du modèle de vol et l'instructeur de visée),
+  `npm run flight:bench` (tableau du banc), scripts Playwright ad hoc dans le scratchpad de session
+  (vue orbite par `?cameraMode=orbit` et la molette pour cadrer l'avion, `window.osf.setConfig(clé,
+  valeur)` pour basculer un réglage sur la même vue, Exploration sans gaz pour une image immobile ;
+  le verrouillage du pointeur est refusé à l'automatisation, la souris ne s'y teste pas ; manette
+  simulée par `navigator.getGamepads` injecté avec `addInitScript` ; `window.osf.aircraft()` donne mode, Mach,
   vitesse, g, incidence, inclinaison, manette, poussée et carburant). Serveur de test sur un autre
   port que celui de l'utilisateur (3000), voir `docs/rendering-roadmap.md`, Outillage.
 
@@ -259,9 +270,22 @@ sol) ; les nuages volumétriques (lot 4) n'ont pas de dépendance avec ces lots.
       Fait : les volets convergents du modèle (charnière à z = −6,15 m, sortie à −6,64 m) se
       déforment dans le nuanceur de sommets (`positionNode`) : ouverts au ralenti (0,62 m, estimé),
       fermés au plein sec (0,55 m), ouverts en PC (0,68 m, rayon dessiné par le modèle).
-- [ ] **G2.4** Brume de chaleur en espace écran : tampon de décalage dessiné par un cône derrière les
+- [x] **G2.4** Brume de chaleur en espace écran : tampon de décalage dessiné par un cône derrière les
       tuyères (toujours actif, même à sec), appliqué avant le TAAU, atténué sur les bords ; preset
       High et plus.
+      Fait : `ScenePipeline.setHeatLayer()` rend la couche `HEAT_LAYER` dans un tampon de décalages
+      (uv) à demi-résolution ; la passe d'atmosphère, qui lit la scène de toute façon, lit sa couleur
+      et sa profondeur aux positions décalées (pas de passe plein écran en plus ; pas de brume en mode
+      SAR, sans atmosphère). `EngineExhaust._createHaze()` : colonne d'air chaud gaussienne autour de
+      chaque axe (0,35 m à la sortie, +0,05 m/m, refroidie sur 8 m, 22 m de long), intégrée en
+      6 échantillons le long de la ligne de vue et arrêtée par la scène ; direction donnée par un
+      bruit de Perlin (tourbillons de 0,3 m) entraîné à 6 m/s vers l'aval (≈ 10 Hz : plus vite, le TAAU
+      le moyennerait en flou) ; déviation angulaire convertie en décalage d'écran par la projection,
+      nulle au bord de la colonne ; chaleur selon le régime (0,6 au ralenti → 1 au plein sec → 2,3 en
+      PC). Force : 10⁻² rad par mètre de colonne, quatre fois l'estimation physique, pour que le
+      scintillement survive au TAAU (quelques pixels près des tuyères) ; à juger en vol. Réglage
+      « Heat haze » (Graphics, Light), presets High et Ultra. Coût : ≈ +0,1 ms sur les vues de
+      référence (voir **Mesures**), +0,05 à +0,1 ms en vue orbite rapprochée.
 - [x] **G2.5** Lumière ponctuelle de PC qui éclaire le fuselage et le sol à basse altitude.
       Fait : `PointLight` 2,5 m derrière les tuyères, 160 000 cd au plein (estimé), orange, avec la
       même exposition que la flamme, pour que ce qu'elle éclaire ne soit pas plus clair qu'elle.
@@ -543,6 +567,7 @@ Preset High, écran intégré 120 Hz, mêmes protocoles que `docs/rendering-road
 | 2026-11-25 | G1 (`benchmarks/render/g1`, puis `g1-cap2`) | 3,44 / 3,43 / 3,50 / 3,87 / 3,94 / 3,68, puis 3,48 / 3,86 / 3,94 / 3,60 / 4,39 / 3,55 | 119,4 · 105,3 · 64,9 · 1 | Draw calls identiques ; les écarts changent de vue d'une série à l'autre (machine chaude après une longue série de mesures) : bruit thermique, le rendu n'a pas changé. À remesurer machine froide en début de G2 |
 | 2026-11-25 | G1, remesuré (`g1-cold`) et en alternance avec G0 servi par un worktree (`ab-g0-*`, `ab-g1-*`) | 3,44 / 3,85 / 3,50 / 3,54 / 4,32 / 3,70 ; en alternance G0 3,44 / 3,43 / 3,50 / 3,40 / 3,79 / 3,48 et G1 3,44 / 3,44 / 3,50 / 3,86 / 3,79 / 3,48 | | Les sauts de +0,4 ms touchent aussi G0 d'une série à l'autre : bruit (paliers d'horloge du GPU), G1 ne coûte rien |
 | 2026-11-25 | G2, preset High (`ab2-3002-*` ; vol : `g2-flight`) | 3,44 / 3,44 / 3,50 / 3,41 / 3,79 / 3,48 (deux séries) | 119,3 · 105,3 · 61,0 · 0 | Identique à G0 ; une série isolée (`g2-exhaust`) avait donné 5,14 ms sur la vue 5 : bruit. Vol : PC visible tout le trajet (trajectoire imposée au-delà de 300 m/s), p1 à −6 % de G1 |
+| 2026-11-25 | G2, brume de chaleur active (`haze-true-*`) et coupée (`haze-false-*`), en alternance ; vol : `g2-haze-flight` | Active : 3,55 / 3,52–3,70 / 3,59–3,85 / 3,68–3,99 / 3,89–4,09 / 3,59–3,71 ; coupée : 3,44 / 3,43–3,44 / 3,50 / 3,40–3,86 / 3,79–4,32 / 3,48 | 119,2 · 105,3 · 60,2 · 1 | ≈ +0,1 ms sur chaque vue (passe de décalages et lectures décalées dans la passe d'atmosphère) ; vol p1 à −7 % de G1 |
 | 2026-11-25 | G2, lumière de PC présente et éteinte (`ab3-3002-*`) | 3,53 / 3,61–4,02 / 3,67–3,73 / 3,50–3,96 / 3,94–4,27 / 3,58–4,07 | | +0,1 à +0,2 ms sur chaque vue, d'où le réglage réservé à Ultra |
 
 Vérifications de G2 dans Chrome (`?dev=1`, caméra placée autour de l'avion par un crochet
@@ -617,6 +642,7 @@ piqué dans le relief : crash et redémarrage ; aucune erreur console.
 
 | Date | Fait | Reste / prochaine étape |
 |---|---|---|
+| 2026-11-25 | G2.4 : brume de chaleur (tampon de décalages, appliqué dans la passe d'atmosphère avant le TAAU), réglage « Heat haze » en High et Ultra ; ≈ +0,1 ms | Ressenti en vol ; lot 4 du rendu, puis G3 |
 | 2026-11-25 | Visée souris : l'avion ne se met plus sur le dos pour une visée modérément basse et n'oscille plus en pendule (poussée sans roulis, retour à l'endroit nez sur la visée, sens de roulis gardé) ; tests | Ressenti en vol ; convergence latérale lente à régler si besoin ; G2.4 |
 | 2026-11-25 | G2 commité (jets et lumière de PC, son, doc) ; vue orbite autour de l'avion (souris, stick droit, molette) | G2.4 (brume de chaleur) ; ressenti en vol |
 | 2026-11-25 | Écarts de G1 levés (bruit, mesures en alternance avec un worktree de G0) ; G2 : modèle du jet, volets de tuyère, flamme volumique avec diamants de choc intégrés exactement, lumière de PC (preset Ultra), son moteur synthétisé ; vérifié dans Chrome de jour et de nuit | Commiter G2 ; G2.4 (brume de chaleur) ; ressenti en vol (visée, son, flamme) ; vue extérieure libre proposée |

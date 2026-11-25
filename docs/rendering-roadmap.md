@@ -66,13 +66,23 @@ en fin de session.
   call) : tout uniforme commun à la frame doit passer en `renderGroup` ; le ray marching de takram lit
   un bruit bleu à `screenCoordinate`, absent d'un compute (`raymarchSampleOffset`) ; comparer
   WebGPU et WebGL2 avec `autoExposure=false` (exposition automatique WebGPU seulement).
-- **En pause depuis le 2026-11-25** : les lots G0 à G2 de `docs/gameplay-roadmap.md` (socle de
-  simulation, modèle de vol, réacteurs et jets) passent avant le lot 4 ; les lots de vol et de rendu
-  alternent ensuite. G0 et G1 sont faits sur `feat/flight-model` (non fusionnée) ; G2 suit.
-  Conséquences pour les mesures de rendu : l'app démarre en mode Simulation (l'avion vole) ; les
-  vues de référence passent en Exploration (immobile) et `render:benchmark` ouvre l'app avec
-  `flightMode=exploration`, donc les captures et vols restent comparables. Captures G0/G1 :
-  `benchmarks/render/g0`, `g1`, `g1-cap2`.
+- **Pause terminée le 2026-11-25** : les lots G0 à G2 de `docs/gameplay-roadmap.md` (socle de
+  simulation, modèle de vol, réacteurs et jets) sont faits sur `feat/flight-model` (non fusionnée, non
+  poussée) ; les lots de vol et de rendu alternent désormais, le lot 4 d'abord. Conséquences pour les
+  mesures de rendu :
+  - l'app démarre en mode Simulation (l'avion vole) ; les vues de référence passent en Exploration
+    (immobile) et `render:benchmark` ouvre l'app avec `flightMode=exploration` ;
+  - **le preset High inclut la brume de chaleur** derrière les tuyères (réglage `heatHaze`,
+    ≈ +0,1 ms sur chaque vue : passe de décalages et lectures décalées dans la passe d'atmosphère) :
+    nouvelle référence des vues `benchmarks/render/haze-true-1` et `haze-true-2` ; pour comparer à
+    `lot3-cap2`, capturer avec `--set heatHaze=false` (`haze-false-*` : identique au lot 3) ;
+  - la lumière de postcombustion (`afterburnerLight`, +0,1 à 0,2 ms même éteinte) n'est active qu'en
+    Ultra : le coût relatif d'Ultra (`PRESET_GPU_COST`) passe de 1,12 à 1,16 ;
+  - le vol du plan 1 montre la flamme de PC tout le trajet (trajectoire imposée au-delà de
+    300 m/s) : référence `benchmarks/render/g2-haze-flight` (p1 60,2, contre 64,1 au lot 3) ;
+  - les écarts de +0,4 ms (jusqu'à +1,3) qui sautent d'une vue à l'autre d'une série de captures à
+    l'autre touchent aussi l'ancien code : seules des captures alternées (worktree de l'ancien état
+    sur le port 3001, ou `--set` d'un réglage sur le même code) tranchent une régression.
 - **Prochaine session de rendu** : lot 4, en commençant par L4.1 (textures de bruit 3D par compute). La
   couche nuageuse plane actuelle suit déjà la courbure de la Terre (sous-divisée) ; les nuages
   volumétriques devront faire de même (couche sphérique autour de la caméra) et reprendre le
