@@ -1,10 +1,11 @@
 /**
  * @description: Elevation worker: downloads and decodes the Terrarium source
  * tiles, keeps the most recently used ones, and computes the elevations of
- * the tiles asked for, off the main thread.
+ * the tiles asked for, off the main thread, flattened under the runways it
+ * was last given.
  */
 
-import { decodeTerrarium, HeightGrid, sourceRanges, tileData } from "./heights";
+import { decodeTerrarium, HeightGrid, RunwayInput, setRunways, sourceRanges, tileData } from "./heights";
 
 /** Decoded source tiles kept for the edges of the tiles loaded next */
 const CACHE_SIZE = 400;
@@ -44,7 +45,11 @@ function source(template: string, z: number, x: number, y: number): Promise<Heig
 	return grid;
 }
 
-self.onmessage = async (message: MessageEvent<Request>) => {
+self.onmessage = async (message: MessageEvent<Request | { runways: RunwayInput[] }>) => {
+	if ("runways" in message.data) {
+		setRunways(message.data.runways);
+		return;
+	}
 	const { id, x, y, z, maxSource, template } = message.data;
 	const ranges = sourceRanges(x, y, z, maxSource);
 	const grids = await Promise.all(

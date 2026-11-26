@@ -49,15 +49,34 @@ export function tileOf(lat, lon, z = RUNWAY_TILE_ZOOM) {
   return { x: Math.min(n - 1, Math.max(0, x)), y: Math.min(n - 1, Math.max(0, y)) };
 }
 
-/** Runways of the map tiles around the aircraft: its tile and the eight around it */
+/**
+ * Runways of the map tiles around the aircraft (its tile and the eight
+ * around it), and of airports added by name
+ */
 export class RunwayCatalog {
   constructor() {
-    /** Runways loaded, from all the tiles kept */
+    /** Runways loaded, from all the tiles kept, each once */
     this.runways = [];
     /** Called when the runways loaded change */
     this.onChange = null;
     this._tiles = new Map();
+    this._extra = new Map();
     this._current = null;
+  }
+
+  /**
+   * Loads the tiles around a position
+   * @returns {Promise<void>} settled once they are loaded (or failed)
+   */
+  load(lat, lon) {
+    this.update(lat, lon);
+    return Promise.all([...this._tiles.values()].map((tile) => tile.loading)).then(() => undefined);
+  }
+
+  /** Adds runways known otherwise (an airport found by a search) */
+  add(runways) {
+    for (const runway of runways) this._extra.set(runway.id, runway);
+    this._collect();
   }
 
   /** Loads the tiles around a position, drops those far from it */
@@ -90,9 +109,9 @@ export class RunwayCatalog {
   _load(x, y) {
     const key = `${x}/${y}`;
     if (this._tiles.has(key)) return;
-    const tile = { x, y, runways: [] };
+    const tile = { x, y, runways: [], loading: null };
     this._tiles.set(key, tile);
-    fetch(`/api/runways/${RUNWAY_TILE_ZOOM}/${x}/${y}`)
+    tile.loading = fetch(`/api/runways/${RUNWAY_TILE_ZOOM}/${x}/${y}`)
       .then((res) => (res.ok ? res.json() : []))
       .then((runways) => {
         if (this._tiles.get(key) !== tile) return;
@@ -106,7 +125,9 @@ export class RunwayCatalog {
   }
 
   _collect() {
-    this.runways = [...this._tiles.values()].flatMap((tile) => tile.runways);
+    const byId = new Map(this._extra);
+    for (const tile of this._tiles.values()) for (const runway of tile.runways) byId.set(runway.id, runway);
+    this.runways = [...byId.values()];
     this.onChange?.(this.runways);
   }
 }

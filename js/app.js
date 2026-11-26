@@ -54,7 +54,17 @@ async function initApp() {
   const scenePipeline = new ScenePipeline(renderer, scene, camera);
 
   // --- Terrain ---
+  // The ground is flattened under the runways around: they are loaded before
+  // the terrain of a new place, which then draws them flat from the start
   const geoTerrainManager = new GeoTerrainManager(scene, renderer);
+  const runwayCatalog = new RunwayCatalog();
+  /** Longest wait for the runways of a place before loading its terrain anyway (ms) */
+  const RUNWAY_WAIT = 3000;
+  runwayCatalog.onChange = (runways) => geoTerrainManager.setRunways(runways);
+  /** Load the runways around a place, waiting no more than a few seconds for the server */
+  const loadRunways = (lat, lon) =>
+    Promise.race([runwayCatalog.load(lat, lon), new Promise((resolve) => setTimeout(resolve, RUNWAY_WAIT))]);
+  await loadRunways(CONFIG.lat, CONFIG.lon);
   geoTerrainManager.init(CONFIG.lat, CONFIG.lon);
 
   // --- Atmosphere ---
@@ -451,18 +461,21 @@ async function initApp() {
   // Runways around the aircraft, and the start lined up on a runway: the
   // terrain is loaded around its start, the aircraft holds there until the
   // ground under it has loaded, then stands on its wheels
-  const runwayCatalog = new RunwayCatalog();
   let runwayStart = null;
   let catalogCountdown = 0;
 
-  /** Line up this far past the start of the runway's pavement (m) */
+  /** Line up this far past the start of the runway (m) */
   const LINE_UP_DISTANCE = 40;
   /** Longest wait for the ground under a runway start (ms) */
   const RUNWAY_LOAD_TIMEOUT = 20000;
 
-  function startOnRunway(airport, runway, endIndex) {
+  async function startOnRunway(airport, runway, endIndex) {
     const end = runway.ends[endIndex];
     const start = offsetPosition(end.lat, end.lon, end.heading, LINE_UP_DISTANCE);
+    const label = `${airport.ident} runway ${end.ident}`;
+    showNotification(`${label}: loading the airport…`);
+    runwayCatalog.add(airport.runways);
+    await loadRunways(start.lat, start.lon);
     update('flightMode', 'simulation');
     update('lat', start.lat);
     update('lon', start.lon);
@@ -471,8 +484,7 @@ async function initApp() {
     simulation.hold(new THREE.Vector3(0, end.elevation + 2, 0), yaw);
     simulation.groundStart = null;
     chaseCameraController.reset();
-    runwayStart = { yaw, since: performance.now(), settled: 0, label: `${airport.ident} runway ${end.ident}` };
-    showNotification(`${runwayStart.label}: loading the airport…`);
+    runwayStart = { yaw, since: performance.now(), settled: 0, label };
   }
 
   /** Stand the aircraft on the runway once the ground there has loaded */
@@ -508,7 +520,8 @@ async function initApp() {
           });
         }
       },
-      flyTo: (lat, lon) => {
+      flyTo: async (lat, lon) => {
+        await loadRunways(lat, lon);
         update('lat', lat);
         update('lon', lon);
         geoTerrainManager.reinit();

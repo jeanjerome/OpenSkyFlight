@@ -19,6 +19,132 @@ const MAP_WIDTH = 2 * Math.PI * 6378137;
  */
 const NORMAL_BASELINE = 25;
 
+/**
+ * Runways the ground is flattened under: their strip (the runway widened to
+ * STRIP_HALF_WIDTH on either side of its centre line and lengthened by
+ * STRIP_END_MARGIN at each end) lies on the straight line between the
+ * elevations of its two ends, and the ground blends back into the source's
+ * over FLATTEN_BLEND around it, with a smoothstep
+ */
+const STRIP_HALF_WIDTH = 150;
+const SHORT_STRIP_HALF_WIDTH = 75;
+const SHORT_RUNWAY = 1200;
+const STRIP_END_MARGIN = 60;
+const FLATTEN_BLEND = 150;
+
+/** A runway as given: its two ends (degrees, elevation in metres) */
+export interface RunwayInput {
+	lat0: number;
+	lon0: number;
+	elevation0: number;
+	lat1: number;
+	lon1: number;
+	elevation1: number;
+}
+
+/** A runway in the [0, 1] Web Mercator square (u eastward, v southward), lengths in true metres */
+interface Runway {
+	u: number;
+	v: number;
+	/** True metres per unit of the square, at the runway */
+	metres: number;
+	/** Unit vector from end 0 to end 1, in true metres eastward and southward */
+	ax: number;
+	ay: number;
+	length: number;
+	halfLength: number;
+	halfWidth: number;
+	elevation0: number;
+	elevation1: number;
+	/** Bounds of the ground it flattens, in the square */
+	minU: number;
+	maxU: number;
+	minV: number;
+	maxV: number;
+}
+
+let runways: Runway[] = [];
+
+const mercatorV = (lat: number) => {
+	const r = (lat * Math.PI) / 180;
+	return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2;
+};
+
+/** Sets the runways the elevations of the tiles computed next are flattened under */
+export function setRunways(list: RunwayInput[]) {
+	runways = list.map(r => {
+		const u0 = (r.lon0 + 180) / 360;
+		const u1 = (r.lon1 + 180) / 360;
+		const v0 = mercatorV(r.lat0);
+		const v1 = mercatorV(r.lat1);
+		const metres = MAP_WIDTH * Math.cos((((r.lat0 + r.lat1) / 2) * Math.PI) / 180);
+		const dx = (u1 - u0) * metres;
+		const dy = (v1 - v0) * metres;
+		const length = Math.max(1, Math.hypot(dx, dy));
+		const halfWidth = length >= SHORT_RUNWAY ? STRIP_HALF_WIDTH : SHORT_STRIP_HALF_WIDTH;
+		const halfLength = length / 2 + STRIP_END_MARGIN;
+		const reach = (Math.hypot(halfLength, halfWidth) + FLATTEN_BLEND) / metres;
+		const u = (u0 + u1) / 2;
+		const v = (v0 + v1) / 2;
+		return {
+			u,
+			v,
+			metres,
+			ax: dx / length,
+			ay: dy / length,
+			length,
+			halfLength,
+			halfWidth,
+			elevation0: r.elevation0,
+			elevation1: r.elevation1,
+			minU: u - reach,
+			maxU: u + reach,
+			minV: v - reach,
+			maxV: v + reach,
+		};
+	});
+}
+
+/**
+ * The sampler with the ground flattened under the runways that may affect
+ * the tile: those within a tile of it (its parent's surface, the profiles of
+ * coarser neighbours and the ring of its normals read a little beyond it).
+ * The same runways flatten every tile that reads a position, so that tiles
+ * still meet without a seam.
+ */
+function flattened(x: number, y: number, z: number, sample: Sampler): Sampler {
+	const size = 1 / 2 ** z;
+	const near = runways.filter(
+		r => r.maxU > (x - 1) * size && r.minU < (x + 2) * size && r.maxV > (y - 1) * size && r.minV < (y + 2) * size,
+	);
+	if (!near.length) return sample;
+	return (zs, px, py) => {
+		const ground = sample(zs, px, py);
+		const across = SOURCE_TILE_SIZE * 2 ** zs;
+		const u = (px + 0.5) / across;
+		const v = (py + 0.5) / across;
+		let weight = 0;
+		let sum = 0;
+		let total = 0;
+		for (const r of near) {
+			if (u < r.minU || u > r.maxU || v < r.minV || v > r.maxV) continue;
+			const dx = (u - r.u) * r.metres;
+			const dy = (v - r.v) * r.metres;
+			const along = dx * r.ax + dy * r.ay;
+			const side = dy * r.ax - dx * r.ay;
+			const outside = Math.hypot(Math.max(0, Math.abs(along) - r.halfLength), Math.max(0, Math.abs(side) - r.halfWidth));
+			if (outside >= FLATTEN_BLEND) continue;
+			const t = 1 - outside / FLATTEN_BLEND;
+			const w = t * t * (3 - 2 * t);
+			const share = Math.min(1, Math.max(0, along / r.length + 0.5));
+			sum += w * (r.elevation0 + share * (r.elevation1 - r.elevation0));
+			total += w;
+			weight = Math.max(weight, w);
+		}
+		return weight > 0 ? ground + weight * (sum / total - ground) : ground;
+	};
+}
+
 /** Decoded Terrarium tile: elevations in metres, row 0 = north edge */
 export interface HeightGrid {
 	size: number;
@@ -155,7 +281,7 @@ export function tileData(
 	ranges: SourceRange[],
 	grids: (HeightGrid | null)[][],
 ) {
-	const sample = sampler(ranges, grids);
+	const sample = flattened(x, y, z, sampler(ranges, grids));
 	return { ...buildHeights(x, y, z, maxSource, sample), normals: buildNormals(x, y, z, maxSource, sample) };
 }
 

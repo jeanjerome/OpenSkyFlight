@@ -10,6 +10,7 @@ import {
   parentRow,
   setTerrainHorizontalScale,
   MAX_STITCH_LEVELS,
+  TerrariumShaderLoader,
 } from 'three-tile';
 import { CONFIG, onChange, update } from '../utils/config.js';
 import ElevationProvider from '../geo/ElevationProvider.js';
@@ -467,6 +468,24 @@ export default class GeoTerrainManager {
 
   reinit() {
     this.init(CONFIG.lat, CONFIG.lon);
+  }
+
+  /**
+   * Flatten the ground under runways (see Airports.js), in the tiles loaded
+   * from now on: their strips lie between the elevations of their two ends
+   * @param {{ends: {lat: number, lon: number, elevation: number}[]}[]} runways
+   */
+  setRunways(runways) {
+    TerrariumShaderLoader.setRunways(
+      runways.map(({ ends: [a, b] }) => ({
+        lat0: a.lat,
+        lon0: a.lon,
+        elevation0: a.elevation,
+        lat1: b.lat,
+        lon1: b.lon,
+        elevation1: b.elevation,
+      })),
+    );
   }
 
   /**

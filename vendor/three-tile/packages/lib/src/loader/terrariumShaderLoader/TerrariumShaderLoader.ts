@@ -24,6 +24,11 @@ import { version } from "../..";
 import { TileGeometry } from "../../geometry/TileGeometry";
 import { gridCells, NORMAL_MAP_SIZE } from "./grid";
 import HeightsWorker from "./heights.worker?worker&inline";
+import type { RunwayInput } from "./heights";
+
+/** Runways the ground is flattened under, as last set, for workers started later */
+let currentRunways: RunwayInput[] = [];
+const loaders = new Set<TerrariumShaderLoader>();
 
 /**
  * Terrarium elevation loader
@@ -53,6 +58,10 @@ import HeightsWorker from "./heights.worker?worker&inline";
  *
  * The source tiles are downloaded, decoded and kept by a worker, which
  * computes the elevations and normals off the main thread (see heights.worker).
+ *
+ * The ground is flattened under the runways set by `setRunways`, in that one
+ * function of the position: tiles computed afterwards draw the runways flat,
+ * their normals and the elevations read on the CPU with them.
  */
 export class TerrariumShaderLoader extends TileGeometryLoader {
 	public readonly info = {
@@ -65,6 +74,15 @@ export class TerrariumShaderLoader extends TileGeometryLoader {
 	private worker: Worker | null = null;
 	private requests = new Map<number, (result: HeightsResult) => void>();
 	private nextId = 0;
+
+	/**
+	 * Sets the runways the ground is flattened under, for the tiles loaded
+	 * from now on (tiles already loaded keep their elevations)
+	 */
+	public static setRunways(runways: RunwayInput[]): void {
+		currentRunways = runways;
+		for (const loader of loaders) loader.worker?.postMessage({ runways });
+	}
 
 	protected async doLoad(_url: string, params: TileLoadClipParamsType): Promise<TileGeometry> {
 		const { source, x, y, z } = params;
@@ -98,6 +116,8 @@ export class TerrariumShaderLoader extends TileGeometryLoader {
 	private computeHeights(request: Omit<HeightsRequest, "id">): Promise<HeightsResult> {
 		if (!this.worker) {
 			this.worker = new HeightsWorker();
+			loaders.add(this);
+			this.worker.postMessage({ runways: currentRunways });
 			this.worker.onmessage = (event: MessageEvent<HeightsResult & { id: number }>) => {
 				const resolve = this.requests.get(event.data.id);
 				this.requests.delete(event.data.id);
