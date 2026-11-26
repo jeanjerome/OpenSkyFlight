@@ -20,8 +20,10 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
   G3.4 (aéroports, départ d'une piste depuis le menu : onglet World, section Airports) et G3.5
   (terrain aplani sous les pistes), G3.6 (pistes et marquages peints, tuiles au zoom 18 autour) et
   G3.7 (balisage lumineux et PAPI) et G3.8 (guidage d'approche, pilote automatique `C`) faits :
-  **lot G3 terminé** le 2026-11-27, branche non poussée ni fusionnée. Suite au choix de
-  l'utilisateur : ses essais en vol, la fusion, puis le lot de rendu 6 ou G4 (radar de nuit). Bundle three-tile à reconstruire après un changement de branche (`cd vendor/three-tile &&
+  **lot G3 terminé** le 2026-11-27, puis le banc de pilotage (voir **Banc de pilotage**) ;
+  `feat/takeoff-landing` fusionnée dans `main` (avance rapide) le 2026-11-27 à la demande de
+  l'utilisateur, non poussée. Suite au choix de l'utilisateur : ses essais en vol, le lot de rendu 6
+  ou G4 (radar de nuit). Bundle three-tile à reconstruire après un changement de branche (`cd vendor/three-tile &&
   npm run build:lib`) : l'aplanissement est dans son worker. L'avion porte désormais
   son ombre et reçoit celle du relief (`js/aircraft/AircraftShadow.js`, calque `SHADOW_CASTER_LAYER`
   pour ce qui doit la projeter : penser au train d'atterrissage de G3).
@@ -827,6 +829,7 @@ Demandé par l'utilisateur le 2026-11-27 : un banc que l'agent exerce lui-même 
 
 | Date | Fait | Reste / prochaine étape |
 |---|---|---|
+| 2026-11-27 | `feat/takeoff-landing` (G3 et banc de pilotage) fusionnée dans `main` en avance rapide | Pousser `main` ; lot de rendu 6 ou G4, au choix de l'utilisateur |
 | 2026-11-27 | Banc de pilotage : pilote scripté (tour de piste complet par les entrées du joueur), test Node sur piste plate, `npm run flight:scenario` dans Chrome sur une vraie piste avec rapport et captures ; premier passage à LSGG 04 réussi | Scénarios supplémentaires (nuit, autres pistes, vent quand il existera) ; ressenti en vol par l'utilisateur ; fusion de la branche |
 | 2026-11-27 | G3.8 : guidage d'approche sur le HUD (seuil visé, écarts d'alignement et de pente, PAPI virtuel), pilote automatique de cap et d'altitude (`C`) ; tests ; vérifié dans Chrome (LSGG 04). Lot G3 terminé | Ressenti en vol par l'utilisateur (décollage, approche, atterrissage) ; fusion de `feat/takeoff-landing` à sa demande ; lot de rendu 6 ou G4 ensuite |
 | 2026-11-27 | G3.7 : balisage lumineux des pistes éclairées (bords, axe codé, seuils verts, fins rouges, rampe d'approche, PAPI selon l'angle de l'œil), allumé au crépuscule ou par mauvaise visibilité ; occultation tolérante au jitter du TAA ; coût dans le bruit ; vérifié dans Chrome (LSGG, CDG) | G3.8 (guidage d'approche sur le HUD, pilote automatique de cap et d'altitude) |
