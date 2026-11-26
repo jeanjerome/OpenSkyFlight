@@ -80,6 +80,12 @@ export class TileMap extends Object3D<TileMapEventMap> {
 
 	private _maxLevel = 19;
 	/** 地图最大缩放级别，大于这个级别瓦片树不再更新 */
+	/**
+	 * Highest level the subdivision of a tile (x, y, z) may reach, when it
+	 * depends on the place; null: maxLevel everywhere
+	 */
+	public maxLevelOf: ((x: number, y: number, z: number) => number) | null = null;
+
 	public get maxLevel() {
 		return this._maxLevel;
 	}
@@ -270,6 +276,7 @@ export class TileMap extends Object3D<TileMapEventMap> {
 				loader: this.loader,
 				minLevel: this.minLevel,
 				maxLevel: this.maxLevel,
+				maxLevelOf: this.maxLevelOf,
 				LODThreshold: this.LODThreshold,
 			});
 			// shadow

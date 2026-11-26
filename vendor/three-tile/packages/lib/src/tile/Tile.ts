@@ -46,6 +46,11 @@ export type TileUpdateParames = {
 	minLevel: number;
 	/** 最大层级 */
 	maxLevel: number;
+	/**
+	 * Highest level the subdivision of a tile (x, y, z) may reach, when it
+	 * depends on the place (finer detail around some areas); maxLevel elsewhere
+	 */
+	maxLevelOf?: ((x: number, y: number, z: number) => number) | null;
 	/** 瓦片LOD阈值 */
 	LODThreshold: number;
 };
@@ -318,9 +323,10 @@ export class Tile extends Object3D<TTileEventMap> {
 	 * @returns newTiles - 新创建的子瓦片数组
 	 */
 	protected LOD(params: TileUpdateParames) {
-		const { loader, minLevel, maxLevel, LODThreshold } = params;
+		const { loader, minLevel, maxLevel, maxLevelOf, LODThreshold } = params;
 		const parentMerging = this.parent instanceof Tile && this.parent._merging;
-		let action = LODEvaluate(this, minLevel, maxLevel, LODThreshold);
+		const max = maxLevelOf ? maxLevelOf(this.x, this.y, this.z) : maxLevel;
+		let action = LODEvaluate(this, minLevel, max, LODThreshold);
 		// No new detail under a tile merging its children
 		if (action === LODAction.create && parentMerging) action = LODAction.none;
 		this._merging = parentMerging || action === LODAction.remove;

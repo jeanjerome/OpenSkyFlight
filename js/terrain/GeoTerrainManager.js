@@ -31,6 +31,24 @@ function latLonToMercator(lat, lon) {
 }
 
 
+/**
+ * Finest tile level around airports (the imagery's finest, ≈ 0.6 m per pixel
+ * at 45° of latitude), and how far around a runway's ends it reaches (m): the
+ * runways, taxiways and aprons stay sharp near the ground, the rest of the
+ * terrain stops at zoom 15 (outside the hi-res mode)
+ */
+const AIRPORT_LEVEL = 18;
+const AIRPORT_DETAIL_REACH = 1500;
+
+/** Length of the equator (m): the width of the Web Mercator map */
+const EQUATOR = 2 * Math.PI * 6378137;
+
+/** Position in the [0, 1] Web Mercator square, u eastward and v southward */
+function mercatorUnit(lat, lon) {
+  const r = (lat * Math.PI) / 180;
+  return [(lon + 180) / 360, (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2];
+}
+
 /** Imagery texture of a tile mesh, null when it has none */
 function imageryOf(mesh) {
   if (!mesh) return null;
@@ -47,6 +65,8 @@ export default class GeoTerrainManager {
     this.scene = scene;
     this.renderer = renderer;
     this.tileMap = null;
+    /** Areas around the runways where the tiles go down to AIRPORT_LEVEL (see setRunways) */
+    this._airportAreas = [];
     /** Paints the runways over the satellite imagery of the tiles loaded (see RunwayMarkings), set by the app */
     this.runwayMarkings = null;
     /** @deprecated Alias for backwards compat — use tileMap */
@@ -97,6 +117,7 @@ export default class GeoTerrainManager {
     this.mapView = null;
 
     const effectiveZoom = CONFIG.hiResMode ? 18 : 15;
+    // Around airports the tiles may go down to the imagery's finest level
     // Read by the image loader for every tile, so a change applies to tiles loaded afterwards
     LoaderFactory.textureAnisotropy = Math.min(CONFIG.textureAnisotropy, this.renderer.getMaxAnisotropy());
 
@@ -107,7 +128,7 @@ export default class GeoTerrainManager {
         : '/tiles/satellite/{z}/{x}/{y}.png',
       dataType: 'image',
       minLevel: 0,
-      maxLevel: effectiveZoom,
+      maxLevel: Math.max(effectiveZoom, AIRPORT_LEVEL),
       // three-tile makes sources transparent by default: the tiles would be
       // sorted far to near and shade every hidden slope
       transparent: false,
@@ -127,7 +148,7 @@ export default class GeoTerrainManager {
           url: '',
           dataType: 'debug',
           minLevel: 0,
-          maxLevel: effectiveZoom,
+          maxLevel: Math.max(effectiveZoom, AIRPORT_LEVEL),
           transparent: false,
         })
       : imgSource;
@@ -137,8 +158,11 @@ export default class GeoTerrainManager {
       imgSource: source,
       demSource,
       minLevel: 2,
-      maxLevel: effectiveZoom,
+      maxLevel: Math.max(effectiveZoom, AIRPORT_LEVEL),
     });
+    // Finest everywhere in the hi-res mode, around the airports otherwise
+    this.tileMap.maxLevelOf = (x, y, z) =>
+      effectiveZoom >= AIRPORT_LEVEL || this._nearAirport(x, y, z) ? AIRPORT_LEVEL : effectiveZoom;
     this.mapView = this.tileMap; // Alias for backwards compat
     // The clouds' shadows (three-tile passes it on to every tile)
     this.tileMap.receiveShadow = true;
@@ -476,12 +500,29 @@ export default class GeoTerrainManager {
     this.init(CONFIG.lat, CONFIG.lon);
   }
 
+  /** Whether the tile (x, y, z) overlaps the area around a runway */
+  _nearAirport(x, y, z) {
+    const n = 2 ** z;
+    const u0 = x / n;
+    const v0 = y / n;
+    const u1 = (x + 1) / n;
+    const v1 = (y + 1) / n;
+    return this._airportAreas.some(([a, b, c, d]) => a < u1 && c > u0 && b < v1 && d > v0);
+  }
+
   /**
    * Flatten the ground under runways (see Airports.js), in the tiles loaded
    * from now on: their strips lie between the elevations of their two ends
    * @param {{ends: {lat: number, lon: number, elevation: number}[]}[]} runways
    */
   setRunways(runways) {
+    // Areas where the tiles may reach AIRPORT_LEVEL, in the [0, 1] Web Mercator square
+    this._airportAreas = runways.map(({ ends: [a, b] }) => {
+      const reach = AIRPORT_DETAIL_REACH / (EQUATOR * Math.cos((a.lat * Math.PI) / 180));
+      const [u0, v0] = mercatorUnit(a.lat, a.lon);
+      const [u1, v1] = mercatorUnit(b.lat, b.lon);
+      return [Math.min(u0, u1) - reach, Math.min(v0, v1) - reach, Math.max(u0, u1) + reach, Math.max(v0, v1) + reach];
+    });
     TerrariumShaderLoader.setRunways(
       runways.map(({ ends: [a, b] }) => ({
         lat0: a.lat,
