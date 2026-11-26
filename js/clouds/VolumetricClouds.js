@@ -401,15 +401,22 @@ export default class VolumetricClouds {
       const weightSum = float(0).toVar();
       const span = far.sub(near).toConst();
       const step = float(CLOUD_MIN_STEP).add(near.mul(CLOUD_STEP_GROWTH - 1)).toVar();
-      const t = step.mul(jitter).toVar();
+      // Start of the current step along the ray, from the entry into the layers
+      const t = float(0).toVar();
 
       Loop(CLOUD_MAX_STEPS, () => {
-        If(t.greaterThan(span), () => Break());
-        const position = start.add(direction.mul(t)).toConst();
+        If(t.greaterThanEqual(span), () => Break());
+        // One sample anywhere in each step (stratified): the steps follow the
+        // camera, and samples at fixed places in them would alias the noise
+        // into patterns that roll through the clouds as it moves. The last
+        // step ends at the scene (the aircraft inside a cloud)
+        const stepLength = min(step, span.sub(t)).toConst();
+        const sampleT = t.add(stepLength.mul(jitter)).toConst();
+        const position = start.add(direction.mul(sampleT)).toConst();
         const height = length(position).sub(R).toConst();
         const weather = this._weather(position, height);
         If(weather.density.greaterThan(vec4(MIN_DENSITY)).any(), () => {
-          const media = this._media(weather, position, height, near.add(t).lessThan(CLOUD_DETAIL_DISTANCE));
+          const media = this._media(weather, position, height, near.add(sampleT).lessThan(CLOUD_DETAIL_DISTANCE));
           const extinction = media.extinction;
           If(extinction.greaterThan(MIN_EXTINCTION), () => {
             const alpha = remapClamp(height, this._minHeight, this._maxHeight);
@@ -420,16 +427,16 @@ export default class VolumetricClouds {
               .add(mix(skyLow, skyHigh, alpha).mul(RECIPROCAL_PI4 * CLOUD_SKY_LIGHT_SCALE).mul(skyGradient))
               .mul(extinction);
             // Scattered light integrated over the step (energy conserving)
-            const stepTransmittance = exp(extinction.mul(step).negate()).toConst();
+            const stepTransmittance = exp(extinction.mul(stepLength).negate()).toConst();
             radiance.addAssign(transmittance.mul(scattered.sub(scattered.mul(stepTransmittance)).div(extinction)));
             transmittance.mulAssign(stepTransmittance);
-            weightedDistance.addAssign(near.add(t).mul(transmittance));
+            weightedDistance.addAssign(near.add(sampleT).mul(transmittance));
             weightSum.addAssign(transmittance);
           });
         });
         If(transmittance.lessThanEqual(CLOUD_MIN_TRANSMITTANCE), () => Break());
+        t.addAssign(stepLength);
         step.assign(min(step.mul(CLOUD_STEP_GROWTH), CLOUD_MAX_STEP));
-        t.addAssign(step);
       });
 
       If(weightSum.greaterThan(0), () => {
