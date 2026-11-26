@@ -15,8 +15,8 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
   G3 et G5) et la récupération automatique de G1.2 (reportée). Le lot de rendu 4 (nuages
   volumétriques) est terminé et fusionné dans `main` le 2026-11-26 (voir `docs/rendering-roadmap.md`).
   Le lot de rendu 5 (terrain et ombres) est terminé et fusionné dans `main` le 2026-11-26 et
-  poussé ; la suite, au choix de l'utilisateur en début de session, peut être G3 (décollage et
-  atterrissage, train et aéroports), sur une nouvelle branche depuis `main`. L'avion porte désormais
+  poussé. **G3 (décollage et atterrissage) en cours sur `feat/takeoff-landing`** depuis le
+  2026-11-26 : G3.1 (train animé) fait ; suite G3.2 (physique au sol), voir le lot G3. L'avion porte désormais
   son ombre et reçoit celle du relief (`js/aircraft/AircraftShadow.js`, calque `SHADOW_CASTER_LAYER`
   pour ce qui doit la projeter : penser au train d'atterrissage de G3).
 - **Vue orbite** (demandée par l'utilisateur, hors lots) : `CONFIG.cameraMode = 'orbit'`, entre la
@@ -305,9 +305,25 @@ sol) ; les nuages volumétriques (lot 4) n'ont pas de dépendance avec ces lots.
 
 ## Lot G3 — Décollage et atterrissage
 
-- [ ] **G3.1** Animation du train : pivots des jambes, contrefiches, roues et trappes calculés depuis la
+- [x] **G3.1** Animation du train : pivots des jambes, contrefiches, roues et trappes calculés depuis la
       géométrie ; séquence trappes ouvertes → jambes repliées **vers l'avant** (toutes les roues) →
       trappes fermées, ≈ 6 s ; touche dédiée, avertissement au-delà de 230 kt train sorti.
+      Fait : `js/flight/GearSequence.js` (position unique de 0, rentré, à 1, sorti et verrouillé, en
+      6 s ; trappes ouvertes sur le premier quart, jambes sur la moitié, trappes principales refermées
+      sur le dernier quart, les petites trappes portées par les jambes restent ouvertes ; un nouvel
+      ordre repart d'où il en est ; tests `tests/gearSequence.test.js`), tenue par `FlightModel.gear`
+      et commandée par `controls.gear` (traînée `GEAR_DRAG` 0,02 selon la course des jambes,
+      estimation). `js/aircraft/LandingGear.js` : charnières des trappes le long de leur bord
+      intérieur (puits principaux) ou extérieur (train avant), trappe avant du modèle (d'une seule
+      pièce, antenne comprise) coupée en deux sur l'axe ; jambe principale repliée vers l'avant et
+      vers l'intérieur, tournée sur son axe pour coucher la roue à plat dans son puits (rangement
+      estimé depuis la forme du puits, `MAIN_WHEEL_STOWED`, vérifié sans dépasser de la peau) ;
+      contrefiche latérale orientée chaque frame vers son point d'attache sur la jambe ; jambe avant
+      repliée de 90° vers l'avant ; train et puits masqués une fois rentré et trappes fermées.
+      Touche `G` et bouton X de la manette (mode Simulation), le pilote automatique des plans de vol
+      passe sur `U` ; HUD : `GEAR TRANSIT` / `GEAR DOWN`, en orange avec `SPEED` au-delà de 230 kt
+      indiqués. Vérifié dans Chrome (page de test du modèle seul, puis en vol, vue orbite et HUD) ;
+      +1 draw call (la seconde moitié de la trappe avant). Le mode Exploration garde le train rentré.
 - [ ] **G3.2** Physique au sol : 3 jambes ressort-amortisseur (principales ≈ 430 kN/m et 50 kN·s/m,
       avant ≈ 150 kN/m et 15 kN·s/m, course 0,3 m), cercle de frottement (μ 0,8 / 0,5), freins carbone
       (≈ 0,4 g), roue avant orientable (±75° au roulage, faible au-delà de 60 kt), résistance au
@@ -408,6 +424,7 @@ sol) ; les nuages volumétriques (lot 4) n'ont pas de dépendance avec ces lots.
 
 | Date | Sujet | Décision | Raison |
 |---|---|---|---|
+| 2026-11-26 | Touche du train | `G` sort et rentre le train (convention des simulateurs), bouton X de la manette ; le pilote automatique des plans de vol passe de `G` à `U` | Choix de l'utilisateur |
 | 2026-11-25 | Ordre avec le rendu | G0, G1 et G2 d'abord, puis alterner lots de vol et lots de rendu | Les fondations du vol conditionnent tout le reste et les jets donnent un effet visible vite |
 | 2026-11-25 | Niveau de réalisme | Simulation « carefree » : physique calée sur les chiffres réels, commandes de vol électriques qui protègent l'avion | Fidèle au vrai Rafale et facile à piloter |
 | 2026-11-25 | Vol libre actuel | Conservé comme mode Exploration | Voyage rapide, vues de référence ; le benchmark garde de toute façon sa trajectoire imposée |
@@ -641,6 +658,7 @@ piqué dans le relief : crash et redémarrage ; aucune erreur console.
 
 | Date | Fait | Reste / prochaine étape |
 |---|---|---|
+| 2026-11-26 | G3 commencé sur `feat/takeoff-landing` ; G3.1 : séquence du train (trappes, jambes repliées vers l'avant, roue principale couchée à plat), traînée, touche `G` / bouton X, HUD et avertissement au-delà de 230 kt ; pilote automatique déplacé sur `U` | G3.2 (physique au sol : jambes ressort-amortisseur, freins, roue avant orientable) ; ressenti visuel du train par l'utilisateur |
 | 2026-11-25 | G2.4 : brume de chaleur (tampon de décalages, appliqué dans la passe d'atmosphère avant le TAAU), réglage « Heat haze » en High et Ultra ; ≈ +0,1 ms | Ressenti en vol ; lot 4 du rendu, puis G3 |
 | 2026-11-25 | Visée souris : l'avion ne se met plus sur le dos pour une visée modérément basse et n'oscille plus en pendule (poussée sans roulis, retour à l'endroit nez sur la visée, sens de roulis gardé) ; tests | Ressenti en vol ; convergence latérale lente à régler si besoin ; G2.4 |
 | 2026-11-25 | G2 commité (jets et lumière de PC, son, doc) ; vue orbite autour de l'avion (souris, stick droit, molette) | G2.4 (brume de chaleur) ; ressenti en vol |
