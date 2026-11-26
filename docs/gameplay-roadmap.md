@@ -18,8 +18,9 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
   poussé. **G3 (décollage et atterrissage) en cours sur `feat/takeoff-landing`** depuis le
   2026-11-26 : G3.1 (train animé), G3.2 (physique au sol), G3.3 (crash et écran de reprise) et
   G3.4 (aéroports, départ d'une piste depuis le menu : onglet World, section Airports) et G3.5
-  (terrain aplani sous les pistes) et G3.6 (pistes et marquages peints) faits ; suite G3.7
-  (balisage lumineux et PAPI), voir le lot G3. Bundle three-tile à reconstruire après un changement de branche (`cd vendor/three-tile &&
+  (terrain aplani sous les pistes), G3.6 (pistes et marquages peints, tuiles au zoom 18 autour) et
+  G3.7 (balisage lumineux et PAPI) faits ; suite G3.8 (guidage d'approche sur le HUD), voir le lot
+  G3. Bundle three-tile à reconstruire après un changement de branche (`cd vendor/three-tile &&
   npm run build:lib`) : l'aplanissement est dans son worker. L'avion porte désormais
   son ombre et reçoit celle du relief (`js/aircraft/AircraftShadow.js`, calque `SHADOW_CASTER_LAYER`
   pour ce qui doit la projeter : penser au train d'atterrissage de G3).
@@ -436,9 +437,29 @@ sol) ; les nuages volumétriques (lot 4) n'ont pas de dépendance avec ces lots.
       CDG 09L, aligné : 22 tuiles en 18, 13 en 17, 19 en 16 ; à 9 km, plus rien au-delà de 15. Coût en
       A/B sur la même vue (GPU saturé) : 3,96–4,11 ms et 528 draw calls contre 3,53–3,57 ms et 489 :
       ≈ +0,45 ms près du sol sur un aéroport, rien ailleurs.
-- [ ] **G3.7** Balisage instancié dans la passe de halo : seuil vert, extrémité rouge, axe et bords
+- [x] **G3.7** Balisage instancié dans la passe de halo : seuil vert, extrémité rouge, axe et bords
       blancs (codes de fin de piste), rampe d'approche, PAPI (4 unités, 2°30′ à 3°30′, couleur selon
       l'angle de l'œil).
+      Fait : `js/airports/RunwayLights.js` (halos instanciés, un draw call, attributs d'instance :
+      WebGPU n'accepte que 8 tampons de sommets, d'où l'angle PAPI rangé avec l'axe et le plan sans
+      normale) et `js/airports/runwayLightLayout.js` (disposition, testée sous Node : feux de bord
+      tous les 60 m, jaunes sur les 600 derniers mètres dès 1 800 m ; axe tous les 30 m dès 2 000 m,
+      rouge et blanc alternés sur les 900 derniers mètres, rouge sur les 300 derniers ; seuil vert vers
+      l'approche, rouge de fin vers la piste, feux de fin propres quand le seuil est décalé ; rampe
+      d'approche de 900 m avec barre transversale à 300 m dès 2 000 m ; PAPI à gauche, 300 m après le
+      seuil). Couleur et intensité selon le côté d'où l'on voit le feu, plus forte dans l'axe de la
+      piste ; PAPI blanc au-dessus de son angle, rouge en dessous (transition sur 3′). Pistes éclairées
+      seulement (`lighted` d'OurAirports), les 8 plus proches à moins de 40 km ; allumés quand le soleil
+      descend sous 6° (pleins à 0°) ou par visibilité inférieure à 5 km ; abaissés par la courbure
+      comme le terrain. Halos d'au moins 4 pixels qui s'atténuent avec leur taille (et non leur aire :
+      en 1/taille², les pistes disparaissaient à 5 km). Test d'occultation avec une tolérance qui
+      croît avec la distance (0,5 m + 0,4 %) : lue au centre du halo, que le jitter du TAA déplace
+      d'un demi-pixel sur le sol juste devant un feu posé à 0,4 m, la profondeur cachait les feux
+      lointains une image sur deux (PAPI ternes ou absents). Vérifié dans Chrome de nuit à LSGG
+      (approche à 3° : PAPI 2 blancs 2 rouges, 4 blancs au-dessus, 4 rouges en dessous) et à CDG,
+      éteints de jour. Coût (865 feux, A/B, GPU saturé) : 2,76–2,88 contre 2,75–2,79 ms, dans le
+      bruit. Les lumières de ville (Black Marble) font de grandes taches floues au sol près des
+      aéroports, de nuit : défaut existant, hors de ce lot.
 - [ ] **G3.8** Guidage d'approche sur le HUD : pente de 3°, écarts d'alignement et de pente calculés
       depuis le seuil, PAPI virtuel ; pilote automatique de cap et d'altitude.
 
@@ -760,6 +781,7 @@ piqué dans le relief : crash et redémarrage ; aucune erreur console.
 
 | Date | Fait | Reste / prochaine étape |
 |---|---|---|
+| 2026-11-27 | G3.7 : balisage lumineux des pistes éclairées (bords, axe codé, seuils verts, fins rouges, rampe d'approche, PAPI selon l'angle de l'œil), allumé au crépuscule ou par mauvaise visibilité ; occultation tolérante au jitter du TAA ; coût dans le bruit ; vérifié dans Chrome (LSGG, CDG) | G3.8 (guidage d'approche sur le HUD, pilote automatique de cap et d'altitude) |
 | 2026-11-26 | G3.6 : pistes revêtues et marquages OACI peints dans la couleur du terrain (seuils, numéros, point de visée, zone de toucher, axe, bandes latérales), antialiasés sur l'empreinte en travers ; coût non mesurable ; vérifié dans Chrome (LSGG), et par l'utilisateur à CDG ; à sa demande, tuiles jusqu'au zoom 18 autour des pistes (+0,45 ms près du sol sur un aéroport) | G3.7 (balisage lumineux, PAPI) |
 | 2026-11-26 | G3.5 : terrain aplani sous les pistes dans le worker d'altitude (relief, normales, morphing et altitude CPU ensemble, sans couture), pistes chargées avant le terrain d'un lieu ; vérifié dans Chrome à Genève (axe à 1 cm du profil publié, décollage sans à-coup) | G3.6 (pistes et marquages dessinés) |
 | 2026-11-26 | G3.4 : données OurAirports servies par le proxy (recherche, pistes par tuile), catalogue des pistes autour de l'avion, recherche d'aéroport dans le menu et départ aligné sur un seuil ; tests ; vérifié dans Chrome (LSGG 04) | G3.5 (aplanir le terrain sous les pistes) |
