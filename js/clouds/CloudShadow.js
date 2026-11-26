@@ -83,7 +83,8 @@ export default class CloudShadow {
 
     this._material = new NodeMaterial();
     this._material.name = 'clouds.shadow';
-    this._material.colorNode = this._mapNode();
+    // The output itself: as a color, an opaque material's alpha would be forced to 1
+    this._material.outputNode = this._mapNode();
     this._material.depthTest = this._material.depthWrite = false;
 
     /** Factor of the direct light where it is evaluated (see receiverNode) */
