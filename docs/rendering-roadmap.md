@@ -11,8 +11,9 @@ en fin de session.
 - **Lot 5 en cours** sur `feat/render-terrain` (depuis `main`, non poussée). Faits : L5.1 (raccord exact
   des bords entre tuiles, altitudes dans un worker), L5.2 (geomorphing du relief et fondu de
   l'imagerie), L5.3 (ombres du relief et de l'avion), L5.8 (mode courbes de niveau tactique
-  phosphore), L5.9 (normales par pixel) ; L5.5 abandonnée. Suite : L5.4, puis L5.6 et L5.7
-  (l'utilisateur a demandé d'enchaîner seul). Référence des vues : `benchmarks/render/pixel-normals-1` ;
+  phosphore), L5.9 (normales par pixel) ; L5.5 abandonnée, L5.4 écartée (coût sans gain visible).
+  Suite : L5.6 et L5.7 (l'utilisateur a demandé d'enchaîner seul). Référence des vues :
+  `benchmarks/render/pixel-normals-2` ;
   vols : `pixel-normals-flight`, `pixel-normals-plan1` (p1 86,2 et 87,0 ; la colonne GPU des vols est
   faussée par la passe d'ombre de l'avion, voir Mesures). L'arbre des tuiles est mis à jour par `GeoTerrainManager.update`, plus par
   le rendu. Bundle three-tile à reconstruire après chaque
@@ -853,7 +854,11 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       nette à 15 m du sol, auto-ombrage aile/fuselage propre. Trouvé : un redessin attendant une
       durée fixe laissait la carte large vide (dessinée avant l'arrivée des tuiles) ; une seule
       frame pour la carte fine coûtait ≈ 9 ms (mesure GPU au repos, surestimée).
-- [ ] **L5.4** Occlusion ambiante (`GTAONode`).
+- [-] **L5.4** Occlusion ambiante (`GTAONode`) : écartée (voir Décisions). Essai : `ao()` de three sur
+      la profondeur de la passe de scène (normales reconstruites), demi-résolution, filtrage temporel,
+      appliquée à la couleur de scène avant l'atmosphère. Rayon 1,5 m : seuls les creux de l'avion
+      foncent un peu, +1,0 à +1,2 ms (vues 2, 4, 6 : 3,90 / 3,85 / 3,97 → 4,96 / 4,83 / 5,14 ms) ;
+      rayon 30 m : fonds de vallée à peine plus sombres, +0,6 à +1,7 ms.
 - [-] **L5.5** Neutralisation de l'éclairage incrusté dans l'imagerie satellite (abandonnée, voir
       Décisions).
 - [ ] **L5.6** Détail procédural : occupation du sol (ESA WorldCover), roche triplanaire sur les
@@ -892,7 +897,12 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       sommet). Corrigé en passant : les textures d'altitude des tuiles n'étaient jamais libérées
       (`TerrariumShaderLoader.unload`) ; nombre de textures borné après deux tours des vues. Coût GPU
       des vues inchangé, p1 en vol en hausse (`pixel-normals-*`). Rendu : ravines et arêtes des
-      versants visibles là où la grille les lissait.
+      versants visibles là où la grille les lissait. Corrigé ensuite : sur les tuiles fines (z13 et
+      plus) les différences sur un pixel source dessinaient en stries les marches d'un mètre de
+      l'altitude (SRTM en mètres entiers, rééchantillonné au-delà de ses 30 m) ; elles portent
+      désormais sur au moins 25 m vrais de part et d'autre (`NORMAL_BASELINE`, latitude comprise),
+      les sources lues par ces échantillons entrant dans `sourceRanges`. Stries disparues, détail
+      lointain intact (`pixel-normals-2`).
 
 ## Lot 6 — Contenu et effets
 
@@ -1072,6 +1082,7 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 | 2026-11-26 | **Pleine résolution** — L5.3 ombres du relief (`terrain-shadow-1`) | 3,75 | 3,85 | 3,96 | 3,90 | 7,82 | 4,32 |
 | 2026-11-26 | **Pleine résolution** — L5.3 relief + avion (`terrain-shadow-2`) | 3,86 | 4,01 | 4,10 | 4,01 | 8,06 | 4,11 |
 | 2026-11-26 | **Pleine résolution** — L5.9 normales par pixel (`pixel-normals-1`) | 3,82 | 3,93 | 4,02 | 4,25 | 8,06 | 4,38 |
+| 2026-11-26 | **Pleine résolution** — L5.9 normales sur 25 m au moins (`pixel-normals-2`) | 3,83 | 3,96 | 4,09 | 4,04 | 8,03 | 4,02 |
 
 Raccord des bords (L5.1) : captures alternées contre `main` (worktree, port 3001), vues 1 et 6, deux
 séries : `main` 3,62 / 3,98 ms (vue 1) et 4,15 / 3,66 ms (vue 6), raccord 3,64 / 3,64 et 4,16 / 4,17 ms :
@@ -1218,6 +1229,7 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 | 2026-11-26 | Éclairage incrusté dans l'imagerie (L5.5) | Abandonné, aucune correction (choix de l'utilisateur) | Les zones noires des vues 4 et 6 ne viennent pas de tuiles invalides : le cache est sain et les tuiles ESRI retéléchargées sont identiques octet pour octet. Elles viennent des ombres des photos (soleil à ≈ 155°, 50° d'élévation : faces nord-ouest 10 fois plus sombres et bleues, en partie écrasées au noir), de l'absence d'ombres du relief et de lumière renvoyée, et des comblements de lacunes du SRTM dans le MNT Terrarium. Le rééclairage essayé dans le shader (gain par canal tiré de la normale et de la teinte de l'ombre, masque élargi par un mip plus grossier, albédo de repli pour le noir écrasé) laissait des liserés sombres au bord des ombres et des taches dans les forêts : rendu jugé moins bon que l'original |
 | 2026-11-26 | Style du mode courbes de niveau (L5.8) | Tactique, coloris phosphore, traits affinés au-delà de 4 km avec plancher à 40 % (choix de l'utilisateur sur planches) | Lisible à l'ombre et la nuit, utile aux missions ; carte topo, maquette et isobandes écartées ; épaisseur constante : plus de notion de profondeur ; affinage dès 2 km : vue haute trop pâle |
 | 2026-11-26 | Raccord des bords entre tuiles (L5.1) | Altitude unique échantillonnée par-delà les tuiles, grilles emboîtées, profils d'arête des voisines plus grossières choisis à chaque frame, calcul dans un worker | Exact (au bit près entre voisines de même niveau, sans jonction en T entre niveaux) sans coût GPU mesurable ; calculé sur le thread principal, il faisait tomber le p1 à 25 (3,5 décodages par tuile, 2,2 ms de calcul) ; dans le worker, le p1 monte au-dessus du lot 4 |
+| 2026-11-26 | Occlusion ambiante (L5.4) | Écartée, pas de `GTAONode` | En espace écran avec un rayon en mètres, elle ne touche que ce qui est près de la caméra : l'avion (creux à peine plus sombres) ou, avec un grand rayon, les fonds de vallée proches, pour 1 à 1,7 ms, un quart d'une frame ; appliquée à la couleur entière elle assombrirait aussi la lumière directe, et l'appliquer à la seule lumière indirecte demanderait une pré-passe de profondeur et de normales de toute la géométrie, ce qui coûte le plus ici. Pistes si le besoin revient : occlusion du ciel à l'échelle du relief tirée des cartes d'altitude des ombres (L5.3), occlusion précalculée de l'avion avec ses cartes de matériau (L6.1) |
 | 2026-11-26 | Ombres du relief et de l'avion (L5.3) | Hauteur d'ombre par ray marching sur une carte d'altitude dessinée vue de dessus (deux cartes), ombre de l'avion par une carte d'ombre ajustée sur lui seul ; pas de `CSMShadowNode` | Des cascades dessinant le terrain depuis le soleil couvriraient mal 100 km de relief au soleil rasant et redessineraient toutes les tuiles à chaque frame ; la hauteur d'ombre est indépendante de l'objet qui la reçoit (terrain et avion lisent la même carte), se redessine rarement et s'étale sur plusieurs frames, et la carte d'altitude réutilise la géométrie affichée (morph et raccords compris). Les cartes d'horizon par texel des tuiles auraient demandé un calcul par tuile et par direction du soleil. L'avion seul justifie une carte d'ombre classique, petite et nette |
 | 2026-11-26 | Geomorphing (L5.2) | Dans le temps (0,75 s), fusions différées jusqu'au retour des enfants sur la surface du parent, bords sur le côté le plus grossier, imagerie en fondu | La sélection des niveaux de three-tile dépend de la tuile entière et de l'orientation de la caméra : un morph fonction de la distance (CDLOD) n'aurait pas été terminé au moment du changement ; le temps couvre aussi les changements dus à une rotation. Coût nul sur le GPU, p1 en vol en hausse |
 | 2026-11-23 | Vitesse par défaut | 560 m/s | Vitesse réelle de l'ancien défaut (800 unités Mercator/s) : benchmarks comparables à la baseline |
@@ -1234,7 +1246,8 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
   vers la lumière) et de l'avion (carte d'ombre ajustée sur lui), réglage « Shadows ». Pas encore vu
   par l'utilisateur.
 - Fait (seul) : L5.9, normales par pixel calculées dans le worker ; corrigé la fuite des textures
-  d'altitude des tuiles déchargées.
+  d'altitude des tuiles déchargées, puis les stries des normales sur les tuiles fines.
+- Essayé puis écarté : L5.4, `GTAONode` (voir Décisions).
 - Outils (scratchpad, non versionnés) : saut du sol d'une frame à l'autre sur 2 500 points par
   `groundHeight` pendant des changements forcés du seuil de LOD, écart entre bords voisins
   reconstruits sur le CPU à chaque frame, morph figé à 0 pour comparer l'imagerie des parents ; accès
