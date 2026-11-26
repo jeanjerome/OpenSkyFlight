@@ -19,6 +19,7 @@ import SimulatedFlight from './flight/SimulatedFlight.js';
 import SimulationClock from './sim/SimulationClock.js';
 import EntityRegistry from './sim/EntityRegistry.js';
 import ControlPanel from './ui/ControlPanel.js';
+import CrashScreen from './ui/CrashScreen.js';
 import HUD from './ui/HUD.js';
 import Minimap from './ui/Minimap.js';
 import Logger from './utils/Logger.js';
@@ -116,11 +117,21 @@ async function initApp() {
     next.teleport(aircraft.position.clone(), aircraft.yaw, aircraft.pitch);
     chaseCameraController.reset();
   }
-  simulation.onCrash = (at, ground) => {
-    showNotification('Crashed: flight restarted 1 500 m above the ground');
-    simulation.teleport(new THREE.Vector3(at.x, ground + 1500, at.z), aircraft.yaw, 0);
-    chaseCameraController.reset();
-  };
+  // After a crash the flight stands still under the crash screen until restarted
+  const crashScreen = new CrashScreen({
+    inFlight: () => {
+      const { x, y, z } = aircraft.position;
+      const ground = geoTerrainManager.groundHeight(x, z) ?? y;
+      simulation.teleport(new THREE.Vector3(x, ground + 1500, z), aircraft.yaw, 0);
+      chaseCameraController.reset();
+    },
+    onGround: () => {
+      const { x, z, yaw } = simulation.groundStart;
+      simulation.placeOnGround(x, z, yaw);
+      chaseCameraController.reset();
+    },
+  });
+  simulation.onCrash = (crash) => crashScreen.show(crash, simulation.groundStart !== null);
 
   // --- Controllers ---
   const controls = new ControlInputs(renderer.domElement);
@@ -335,13 +346,21 @@ async function initApp() {
   });
 
   const toggleGear = () => {
-    if (flight !== simulation || !simulation.enabled) return;
+    if (flight !== simulation || !simulation.enabled || simulation.crash) return;
     const down = simulation.toggleGear();
-    showNotification(down ? 'Gear down' : 'Gear up');
+    showNotification(
+      down === null ? 'Gear locked down: the wheels carry the aircraft' : down ? 'Gear down' : 'Gear up',
+    );
   };
   input.onKey('g', toggleGear);
   controls.onButton(GAMEPAD.X, () => {
     if (!paused) toggleGear();
+  });
+  controls.onButton(GAMEPAD.A, () => {
+    if (!paused) crashScreen.choose('flight');
+  });
+  controls.onButton(GAMEPAD.B, () => {
+    if (!paused) crashScreen.choose('ground');
   });
 
   input.onKey('u', () => {
@@ -580,6 +599,8 @@ async function initApp() {
       lastControlDevice = controls.device;
       updateFlyHint();
     }
+    // Leaving the crash by other means (another flight mode, a reference view, the autopilot) closes its screen
+    if (crashScreen.isOpen && (flight !== simulation || !simulation.crash)) crashScreen.hide();
     flight.applyControls(commands, dt);
     benchmarkRunner.tickPath(dt, flight, renderer);
 

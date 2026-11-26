@@ -219,3 +219,31 @@ export const STEERING_MAX = (75 * Math.PI) / 180;
  * angle narrows with speed, a few degrees at 30 kt, under one beyond 60 kt
  */
 export const STEERING_SIDE_ACCELERATION = 3.5;
+
+/**
+ * Points of the airframe that strike the ground first, from the centre of
+ * gravity (body frame, m, from the 3D model), by the part they belong to:
+ * nose (radome tip, chin), belly (centre and wing stores), tail (nozzles,
+ * arrester hook), wingtips (wingtip missiles), top (fin, canopy). With the
+ * wheels on the ground, the nozzles touch at about 16° of pitch and the
+ * wingtips at about 17° of bank.
+ */
+export const STRUCTURE_POINTS = [
+  { part: 'nose', position: [0, -0.37, -8.69] },
+  { part: 'nose', position: [0, -0.71, -6.36] },
+  { part: 'belly', position: [0, -1.4, -0.59] },
+  { part: 'belly', position: [-2.57, -1.25, -0.36] },
+  { part: 'belly', position: [2.57, -1.25, -0.36] },
+  { part: 'tail', position: [-0.67, -0.44, 5.01] },
+  { part: 'tail', position: [0.67, -0.44, 5.01] },
+  { part: 'tail', position: [0, -0.66, 4.19] },
+  { part: 'wingtip', position: [-5.19, -0.61, 3.48] },
+  { part: 'wingtip', position: [5.19, -0.61, 3.48] },
+  { part: 'wingtip', position: [-5.64, -0.16, 3.46] },
+  { part: 'wingtip', position: [5.64, -0.16, 3.46] },
+  { part: 'top', position: [0, 3.31, 5.42] },
+  { part: 'top', position: [0, 1.24, -3.95] },
+];
+
+/** Highest vertical speed the landing gear takes at touchdown (m/s), as for land-based fighters (10 ft/s) */
+export const TOUCHDOWN_SINK_LIMIT = 3;

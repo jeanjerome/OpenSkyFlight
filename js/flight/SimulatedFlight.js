@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import FlightModel from './FlightModel.js';
 import MouseAim from './MouseAim.js';
 import { DRY_DETENT } from './Engines.js';
-import { GEAR_LEGS, INTERNAL_FUEL } from '../constants/rafale.js';
+import { groundStrike } from './GroundStrike.js';
+import { GEAR_LEGS, INTERNAL_FUEL, TOUCHDOWN_SINK_LIMIT } from '../constants/rafale.js';
 
 /** Speed given to the aircraft when the Simulation mode starts or restarts (m/s, ≈ 430 kt) */
 export const ENTRY_SPEED = 220;
@@ -19,12 +20,6 @@ const KEY_STICK_TIME = 0.3;
 /** Time for it to come back to neutral when the key is released (s) */
 const KEY_RELEASE_TIME = 0.08;
 
-/**
- * Height of the centre of gravity above the ground below which the aircraft
- * has crashed (m): only reachable with the gear up or collapsed
- */
-const CRASH_HEIGHT = 1;
-
 /** Height of the centre of gravity above the ground with the wheels just touching (m) */
 const WHEELS_HEIGHT = -Math.min(...GEAR_LEGS.map((leg) => leg.position[1]));
 
@@ -40,9 +35,10 @@ const WHEELS_HEIGHT = -Math.min(...GEAR_LEGS.map((leg) => leg.position[1]));
  * gear. On the ground the mouse aim steers the nose wheel towards the aim and
  * keeps the wings level.
  *
- * The wheels carry the aircraft (FlightModel, GearContact); touching the
- * ground otherwise is a crash: `onCrash` is called and the flight restarts
- * above that point.
+ * The wheels carry the aircraft (FlightModel, GearContact). A wheel touching
+ * down faster than the gear takes, or any other part of the airframe touching
+ * the ground, is a crash: the flight stops where it is and `onCrash` is called
+ * with what happened, until it restarts (teleport, placeOnGround).
  */
 export default class SimulatedFlight {
   /**
@@ -62,8 +58,18 @@ export default class SimulatedFlight {
     this.pitchRate = 0;
     /** Whether the aim leads (mouse) or follows the nose (keys, gamepad) */
     this.aiming = true;
-    /** Called when the aircraft hits the ground, with its position */
+    /**
+     * Called when the aircraft crashes, with what happened: the part that hit
+     * the ground ('wheels' for a touchdown too hard, or nose, belly, tail,
+     * wingtip, top), the vertical speed of the impact (m/s), the airspeed
+     * (m/s), whether the gear was down
+     * @type {((crash: {part: string, sink: number, speed: number, gearDown: boolean}) => void)|null}
+     */
     this.onCrash = null;
+    /** The crash the flight stopped at, null while flying */
+    this.crash = null;
+    /** Where the flight last started on the ground, to restart there: {x, z, yaw} */
+    this.groundStart = null;
 
     this._stick = { pitch: 0, roll: 0, yaw: 0 };
     this._rudder = 0;
@@ -106,6 +112,7 @@ export default class SimulatedFlight {
     model.fuel = INTERNAL_FUEL;
     model.reset(position, this._quaternion, speed, ENTRY_LEVER);
     this._detentFree = false;
+    this.crash = null;
     this.aim.syncTo(model.quaternion);
     this._publish(true);
   }
@@ -116,7 +123,7 @@ export default class SimulatedFlight {
    * @param {number} dt - frame time (s)
    */
   applyControls(commands, dt) {
-    if (!this.enabled) return;
+    if (!this.enabled || this.crash) return;
     const f = commands.flight;
     const model = this.model;
 
@@ -161,24 +168,28 @@ export default class SimulatedFlight {
     model.fuel = INTERNAL_FUEL;
     model.reset(new THREE.Vector3(x, ground + WHEELS_HEIGHT, z), this._quaternion, 0, 0, true);
     this._detentFree = false;
+    this.crash = null;
+    this.groundStart = { x, z, yaw };
     this.aim.syncTo(model.quaternion);
     this._publish(true);
     return true;
   }
 
   /**
-   * Commands the landing gear the other way
-   * @returns {boolean} whether it is now commanded down
+   * Commands the landing gear the other way; while the wheels carry the
+   * aircraft the handle stays locked down
+   * @returns {boolean|null} whether it is now commanded down, null when locked
    */
   toggleGear() {
     const controls = this.model.controls;
+    if (controls.gear && this.model.onGround) return null;
     controls.gear = !controls.gear;
     return controls.gear;
   }
 
   /** Advance one simulation step */
   step(dt) {
-    if (!this.enabled) return;
+    if (!this.enabled || this.crash) return;
     const model = this.model;
     this.aircraft.beginStep();
 
@@ -207,10 +218,11 @@ export default class SimulatedFlight {
     model.step(dt);
     this._publish(false);
 
-    const height = model.wheels.height;
-    if (height < CRASH_HEIGHT) {
-      const at = model.position.clone();
-      this.onCrash?.(at, at.y - height);
+    const sink = model.wheels.touchdownSink;
+    const strike = sink > TOUCHDOWN_SINK_LIMIT ? { part: 'wheels', sink } : groundStrike(model, this.groundHeight);
+    if (strike) {
+      this.crash = { ...strike, speed: model.airspeed, gearDown: model.gear.downLocked };
+      this.onCrash?.(this.crash);
     }
   }
 

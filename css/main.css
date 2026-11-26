@@ -679,7 +679,8 @@ body.menu-open :is(#hud, #crosshair, #minimap-container, #hires-badge) {
   color: var(--ui-dim);
 }
 #settings-menu kbd,
-#fly-hint kbd {
+#fly-hint kbd,
+#crash-screen kbd {
   display: inline-grid;
   place-items: center;
   min-width: 26px;
@@ -798,6 +799,71 @@ body.menu-open :is(#hud, #crosshair, #minimap-container, #hires-badge) {
 :where(#settings-menu, #fly-hint) button:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
+}
+
+/* Crash screen: over the stopped flight, below the settings menu */
+#crash-screen {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-panel) - 1);
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse at center, rgba(30, 4, 2, 0.55) 0%, rgba(4, 4, 4, 0.85) 100%);
+  font: 500 16px var(--font-ui);
+  color: var(--ui-text);
+  animation: sm-fade 0.4s ease-out;
+}
+#crash-screen button {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+#crash-screen .sm-btn-primary {
+  color: var(--ui-on-accent);
+}
+.cs-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: min(520px, 90vw);
+  max-width: 90vw;
+  padding: 28px 36px 30px;
+  background: rgba(4, 10, 8, 0.8);
+  border: 1px solid rgba(255, 176, 32, 0.35);
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+  animation: sm-drop 0.35s ease-out;
+}
+.cs-label {
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--ui-warn);
+  text-shadow: 0 0 12px rgba(255, 176, 32, 0.5);
+}
+.cs-title {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.cs-detail {
+  max-width: 520px;
+  color: var(--ui-text-soft);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.45;
+}
+.cs-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 14px;
+}
+.cs-actions .sm-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 16px;
 }
 
 /* Entrance animations */

@@ -98,7 +98,8 @@ Available scripts:
 | `Q` / `E` | Rudder left / right (`A` / `E` on AZERTY) |
 | `W` / `S` | Throttle up / down; release and press `W` again at full power for the afterburner (`Z` / `S` on AZERTY; Exploration: move forward / backward) |
 | `Space` | Airbrake (hold); on the ground, also the wheel brakes |
-| `G` | Landing gear down / up (Simulation flight) |
+| `G` | Landing gear down / up (Simulation flight; locked down while the wheels carry the aircraft) |
+| `Enter` / `Space` | After a crash: restart in flight / on the ground where the flight started |
 | `F` | Simulation or Exploration (free flight) mode |
 | `T` | Cycle texture mode (Satellite / Road map / SAR / Elevation) |
 | `V` | Toggle cockpit / chase view |

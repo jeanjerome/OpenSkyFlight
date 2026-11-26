@@ -61,6 +61,8 @@ export default class GearContact {
     this.onGround = false;
     /** Height of the centre of gravity above the ground (m), Infinity where unknown */
     this.height = Infinity;
+    /** Fastest vertical speed at which a wheel touched the ground in the last step (m/s) */
+    this.touchdownSink = 0;
     this.force = new THREE.Vector3();
     this.moment = new THREE.Vector3();
 
@@ -100,6 +102,7 @@ export default class GearContact {
     const below = groundHeight ? groundHeight(position.x, position.z) : null;
     this.height = below === null ? Infinity : position.y - below;
     this.onGround = false;
+    this.touchdownSink = 0;
     if (!extended || this.height > CONTACT_HEIGHT) {
       for (const leg of this.legs) this._airborne(leg, dt);
       return;
@@ -160,6 +163,7 @@ export default class GearContact {
       force.add(legForce);
       moment.add(this._torque.crossVectors(arm, legForce));
 
+      if (!leg.contact) this.touchdownSink = Math.max(this.touchdownSink, -pointVelocity.dot(normal));
       leg.compression = Math.min(compression, spec.travel);
       leg.wheelSpeed = along;
       leg.load = load;
