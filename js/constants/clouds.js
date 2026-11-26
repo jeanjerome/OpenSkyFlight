@@ -7,6 +7,33 @@ export const CLOUD_DETAIL_SIZE = 32;
 /** Texels along each side of the weather map (where each layer of clouds forms) */
 export const CLOUD_WEATHER_SIZE = 512;
 
+/** Texels along each side of the cirrus map (their fibres) */
+export const CLOUD_CIRRUS_SIZE = 1024;
+
+/** Ground distance covered by one repeat of the cirrus map (m) */
+export const CLOUD_CIRRUS_TILE = 20e3;
+
+/**
+ * Fibres of the cirrus map: ridges of Perlin noise, cells of the first octave
+ * along x (the wind) and how much more of them across it (the stretch of the
+ * streaks), sharpness of the ridges, octaves, cells and amplitude of the broad
+ * swirls that bend them. Each octave's ridges must stay several texels wide
+ * (cells × stretch × 2^(octaves − 1) well below CLOUD_CIRRUS_SIZE), or a
+ * diagonal fibre breaks into a row of beads. Where the weather map is dense the
+ * cirrus fill the fibres above `fill` (fading in over `softness`), where it
+ * thins out only their crests.
+ */
+export const CLOUD_CIRRUS_FIBRES = {
+  cells: 2,
+  stretch: 16,
+  sharpness: 7,
+  octaves: 3,
+  warpCells: 2,
+  warp: 0.11,
+  fill: 0.1,
+  softness: 0.4,
+};
+
 /** Ground distance covered by one repeat of the weather map (m) */
 export const CLOUD_WEATHER_TILE = 100e3;
 
@@ -23,12 +50,14 @@ export const CLOUD_DETAIL_TILE = 170;
  * (extinction per metre at full density), share of the shape noise that erodes
  * them and of the detail noise, exponent of the weather map, bias of the
  * rounding of their tops and softness of their edges where the coverage cuts
- * the weather map (after takram's three-clouds defaults)
+ * the weather map (after takram's three-clouds defaults). The cirrus are thin
+ * and translucent, shaped by the fibres of the cirrus map instead of the shape
+ * noise (see CLOUD_CIRRUS_FIBRES).
  */
 export const CLOUD_LAYERS = [
   { base: 0, thickness: 650, density: 0.2, shape: 1, detail: 1, weatherExponent: 1, bias: 0.35, edge: 0.6 },
   { base: 250, thickness: 1200, density: 0.2, shape: 1, detail: 1, weatherExponent: 1, bias: 0.35, edge: 0.6 },
-  { altitude: 7500, thickness: 500, density: 0.002, shape: 0.6, detail: 0, weatherExponent: 2.5, bias: 0.35, edge: 0.3 },
+  { altitude: 7500, thickness: 175, density: 0.0011, shape: 0, detail: 0, weatherExponent: 2.5, bias: 0.35, edge: 0.3 },
 ];
 
 /** Sky fraction the clouds cover at the default weather (0 clear, 1 overcast) */

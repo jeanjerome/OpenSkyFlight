@@ -1,11 +1,20 @@
 import * as THREE from 'three';
 import { Storage3DTexture, StorageTexture } from 'three/webgpu';
-import { Fn, If, Return, float, globalId, remap, saturate, smoothstep, textureStore, uvec2, uvec3, vec3, vec4 } from 'three/tsl';
+import { Fn, If, Return, abs, float, globalId, pow, remap, saturate, smoothstep, textureStore, uvec2, uvec3, vec3, vec4 } from 'three/tsl';
 import { perlinFbm, worley } from './tileableNoise.js';
-import { CLOUD_SHAPE_SIZE, CLOUD_DETAIL_SIZE, CLOUD_WEATHER_SIZE } from '../constants/clouds.js';
+import { CLOUD_CIRRUS_FIBRES, CLOUD_CIRRUS_SIZE, CLOUD_SHAPE_SIZE, CLOUD_DETAIL_SIZE, CLOUD_WEATHER_SIZE } from '../constants/clouds.js';
 
 const WORKGROUP_3D = [4, 4, 4];
 const WORKGROUP_2D = [8, 8, 1];
+
+function plane(size, name) {
+  const texture = new StorageTexture(size, size);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.colorSpace = THREE.NoColorSpace;
+  texture.generateMipmaps = false;
+  texture.name = name;
+  return texture;
+}
 
 function volume(size, name) {
   const texture = new Storage3DTexture(size, size, size);
@@ -42,10 +51,12 @@ function worleyFbm(point, cells) {
  *   scale of a hundred metres (wisps at the bottom, cauliflower at the top);
  * - weather (CLOUD_WEATHER_SIZE²): where each layer of clouds forms, before the
  *   coverage setting thresholds it: low cumulus (red), mid-level clouds (green),
- *   high cirrus (blue).
+ *   high cirrus (blue);
+ * - cirrus (CLOUD_CIRRUS_SIZE²): the fibres along which the cirrus form, long
+ *   streaks bent by broad swirls (mares' tails).
  *
  * Built after Hillaire's TileableVolumeNoise and takram's three-clouds (MIT).
- * The volumes only fill their red channel: a single-channel format cannot be
+ * The volumes and the cirrus map only fill their red channel: a single-channel format cannot be
  * written by a compute shader.
  *
  * Needs compute shaders with storage textures: WebGPU backend only.
@@ -55,11 +66,8 @@ export default class CloudTextures {
     this.shape = volume(CLOUD_SHAPE_SIZE, 'cloudShape');
     this.detail = volume(CLOUD_DETAIL_SIZE, 'cloudShapeDetail');
 
-    this.weather = new StorageTexture(CLOUD_WEATHER_SIZE, CLOUD_WEATHER_SIZE);
-    this.weather.wrapS = this.weather.wrapT = THREE.RepeatWrapping;
-    this.weather.colorSpace = THREE.NoColorSpace;
-    this.weather.generateMipmaps = false;
-    this.weather.name = 'cloudWeather';
+    this.weather = plane(CLOUD_WEATHER_SIZE, 'cloudWeather');
+    this.cirrus = plane(CLOUD_CIRRUS_SIZE, 'cloudCirrus');
 
     this._generated = false;
   }
@@ -116,6 +124,39 @@ export default class CloudTextures {
       .setName('cloudWeather');
   }
 
+  _cirrusKernel() {
+    const size = CLOUD_CIRRUS_SIZE;
+    const o = CLOUD_CIRRUS_FIBRES;
+    // Ridges of Perlin noise stretched along x (the wind): thin streaks,
+    // each octave half the weight of the previous one
+    const ridges = (point) => {
+      let sum = float(0);
+      let weight = 1;
+      let weightSum = 0;
+      for (let i = 0; i < o.octaves; i++) {
+        const cells = o.cells * 2 ** i;
+        const ridge = pow(saturate(abs(perlinFbm(point, [cells, cells * o.stretch, 1], 1)).oneMinus()), o.sharpness);
+        sum = sum.add(ridge.mul(weight));
+        weightSum += weight;
+        weight *= 0.5;
+      }
+      return sum.div(weightSum);
+    };
+    return Fn(() => {
+      If(globalId.xy.greaterThanEqual(uvec2(size)).any(), () => Return());
+      const point = vec3(vec3(globalId).xy.add(0.5).div(size), 0).toConst();
+      // Broad swirls bend the streaks
+      const warp = vec3(
+        perlinFbm(point, [o.warpCells, o.warpCells, 1], 3),
+        perlinFbm(point.add(vec3(0.31, 0.57, 0)), [o.warpCells, o.warpCells, 1], 3),
+        0,
+      ).mul(o.warp);
+      textureStore(this.cirrus, globalId.xy, vec4(saturate(ridges(point.add(warp))), 0, 0, 1));
+    })()
+      .computeKernel(WORKGROUP_2D)
+      .setName('cloudCirrus');
+  }
+
   /**
    * Fill the textures, once
    * @param {THREE.WebGPURenderer} renderer
@@ -132,6 +173,7 @@ export default class CloudTextures {
       [this._shapeKernel(), groups(CLOUD_SHAPE_SIZE, WORKGROUP_3D)],
       [this._detailKernel(), groups(CLOUD_DETAIL_SIZE, WORKGROUP_3D)],
       [this._weatherKernel(), groups(CLOUD_WEATHER_SIZE, WORKGROUP_2D, 1)],
+      [this._cirrusKernel(), groups(CLOUD_CIRRUS_SIZE, WORKGROUP_2D, 1)],
     ];
     for (const [kernel, dispatch] of kernels) renderer.compute(kernel, dispatch);
   }
@@ -140,5 +182,6 @@ export default class CloudTextures {
     this.shape.dispose();
     this.detail.dispose();
     this.weather.dispose();
+    this.cirrus.dispose();
   }
 }

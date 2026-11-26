@@ -30,6 +30,8 @@ import { EARTH_RADIUS } from 'three-tile';
 import CloudTextures from './CloudTextures.js';
 import CloudsTemporalNode from './CloudsTemporalNode.js';
 import {
+  CLOUD_CIRRUS_FIBRES,
+  CLOUD_CIRRUS_TILE,
   CLOUD_DEFAULT_COVERAGE,
   CLOUD_DETAIL_DISTANCE,
   CLOUD_DETAIL_TILE,
@@ -96,7 +98,8 @@ function henyeyGreenstein(g, cosTheta) {
  * The density follows Schneider's model (Horizon Zero Dawn, 2015) as takram's
  * three-clouds implements it (MIT): a weather map tells where each layer forms,
  * the coverage thresholds it, the height in the layer rounds the tops, and the
- * shape and detail noise volumes erode it (see CloudTextures). The light that
+ * shape and detail noise volumes erode it (see CloudTextures). The cirrus only
+ * form along the fibres of a map of their own. The light that
  * reaches each sample is the sunlight (or moonlight) through the cloud between
  * it and the light, marched in a few growing steps, scattered by a two-lobe
  * Henyey-Greenstein phase function with Wrenninge's approximation of multiple
@@ -126,6 +129,7 @@ export default class VolumetricClouds {
 
     this._cameraHeight = frameUniform(0);
     this._weatherOrigin = frameUniform(new THREE.Vector2());
+    this._cirrusOrigin = frameUniform(new THREE.Vector2());
     this._shapeOrigin = frameUniform(new THREE.Vector3());
     this._detailOrigin = frameUniform(new THREE.Vector3());
     this._layerBottoms = frameUniform(new THREE.Vector4());
@@ -183,6 +187,7 @@ export default class VolumetricClouds {
     const x = cameraPosition.x - this._drift.x;
     const z = cameraPosition.z - this._drift.y;
     this._weatherOrigin.value.set(fract(x / CLOUD_WEATHER_TILE), fract(z / CLOUD_WEATHER_TILE));
+    this._cirrusOrigin.value.set(fract(x / CLOUD_CIRRUS_TILE), fract(z / CLOUD_CIRRUS_TILE));
     this._shapeOrigin.value.set(fract(x / CLOUD_SHAPE_TILE), fract(z / CLOUD_SHAPE_TILE), 0);
     this._detailOrigin.value.set(fract(x / CLOUD_DETAIL_TILE), fract(z / CLOUD_DETAIL_TILE), 0);
   }
@@ -203,7 +208,12 @@ export default class VolumetricClouds {
     // The coverage lowers the threshold the weather map must exceed (Skybolt)
     const threshold = this.coverage.mul(heightScale).oneMinus();
     const edges = vec4(this._edges);
-    const density = remapClamp(mix(local, vec4(1), edges), threshold, threshold.add(edges));
+    const covered = remapClamp(mix(local, vec4(1), edges), threshold, threshold.add(edges)).toConst();
+    // The high layer only forms along the cirrus fibres, wider where it is denser
+    const fibres = texture(this.textures.cirrus, this._cirrusOrigin.add(position.xz.div(CLOUD_CIRRUS_TILE))).level(0).r;
+    const fill = mix(float(1), float(CLOUD_CIRRUS_FIBRES.fill), covered.z);
+    const cirrus = remapClamp(fibres, fill, fill.add(CLOUD_CIRRUS_FIBRES.softness)).mul(covered.z);
+    const density = vec4(covered.xy, cirrus, covered.w);
     return { fraction, density };
   }
 
