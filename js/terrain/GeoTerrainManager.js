@@ -47,6 +47,8 @@ export default class GeoTerrainManager {
     this.scene = scene;
     this.renderer = renderer;
     this.tileMap = null;
+    /** Paints the runways over the satellite imagery of the tiles loaded (see RunwayMarkings), set by the app */
+    this.runwayMarkings = null;
     /** @deprecated Alias for backwards compat — use tileMap */
     this.mapView = null;
     this.elevationProvider = new ElevationProvider();
@@ -212,6 +214,10 @@ export default class GeoTerrainManager {
       if (!mat.isMeshStandardNodeMaterial) continue;
       applyTerrariumElevation(mat);
       applyTerrariumImagery(mat);
+      // Runways painted over the satellite imagery (the road map draws its own)
+      if (this.runwayMarkings && CONFIG.textureMode === 'satellite') {
+        mat.colorNode = this.runwayMarkings.paint(mat.colorNode);
+      }
       mat.emissiveNode = this._emissiveNode;
       mat._terrariumApplied = true;
       mat.needsUpdate = true;

@@ -39,6 +39,7 @@ import ChaseCameraController from './camera/ChaseCameraController.js';
 import OrbitCameraController from './camera/OrbitCameraController.js';
 import FlightPlanRecorder from './flightplan/FlightPlanRecorder.js';
 import { RunwayCatalog, offsetPosition } from './airports/Airports.js';
+import RunwayMarkings from './terrain/RunwayMarkings.js';
 import Stats from 'stats.js';
 
 async function initApp() {
@@ -58,6 +59,7 @@ async function initApp() {
   // the terrain of a new place, which then draws them flat from the start
   const geoTerrainManager = new GeoTerrainManager(scene, renderer);
   const runwayCatalog = new RunwayCatalog();
+  geoTerrainManager.runwayMarkings = new RunwayMarkings();
   /** Longest wait for the runways of a place before loading its terrain anyway (ms) */
   const RUNWAY_WAIT = 3000;
   runwayCatalog.onChange = (runways) => geoTerrainManager.setRunways(runways);
@@ -802,6 +804,7 @@ async function initApp() {
     // Wall-clock time: the tiles keep morphing as the camera moves in the paused menu
     geoTerrainManager.update(camera, Math.min(frameTimeMs / 1000, MAX_DELTA_TIME));
     updateRunwayStart(now);
+    geoTerrainManager.runwayMarkings.update(runwayCatalog.runways, geoTerrainManager, camera.position);
     // Runways around the aircraft, checked about once a second
     if (--catalogCountdown <= 0) {
       catalogCountdown = 60;

@@ -67,3 +67,17 @@ test('a position offset along a heading', () => {
   assert.ok(Math.abs(p.lat - 46) < 1e-9);
   assert.ok(Math.abs((p.lon - 6) * 111195 * Math.cos((46 * Math.PI) / 180) - 1000) < 1);
 });
+
+test('runway designations keep their leading zero and side letter; only paved runways are painted', async () => {
+  const { designationCode, pavementOf } = await import('../js/terrain/RunwayMarkings.js');
+  assert.equal(designationCode('04'), 200 + 4 * 4);
+  assert.equal(designationCode('9'), 9 * 4);
+  assert.equal(designationCode('27L'), 27 * 4 + 1);
+  assert.equal(designationCode('36R'), 36 * 4 + 3);
+  for (const ident of ['H1', 'N', '37', '']) assert.equal(designationCode(ident), 0, ident);
+  assert.equal(pavementOf('ASPH-G'), 0);
+  assert.equal(pavementOf('CON'), 1);
+  assert.equal(pavementOf('PEM'), 1);
+  assert.equal(pavementOf('GRS'), null);
+  assert.equal(pavementOf('Turf'), null);
+});
