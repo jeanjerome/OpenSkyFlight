@@ -127,7 +127,7 @@ The settings menu (`Esc`) also lists every shortcut in its Controls tab.
 
 ## Building three-tile (required)
 
-The terrain engine relies on [three-tile](https://github.com/sxguojf/three-tile), a lightweight Three.js tile map library. We vendor a patched fork (`0.11.8-osf`) in `vendor/three-tile/` with custom LOD enhancements (concentric view-center weighting, removal hysteresis), WebGPU tile materials, Terrarium elevation decoded into float height textures, and anisotropic filtering of tile imagery.
+The terrain engine relies on [three-tile](https://github.com/sxguojf/three-tile), a lightweight Three.js tile map library. We vendor a patched fork (`0.11.8-osf`) in `vendor/three-tile/` with custom LOD enhancements (concentric view-center weighting, removal hysteresis), WebGPU tile materials, Terrarium elevation decoded in a worker into float height textures with seamless tile edges, and anisotropic filtering of tile imagery.
 
 The app imports the built bundle `vendor/three-tile/packages/lib/dist/three-tile-osf.js` via the import map. This file is **not versioned** (`dist/` is git-ignored), so it must be built after cloning, and again after any change to `vendor/three-tile/packages/lib/src/`:
 
@@ -156,9 +156,9 @@ Default location: **Mont Blanc** (45.8326°N, 6.8652°E).
 
 ## How It Works
 
-1. **Elevation** — Terrarium PNG tiles (AWS S3) are decoded on the CPU (`R×256 + G + B/256 − 32768` metres), resampled at the tile grid vertices into a float texture, and displaced on the GPU by a TSL `positionNode` shader. The tile map is scaled horizontally by cos(latitude) so that world units are metres on all three axes
+1. **Elevation** — Terrarium PNG tiles (AWS S3) are decoded in a worker (`R×256 + G + B/256 − 32768` metres), sampled at the tile grid vertices across tile boundaries into a float texture, and displaced on the GPU by a TSL `positionNode` shader. Neighbouring tiles share their edges exactly, and the edges of a tile beside a coarser one follow the coarser edge, so the terrain has no steps between tiles. The tile map is scaled horizontally by cos(latitude) so that world units are metres on all three axes
 2. **LOD system** — three-tile's quadtree subdivision splits tiles near the camera into 4 children at higher zoom; a concentric weighting concentrates hi-res tiles (zoom 16–18) at the view center while distant and peripheral tiles stay coarse
-3. **Textures** — Four modes: Satellite (ESRI) and Road map (OSM) fetch raster tiles on demand; SAR radar and Elevation contours are GPU-generated via TSL shaders
+3. **Textures** — Four modes: Satellite (ESRI) and Road map (OSM) fetch raster tiles on demand; SAR radar and the contour map (glowing contour lines over dark ground) are GPU-generated via TSL shaders
 4. **Caching** — A Node.js proxy intercepts all `/tiles/` requests: serves from disk on hit, fetches upstream on miss, caches for next time
 
 ## Tile Cache

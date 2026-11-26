@@ -27,9 +27,12 @@ import {
 	modelWorldMatrix,
 	cameraPosition,
 	vec4,
+	uniform,
+	If,
 } from "three/tsl";
 import { EARTH_RADIUS } from "../tile/curvature";
-import { DataTexture, FloatType, RedFormat } from "three";
+import { MAX_STITCH_LEVELS } from "../loader/terrariumShaderLoader/grid";
+import { DataTexture, FloatType, RedFormat, Vector4 } from "three";
 import type { Mesh, Texture } from "three";
 
 // Use any for MeshStandardNodeMaterial since it's in three/webgpu, not in three types
@@ -62,34 +65,57 @@ function getElevationNodes(): ElevationNodes {
 	const heightMap: any = (texture(placeholder) as any).onObjectUpdate(
 		({ object }: { object: Mesh }) => object.geometry.userData.heightTexture as Texture,
 	);
+	// Levels by which the neighbours drawn along the west, east, south and
+	// north edges are coarser than the tile (0: same level or finer), set on
+	// `object.userData.edgeLevels` by the application as the tiles change
+	const noStitch = new Vector4();
+	const edgeLevels: any = (uniform(new Vector4()) as any).onObjectUpdate(
+		({ object }: { object: Mesh }) => (object.userData.edgeLevels as Vector4) ?? noStitch,
+	);
 
 	const vNormal = varying(vec3(0.0, 0.0, 1.0)); // Z-up in tile local space
 
 	const position = Fn(() => {
 		const pos = positionLocal.toVar();
 
-		// Grid of n x n vertices; n depends on the tile zoom level
-		const last = heightMap.size(int(0)).x.toInt().sub(int(1)).toVar();
+		// Grid of n x n vertices and a ring of vertices around it (see
+		// TerrariumShaderLoader); n depends on the tile zoom level
+		const width = heightMap.size(int(0)).x.toInt().toVar();
+		const last = width.sub(int(3)).toVar();
 		const lastF = last.toFloat();
 
-		// Exact texel of a grid vertex: no filtering, the value is the elevation at the vertex
-		const heightAt = (i: any, j: any) => heightMap.load(ivec2(i, j)).r;
+		// Exact texel of a vertex (i, j in [-1, n]): no filtering, the value is the elevation at the vertex
+		const heightAt = (i: any, j: any) => heightMap.load(ivec2(i.add(int(1)), j.add(int(1)))).r;
+		// Elevation along an edge as a neighbour d levels coarser draws it
+		const profileAt = (edge: number, d: any, k: any) =>
+			heightMap.load(ivec2(k, width.add(int(edge * MAX_STITCH_LEVELS - 1)).add(d))).r;
 
 		// Grid indices of this vertex (skirt vertices share the UVs of the edge)
 		const cell = round(uv().mul(lastF)).toVar();
-		const i = cell.x.toInt();
-		const j = cell.y.toInt();
-		const elevation = heightAt(i, j);
+		const i = cell.x.toInt().toVar();
+		const j = cell.y.toInt().toVar();
+		const elevation = heightAt(i, j).toVar();
 
-		// Normal from central differences over the neighbouring vertices
-		// (one-sided on the tile edges), in tile local space (X=east, Y=north, Z=up)
-		const iL = max(i.sub(int(1)), int(0));
-		const iR = min(i.add(int(1)), last);
-		const jD = max(j.sub(int(1)), int(0));
-		const jU = min(j.add(int(1)), last);
-		const step = float(1).div(lastF);
-		const tangent = vec3(iR.sub(iL).toFloat().mul(step), float(0.0), heightAt(iR, j).sub(heightAt(iL, j)));
-		const bitangent = vec3(float(0.0), jU.sub(jD).toFloat().mul(step), heightAt(i, jU).sub(heightAt(i, jD)));
+		// On an edge along a coarser neighbour, the edge follows the neighbour's
+		// edge: no step between them. A corner follows the coarsest of its two neighbours.
+		const stitched = int(0).toVar();
+		const stitch = (onEdge: any, level: any, edge: number, k: any) => {
+			const d = level.toInt();
+			If(onEdge.and(d.greaterThan(stitched)), () => {
+				elevation.assign(profileAt(edge, d, k));
+				stitched.assign(d);
+			});
+		};
+		stitch(i.equal(int(0)), edgeLevels.x, 0, j);
+		stitch(i.equal(last), edgeLevels.y, 1, j);
+		stitch(j.equal(int(0)), edgeLevels.z, 2, i);
+		stitch(j.equal(last), edgeLevels.w, 3, i);
+
+		// Normal from central differences over the neighbouring vertices, the
+		// ring included, in tile local space (X=east, Y=north, Z=up)
+		const step = float(2).div(lastF);
+		const tangent = vec3(step, float(0.0), heightAt(i.add(int(1)), j).sub(heightAt(i.sub(int(1)), j)));
+		const bitangent = vec3(float(0.0), step, heightAt(i, j.add(int(1))).sub(heightAt(i, j.sub(int(1)))));
 		vNormal.assign(cross(tangent, bitangent).normalize());
 
 		// Displace along Z (tile local elevation axis), less the curvature of
@@ -114,7 +140,11 @@ function getElevationNodes(): ElevationNodes {
  * So elevation in metres maps directly to local Z offset.
  *
  * The elevations come from `geometry.userData.heightTexture` of the mesh being
- * drawn: a float texture with one elevation per grid vertex (n x n, row 0 = south).
+ * drawn: a float texture with one elevation per grid vertex (row 0 = south),
+ * a ring of vertices around the grid and the edge profiles drawn by coarser
+ * neighbours (see TerrariumShaderLoader). `object.userData.edgeLevels` (a
+ * Vector4: west, east, south, north) says how much coarser the neighbours
+ * drawn along each edge are; the edges follow them.
  *
  * @param material  The tile material to augment (MeshStandardNodeMaterial)
  */

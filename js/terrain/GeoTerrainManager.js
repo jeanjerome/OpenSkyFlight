@@ -1,6 +1,6 @@
 import { Fn, float, vec2, vec3, uv, fract, mix, sin } from 'three/tsl';
 import * as THREE from 'three';
-import { LoaderFactory, TileMap, TileSource, applyTerrariumElevation } from 'three-tile';
+import { LoaderFactory, TileMap, TileSource, applyTerrariumElevation, gridCells, MAX_STITCH_LEVELS } from 'three-tile';
 import { CONFIG, onChange, update } from '../utils/config.js';
 import ElevationProvider from '../geo/ElevationProvider.js';
 import { createContourMapNodes } from './ContourMap.js';
@@ -43,6 +43,8 @@ export default class GeoTerrainManager {
     this._syntheticNodes = {};
     this._emissiveNode = null;
     this._exposureNode = null;
+    /** Tiles drawn this frame by "z/x/y" */
+    this._drawnTiles = new Map();
 
     onChange((key, value) => {
       if (key === 'terrainLodThreshold' && this.tileMap) this.tileMap.LODThreshold = value;
@@ -231,6 +233,41 @@ export default class GeoTerrainManager {
     }
 
     if (this._wireframeMode) this._enforceWireframe();
+    this._updateEdgeLevels();
+  }
+
+  /**
+   * For each drawn tile, how many levels coarser the tiles drawn along its
+   * west, east, south and north edges are (0: same level or finer), read by
+   * the vertex shader to move the edges onto their coarser neighbours'.
+   * The neighbour along an edge is the drawn tile holding the middle of the
+   * edge, just outside it, at the tile's level or above.
+   */
+  _updateEdgeLevels() {
+    const drawn = this._drawnTiles;
+    drawn.clear();
+    this.tileMap.rootTile.traverse((tile) => {
+      if (tile.isTile && tile.showing) drawn.set(`${tile.z}/${tile.x}/${tile.y}`, tile);
+    });
+    const levelOf = (z, u, v) => {
+      for (let level = z; level >= 0; level--) {
+        const n = 2 ** level;
+        if (drawn.has(`${level}/${((Math.floor(u * n) % n) + n) % n}/${Math.floor(v * n)}`)) return z - level;
+      }
+      return 0;
+    };
+    for (const tile of drawn.values()) {
+      const n = 2 ** tile.z;
+      const step = 0.25 / n / gridCells(tile.z);
+      const levels = (tile.model.userData.edgeLevels ??= new THREE.Vector4());
+      levels.set(
+        levelOf(tile.z, tile.x / n - step, (tile.y + 0.5) / n),
+        levelOf(tile.z, (tile.x + 1) / n + step, (tile.y + 0.5) / n),
+        levelOf(tile.z, (tile.x + 0.5) / n, (tile.y + 1) / n + step),
+        levelOf(tile.z, (tile.x + 0.5) / n, tile.y / n - step),
+      );
+      levels.clampScalar(0, MAX_STITCH_LEVELS);
+    }
   }
 
   _hasVisibleTiles(tileMap) {
@@ -421,11 +458,15 @@ export default class GeoTerrainManager {
     }
     if (!displayed) return this.getGroundElevation(worldX, worldZ, null);
 
-    // Grid of size × size vertices over the tile, row 0 along the south edge;
-    // each cell is split along the diagonal from its south-east to its
-    // north-west vertex (three-tile's grid indices)
+    // Grid of size × size vertices over the tile, row 0 along the south edge,
+    // inside a ring of one vertex (texture rows and columns 1 to size); each
+    // cell is split along the diagonal from its south-east to its north-west
+    // vertex (three-tile's grid indices). The edges stitched to coarser
+    // neighbours are left out (a few metres at most).
     const texture = displayed.model.geometry.userData.heightTexture;
-    const { data, width: size } = texture.image;
+    const { data, width } = texture.image;
+    const size = width - 2;
+    const at = (column, row) => data[(row + 1) * width + column + 1];
     const n = 2 ** displayed.z;
     const gx = (u * n - displayed.x) * (size - 1);
     const gy = (1 - (v * n - displayed.y)) * (size - 1);
@@ -433,10 +474,10 @@ export default class GeoTerrainManager {
     const j = Math.min(size - 2, Math.max(0, Math.floor(gy)));
     const fx = gx - i;
     const fy = gy - j;
-    const a = data[j * size + i];
-    const b = data[j * size + i + 1];
-    const c = data[(j + 1) * size + i];
-    const d = data[(j + 1) * size + i + 1];
+    const a = at(i, j);
+    const b = at(i + 1, j);
+    const c = at(i, j + 1);
+    const d = at(i + 1, j + 1);
     return fx + fy <= 1 ? a + fx * (b - a) + fy * (c - a) : d + (1 - fx) * (c - d) + (1 - fy) * (b - d);
   }
 
