@@ -6,7 +6,7 @@ contrainte : l'application doit continuer à fonctionner dans un navigateur (Web
 Ce document est la **source de vérité de l'avancement**. Il est lu en début de session et mis à jour
 en fin de session.
 
-## État courant (mis à jour le 2026-11-25, session 21)
+## État courant (mis à jour le 2026-11-26, session 22)
 
 - **Lots terminés** : 0 à 3, fusionnés dans `main` (lots 2 et 3 le 2026-11-24). Lot 3 : bilan dans
   **Mesures** (lignes « Clôture du lot 3 ») et constats visuels sous les tableaux. Lot 2 : toutes les tâches faites sauf le reste optionnel de
@@ -89,14 +89,15 @@ en fin de session.
   reste en WebGL2 jusqu'à L4.8) ; `cloudAltitude` fixe la base des cumulus. Code : `js/clouds/`,
   `js/constants/clouds.js`, passe des nuages (`CloudsTemporalNode`) dans
   `ScenePipeline.setAtmosphere(apply, clouds)`, composition dans `AtmosphericSky._overScene`. Référence
-  des vues : `benchmarks/render/clouds-2` (vue 5 : 6,44 ms, dont ≈ 2,65 ms de nuages contre 3,79 ms
-  sans ; les vues de référence remettent le vent à zéro, sinon la couverture en vue dérive pendant une
-  capture et le coût de la vue 5 varie de ±0,6 ms). Coût non remesuré depuis la session 21 (boîte de
-  rognage élargie, poudre retirée : quelques opérations par pixel) : refaire une capture `clouds-3`
-  avant L4.5. Code commité (dernier commit de code `e360847`), branche non poussée ni fusionnée.
-- **Prochaine étape** : forme des cirrus (nappe lisse, sans filaments ; L4.3), puis L4.5 (ombres des
-  nuages sur le terrain). Couverture dans le menu avec L4.8. Fait avec l'utilisateur : scintillement
-  (rognage de l'historique, L4.4), cirrus gris et contraste de l'ombre propre (L4.3).
+  des vues : `benchmarks/render/clouds-5` (cirrus fibreux et marche stratifiée ; vue 5 : 7,13 ms,
+  contre 6,99 dans `clouds-4`, cirrus fibreux seuls, et 6,80 dans `clouds-3`, l'état de la session 21 ;
+  captures alternées de la vue 5 : cirrus fibreux −0,08 ms, marche stratifiée +0,15 ms). Les vues de référence remettent le vent à zéro,
+  sinon la couverture en vue dérive pendant une capture et le coût de la vue 5 varie de ±0,6 ms. Une
+  instance de l'app ouverte ailleurs (navigateur de l'utilisateur) double tous les coûts GPU d'une
+  capture : vérifier qu'aucune ne tourne avant de mesurer. Branche non poussée ni fusionnée.
+- **Prochaine étape** : L4.5 (ombres des nuages sur le terrain). Couverture dans le menu avec L4.8.
+  Fait avec l'utilisateur : scintillement (rognage de l'historique, L4.4), cirrus gris, contraste de
+  l'ombre propre et forme des cirrus (L4.3).
 - **Suite** : lot 4 (nuages volumétriques). Points ouverts : culling des tuiles par three presque
   inopérant (sphère englobante calculée en coordonnées locales où l'épaisseur est en mètres et la
   largeur en tuiles : rayon démesuré une fois mis à l'échelle), piste CPU et GPU pour le lot 5 ; coût CPU de soumission (≈ 5 µs par
@@ -593,8 +594,32 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       Coefficients de la diffusion multiple en constantes (`CLOUD_SCATTERING_DECAY`, inchangés).
       Grain des nuages proches en vol rapide : plus de points sombres depuis la correction du
       rognage (L4.4), seulement un léger flou en mouvement. Rebond du sol (`groundBounceScale` de
-      takram) écarté pour l'instant par l'utilisateur, faute de vue sous la couche. Reste : forme des
-      cirrus (une nappe lisse, sans filaments).
+      takram) écarté pour l'instant par l'utilisateur, faute de vue sous la couche.
+      Cirrus fibreux (choisis avec l'utilisateur parmi des variantes, mélange de deux d'entre elles) :
+      la couche haute était une nappe grise et lisse, proche d'un altostratus. Elle ne se forme plus
+      que le long des fibres d'une carte 2D (`CloudTextures.cirrus`, 1024² pour 20 km, générée au
+      démarrage) : crêtes de bruit de Perlin étirées 16 fois dans le sens du vent, courbées par un
+      bruit large (crochets en « queue de cheval »), seuillées d'autant plus bas que la carte météo
+      est dense (`CLOUD_CIRRUS_FIBRES`) ; couche de 175 m au lieu de 500, densité 0,0011 au lieu de
+      0,002, sans bruit de forme. Une érosion façon bruit de forme ne creusait que les bords : au cœur
+      de la nappe la densité vaut 1 et `remapClamp(1, x, 1)` reste 1. En 512² ou avec des crêtes plus
+      fines, une fibre en diagonale se hachait en perles verticales (crête large d'un texel). Coût :
+      −0,08 ms sur la vue 5 (captures alternées, couche plus mince). Scintillement caméra fixe dans la
+      zone des cirrus 0,11 sur 255 (nappe : 0,06 ; surface des cumulus : 0,50) ; vérifié en vol.
+      Marche stratifiée : en vol, l'utilisateur voyait le contenu des nuages « rouler » comme le nuage
+      d'une explosion, surtout en périphérie et au loin, et l'avion se couvrir de points dans un nuage.
+      Ni le vent (sa dérive est une translation rigide : 6 s de vent donnent l'image d'un décalage
+      instantané de 51 m) ni la reconstruction temporelle (effet identique en marchant tous les pixels
+      sans historique) n'en étaient la cause, mais la marche : seul le départ était tiré au hasard,
+      dans le premier pas, alors que les pas grandissent avec la distance. Au loin, les échantillons
+      tombaient à des places fixes de leurs pas, qui suivent la caméra (ils partent de l'entrée dans la
+      couche) : le crénelage du bruit de forme glissait avec l'avion à travers les nuages. Et le dernier
+      pas n'était pas raccourci à la scène : l'avion, à 25 m dans un nuage, recevait selon le tirage
+      zéro ou un échantillon intégrant 60 m de nuage. Désormais un échantillon tiré au hasard dans toute
+      la largeur de chaque pas, et le dernier pas s'arrête à la scène. Écart à une marche de référence
+      (pas de 20 à 50 m, 4096 pas ; image convergée de la vue 5) : nuages lointains 1,45 % → 1,10 %,
+      moyens 1,05 → 0,82, proches inchangés (bruit). Validé en vol par l'utilisateur, avion voilé
+      uniformément dans un nuage. Coût : +0,15 ms sur la vue 5 (captures alternées).
 - [x] **L4.4** Rendu à 1/4 de résolution + reprojection temporelle, composition tenant compte de la
       profondeur du terrain.
       `js/clouds/CloudsTemporalNode.js` : chaque frame marche un pixel de chaque bloc 4×4 de la passe
@@ -784,6 +809,9 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 | 2026-11-24 | L3 sans fond de tuile — draw calls (contre 549 / 657 / 663 / 603 / 631 / 603) | 307 | 361 | 364 | 334 | 348 | 334 |
 | 2026-11-24 | L2.7 Low et Medium (LODThreshold 0,9) — draw calls / triangles | 382 / 1,26 M | 412 / 1,53 M | 454 / 1,69 M | 388 / 1,30 M | 384 / 1,21 M | 382 / 1,26 M |
 | 2026-11-24 | L2.7 Ultra 1,4 — draw calls / triangles | 712 / 2,66 M | 790 / 3,36 M | 820 / 3,45 M | 730 / 2,77 M | 768 / 2,78 M | 724 / 2,69 M |
+| 2026-11-26 | **Pleine résolution** — L4 nuages, rognage élargi et sans poudre (`clouds-3`) | 3,61 | 3,77 | 3,78 | 3,73 | 6,80 | 3,80 |
+| 2026-11-26 | **Pleine résolution** — L4 cirrus fibreux (`clouds-4`) | 3,54 | 3,97 | 3,83 | 3,75 | 6,99 | 3,69 |
+| 2026-11-26 | **Pleine résolution** — L4 marche stratifiée (`clouds-5`) | 3,55 | 3,55 | 4,06 | 3,50 | 7,13 | 4,08 |
 
 Les lignes « GPU ms méd. » antérieures à L2.9 ne sont pas exploitables (somme des passes, fréquence
 du GPU fixée par le régulateur). Les lignes « coût GPU » de L2.9 à L2.3 ont été mesurées à 1028×645
@@ -885,6 +913,19 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 ## Journal des sessions
 
 <!-- Entrée la plus récente en haut. -->
+
+### 2026-11-26 (22)
+- Mesuré : capture `clouds-3` (état de la session 21) ; une première série à coûts doublés venait
+  d'une instance de l'app ouverte en même temps par l'utilisateur.
+- Fait : cirrus fibreux (voir L4.3), paramètres choisis avec l'utilisateur sur des planches de la
+  vue 5. Capture `clouds-4`, captures alternées contre l'état précédent (worktree supprimé ensuite).
+- Corrigé : roulis du contenu des nuages en vol et points sur l'avion dans un nuage (marche
+  stratifiée, voir L4.3). Diagnostic : l'utilisateur a volé avec des variantes passées dans l'URL
+  (vent coupé, tous les pixels marchés, sans historique, sans détail, pas fins) ; de mon côté, vol
+  rejoué à pas de temps fixe (crochet temporaire `window.__advance(n)` dans la boucle de rendu, patch
+  gardé dans le scratchpad de la session) pour comparer images en mouvement et images convergées à
+  la même pose. Capture `clouds-5`.
+- Prochaine étape : L4.5 (ombres des nuages sur le terrain).
 
 ### 2026-11-25 (21)
 - Corrigé : taches noires après la traversée d'un nuage (NaN de la perspective aérienne à distance
