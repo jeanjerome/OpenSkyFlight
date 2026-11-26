@@ -81,6 +81,9 @@ export default class AircraftManager {
         child.material.map = texture;
         child.material.needsUpdate = true;
       }
+      // The airframe darkens under and inside the clouds (their shadows scale
+      // the direct light); the lights and the exhaust, added below, glow on
+      if (child.isMesh) child.receiveShadow = true;
     });
 
     const hiddenGearParts = new Set([
