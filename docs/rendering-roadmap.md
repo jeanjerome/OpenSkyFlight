@@ -772,7 +772,8 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
 - [ ] **L5.3** Ombres du relief (cartes d'horizon ou ray marching sur la carte d'altitude) +
       `CSMShadowNode` pour l'avion et le terrain proche.
 - [ ] **L5.4** Occlusion ambiante (`GTAONode`).
-- [ ] **L5.5** Neutralisation de l'éclairage incrusté dans l'imagerie satellite.
+- [-] **L5.5** Neutralisation de l'éclairage incrusté dans l'imagerie satellite (abandonnée, voir
+      Décisions).
 - [ ] **L5.6** Détail procédural : occupation du sol (ESA WorldCover), roche triplanaire sur les
       pentes, neige selon altitude/pente, textures de détail selon la distance.
 - [ ] **L5.7** Eau : masque (OSM/JRC), matériau Fresnel + reflet du ciel + scintillement solaire,
@@ -1048,11 +1049,19 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 | 2026-11-25 | Repère des nuages | Coquilles sphériques centrées sur le centre de la Terre sous la caméra, coordonnées de texture tirées des x, z de la carte et de l'altitude, origine réduite modulo la répétition sur le CPU | Même courbure que le terrain (abaissé de d²/2R autour de la caméra) ; pas de coutures de projection cube-sphère ; précision des flottants conservée loin de l'origine de la carte |
 | 2026-11-25 | Suréchantillonnage temporel des nuages | Un pixel sur 16 marché par frame (Bayer 4×4), reprojection par pixel à la distance de sa scène ou du front des nuages, rejet de l'historique sur la distance de scène, repli pondéré par la ressemblance de profondeur | Comme takram pour le coût (marche à 1/16 des pixels) ; leur vitesse prise au fragment le plus proche d'un voisinage basse résolution laisse des halos aux silhouettes en mouvement, la reprojection à la profondeur pleine résolution de chaque pixel les évite |
 | 2026-11-25 | Reconstruction de l'atmosphère en cours de vol | Le TAAU marque ses matériaux internes à recompiler quand la passe d'atmosphère change | `TAAUNode.setup()` leur donne de nouveaux nœuds sans les marquer : couper la brume de distance, la brume de chaleur ou le volume de perspective aérienne depuis le menu ne s'appliquait qu'au rechargement (défaut antérieur, trouvé avec les nuages) |
+| 2026-11-26 | Éclairage incrusté dans l'imagerie (L5.5) | Abandonné, aucune correction (choix de l'utilisateur) | Les zones noires des vues 4 et 6 ne viennent pas de tuiles invalides : le cache est sain et les tuiles ESRI retéléchargées sont identiques octet pour octet. Elles viennent des ombres des photos (soleil à ≈ 155°, 50° d'élévation : faces nord-ouest 10 fois plus sombres et bleues, en partie écrasées au noir), de l'absence d'ombres du relief et de lumière renvoyée, et des comblements de lacunes du SRTM dans le MNT Terrarium. Le rééclairage essayé dans le shader (gain par canal tiré de la normale et de la teinte de l'ombre, masque élargi par un mip plus grossier, albédo de repli pour le noir écrasé) laissait des liserés sombres au bord des ombres et des taches dans les forêts : rendu jugé moins bon que l'original |
 | 2026-11-23 | Vitesse par défaut | 560 m/s | Vitesse réelle de l'ancien défaut (800 unités Mercator/s) : benchmarks comparables à la baseline |
 
 ## Journal des sessions
 
 <!-- Entrée la plus récente en haut. -->
+
+### 2026-11-26 (24)
+- Analysé : zones noires dans les massifs (vues 4 et 6). Cache de tuiles sain, causes dans l'imagerie,
+  l'éclairage et le MNT (voir Décisions, ligne L5.5).
+- Essayé puis annulé : rééclairage de l'imagerie dans le shader ; L5.5 abandonnée par l'utilisateur.
+  Aucun code modifié.
+- Prochaine étape : inchangée (G3 ou lot 5, voir État courant).
 
 ### 2026-11-26 (23)
 - Fait : L4.6, traversée des nuages (voir la tâche) : lumière dans un nuage choisie par
