@@ -89,13 +89,15 @@ en fin de session.
   reste en WebGL2 jusqu'à L4.8) ; `cloudAltitude` fixe la base des cumulus. Code : `js/clouds/`,
   `js/constants/clouds.js`, passe des nuages (`CloudsTemporalNode`) dans
   `ScenePipeline.setAtmosphere(apply, clouds)`, composition dans `AtmosphericSky._overScene`. Référence
-  des vues : `benchmarks/render/clouds-5` (cirrus fibreux et marche stratifiée ; vue 5 : 7,13 ms,
-  contre 6,99 dans `clouds-4`, cirrus fibreux seuls, et 6,80 dans `clouds-3`, l'état de la session 21 ;
-  captures alternées de la vue 5 : cirrus fibreux −0,08 ms, marche stratifiée +0,15 ms). Les vues de référence remettent le vent à zéro,
+  des vues : `benchmarks/render/clouds-6` (ombres des nuages ; vue 5 : 7,51 ms, contre 7,13 dans
+  `clouds-5`, marche stratifiée, 6,99 dans `clouds-4`, cirrus fibreux, et 6,80 dans `clouds-3`, l'état
+  de la session 21 ; d'une série à l'autre ±0,4 ms : les captures alternées de la vue 5 donnent
+  cirrus fibreux −0,08 ms, marche stratifiée +0,15 ms, ombres +0,12 ms). Les vues de référence remettent le vent à zéro,
   sinon la couverture en vue dérive pendant une capture et le coût de la vue 5 varie de ±0,6 ms. Une
   instance de l'app ouverte ailleurs (navigateur de l'utilisateur) double tous les coûts GPU d'une
   capture : vérifier qu'aucune ne tourne avant de mesurer. Branche non poussée ni fusionnée.
-- **Prochaine étape** : L4.5 (ombres des nuages sur le terrain). Couverture dans le menu avec L4.8.
+- **Prochaine étape** : L4.6 (traversée des nuages, caméra dans la couche). Couverture dans le menu
+  avec L4.8.
   Fait avec l'utilisateur : scintillement (rognage de l'historique, L4.4), cirrus gris, contraste de
   l'ombre propre et forme des cirrus (L4.3).
 - **Suite** : lot 4 (nuages volumétriques). Points ouverts : culling des tuiles par three presque
@@ -642,7 +644,26 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       détail suit désormais le vent avec la forme (il restait fixe, et les nuages glissaient dessous).
       Un rognage limité aux pixels marchés, essayé d'abord, laissait en vol une trame de nuage périmé
       sur le relief découvert : le rognage à chaque frame reste nécessaire.
-- [ ] **L4.5** Ombres des nuages sur le terrain.
+- [x] **L4.5** Ombres des nuages sur le terrain.
+      `js/clouds/CloudShadow.js` : carte de 512² sur 60 km centrée sous la caméra, recalée par texel
+      (les échantillons restent fixes sur le sol), redessinée tous les 4 rendus (`CLOUD_SHADOW_REFRESH` ;
+      entre deux, la lecture recale le centre gardé en coordonnées monde, en doubles). Chaque texel suit
+      le rayon vers la lumière qui croise la base des cumulus en ce point et garde l'épaisseur optique
+      des nuages au-dessus de quatre hauteurs : la base, le tiers et les deux tiers jusqu'au sommet des
+      nuages moyens, ce sommet (au-delà, les cirrus seuls) ; 8 pas par tiers, 2 dans les cirrus, bruit
+      de forme sans détail, sauté là où la carte météo est vide. Un point qui reçoit les ombres est
+      projeté le long de la lumière sur la base, et l'épaisseur interpolée à sa hauteur : un sommet
+      qui dépasse dans la couche n'est pas ombré par les nuages en dessous. Fondu vers les bords de la
+      carte (au-delà de ≈ 24 km, plus d'ombre) ; élévation de la lumière prise d'au moins 3° pour la
+      projection. Branchement : `light.shadow.shadowNode` de three sur l'`AtmosphereLight` (soleil ou
+      lune), avec `renderer.shadowMap.enabled` et `castShadow` mais sans carte de profondeur (le nœud
+      personnalisé remplace celle de three : aucun draw call de plus) ; le facteur ne multiplie que la
+      lumière directe, pas celle du ciel ni l'émission des villes. Le terrain reçoit les ombres
+      (`tileMap.receiveShadow`, recopié par three-tile sur chaque tuile) ; l'avion non. La carte est
+      dessinée avant chaque rendu du pipeline (`ScenePipeline.setBeforeRender`), donc comptée dans les
+      rendus répétés de la mesure GPU. Coût (vue 5, captures alternées) : +0,12 ms (carte redessinée à
+      chaque rendu : +0,45 à +0,75 ms ; lecture par fragment : rien de mesurable). En vol, carte
+      redessinée tous les 4 rendus ou à chaque rendu : mêmes images à chaque phase du cycle.
 - [ ] **L4.6** Traversée des nuages (caméra dans la couche).
 - [ ] **L4.7** Rayons crépusculaires (`GodraysNode`) et reflet d'objectif (`LensflareNode`).
 - [ ] **L4.8** Retirer l'ancien `CloudLayer` plan ; adapter les contrôles du panneau.
@@ -812,6 +833,7 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 | 2026-11-26 | **Pleine résolution** — L4 nuages, rognage élargi et sans poudre (`clouds-3`) | 3,61 | 3,77 | 3,78 | 3,73 | 6,80 | 3,80 |
 | 2026-11-26 | **Pleine résolution** — L4 cirrus fibreux (`clouds-4`) | 3,54 | 3,97 | 3,83 | 3,75 | 6,99 | 3,69 |
 | 2026-11-26 | **Pleine résolution** — L4 marche stratifiée (`clouds-5`) | 3,55 | 3,55 | 4,06 | 3,50 | 7,13 | 4,08 |
+| 2026-11-26 | **Pleine résolution** — L4 ombres des nuages (`clouds-6`) | 3,60 | 3,60 | 3,71 | 3,74 | 7,51 | 3,82 |
 
 Les lignes « GPU ms méd. » antérieures à L2.9 ne sont pas exploitables (somme des passes, fréquence
 du GPU fixée par le régulateur). Les lignes « coût GPU » de L2.9 à L2.3 ont été mesurées à 1028×645
@@ -925,7 +947,8 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
   rejoué à pas de temps fixe (crochet temporaire `window.__advance(n)` dans la boucle de rendu, patch
   gardé dans le scratchpad de la session) pour comparer images en mouvement et images convergées à
   la même pose. Capture `clouds-5`.
-- Prochaine étape : L4.5 (ombres des nuages sur le terrain).
+- Fait : L4.5, ombres des nuages sur le terrain (voir la tâche). Capture `clouds-6`.
+- Prochaine étape : L4.6 (traversée des nuages).
 
 ### 2026-11-25 (21)
 - Corrigé : taches noires après la traversée d'un nuage (NaN de la perspective aérienne à distance
