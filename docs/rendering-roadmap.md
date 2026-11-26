@@ -84,12 +84,13 @@ en fin de session.
     l'autre touchent aussi l'ancien code : seules des captures alternées (worktree de l'ancien état
     sur le port 3001, ou `--set` d'un réglage sur le même code) tranchent une régression.
 - **Lot 4 en cours** sur `feat/render-clouds` (depuis `main`, après la fusion de `feat/flight-model`
-  le 2026-11-25). Fait : L4.1, L4.4, L4.5, L4.6, et premières versions de L4.2 et L4.3 (voir les tâches). Le réglage
+  le 2026-11-25). Fait : L4.1, L4.4, L4.5, L4.6, L4.7, et premières versions de L4.2 et L4.3 (voir les tâches). Le réglage
   « Clouds » (`showClouds`) dessine les nuages volumétriques en WebGPU (la couche plane `CloudLayer`
   reste en WebGL2 jusqu'à L4.8) ; `cloudAltitude` fixe la base des cumulus. Code : `js/clouds/`,
   `js/constants/clouds.js`, passe des nuages (`CloudsTemporalNode`) dans
   `ScenePipeline.setAtmosphere(apply, clouds)`, composition dans `AtmosphericSky._overScene`. Référence
-  des vues : `benchmarks/render/clouds-7` (traversée des nuages ; vue 5 : 7,43 ms, rien de mesurable
+  des vues : `benchmarks/render/clouds-8` (rayons crépusculaires ; vue 5 : 7,38 ms, 7,14 dans `clouds-8b`), avant elle
+  `clouds-7` (traversée des nuages ; vue 5 : 7,43 ms, rien de mesurable
   sur les vues de référence, caméra loin des couches), avant elle `clouds-6` (ombres des nuages ; vue 5 : 7,51 ms, contre 7,13 dans
   `clouds-5`, marche stratifiée, 6,99 dans `clouds-4`, cirrus fibreux, et 6,80 dans `clouds-3`, l'état
   de la session 21 ; d'une série à l'autre ±0,4 ms : les captures alternées de la vue 5 donnent
@@ -98,9 +99,9 @@ en fin de session.
   instance de l'app ouverte ailleurs (navigateur de l'utilisateur) double tous les coûts GPU d'une
   capture : vérifier qu'aucune ne tourne avant de mesurer. Tout est commité (dernier commit de code :
   traversée des nuages), branche non poussée ni fusionnée.
-- **Prochaine étape** : L4.7 (rayons crépusculaires et reflet d'objectif), puis L4.8 (retrait de
-  l'ancien `CloudLayer`, couverture dans le menu). L4.6 validée en vol par l'utilisateur (au-dessus,
-  en dessous et à travers les nuages).
+- **Prochaine étape** : L4.8 (retrait de l'ancien `CloudLayer`, couverture dans le menu), puis
+  clôture du lot 4. L4.6 validée en vol par l'utilisateur (au-dessus, en dessous et à travers les
+  nuages) ; L4.7 faite (rayons des nuages à 70 %, reflet d'objectif en option désactivée).
   Outils pour les défauts en mouvement : variantes passées dans l'URL que l'utilisateur essaie en
   vol, vol rejoué à pas de temps fixe (crochets temporaires `window.__advance(n)` et
   `window.__move(m)` dans la boucle de rendu de `js/app.js`, à recréer : les patchs du scratchpad ne
@@ -714,7 +715,29 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       le sommet des nuages moyens et les cirrus (l'avion de la vue 5) ne recevait que 37 % du soleil
       sous un ciel clair. Les passes plein écran écrivent désormais leur `outputNode`.
       Capture `clouds-7` : coûts des vues de référence inchangés (vue 5 : 7,43 ms).
-- [ ] **L4.7** Rayons crépusculaires (`GodraysNode`) et reflet d'objectif (`LensflareNode`).
+- [x] **L4.7** Rayons crépusculaires (`GodraysNode`) et reflet d'objectif (`LensflareNode`).
+      Rayons crépusculaires des nuages, sans `GodraysNode` (il marche la carte de profondeur d'une
+      lumière, que le soleil n'a pas : ses ombres viennent de la carte des nuages, L4.5). L'air à
+      l'ombre des nuages ne diffuse plus le soleil : un second volume, 256×128×32 sur les 25 km que
+      couvre la carte des ombres (`LIGHT_SHAFT_*`), suit le rayon de chaque colonne, lit la part de
+      lumière cachée en 4 points de chaque cellule et cumule la lumière diffusée sur la cellule (écart
+      du volume de perspective aérienne entre ses bouts) pondérée par cette part ; les pixels la
+      retranchent à leur distance, le ciel celle de toute la colonne. Première version par la
+      longueur d'ombre de Bruneton dans la bibliothèque (`shadowLength`, un seul tronçon par rayon) :
+      +1,3 ms (évaluation « précise » des tables dans chaque cellule) et marches d'escalier sur les
+      bords d'ombre à 128×64 ; la version retenue ne coûte rien de mesurable (vue 6 sous les nuages,
+      captures alternées) et ses colonnes, décalées à chaque frame, sont lissées par l'anticrénelage.
+      Intensité choisie par l'utilisateur sur planche (vue 6, nuages à 5000 m) : 70 % de la lumière
+      ôtée (`LIGHT_SHAFT_STRENGTH`), l'air à l'ombre diffusant encore celle du ciel ; à 100 %, la
+      brume disparaissait à l'ombre. Les reliefs ne font pas encore de rayons (pas de carte d'ombre du
+      terrain avant L5.3).
+      Reflet d'objectif (`LensflareNode` de three, images fantômes du bloom à travers le centre de
+      l'image, adoucies par un flou gaussien) : réglage « Lens flare » du menu, désactivé par défaut et
+      hors presets (choix de l'utilisateur). Seul le cœur du bloom fait des fantômes (20 fois son
+      seuil, `LENS_FLARE`) : son halo large en faisait des disques de la moitié de l'image. Coût
+      +0,15 à +0,5 ms sur la vue 6 (d'abord +1,3 ms : les nœuds passés sans `getTextureNode()` étaient
+      recopiés dans des cibles plein écran).
+      Captures `clouds-8` et `clouds-8b` : coûts des vues de référence inchangés.
 - [ ] **L4.8** Retirer l'ancien `CloudLayer` plan ; adapter les contrôles du panneau.
 
 ## Lot 5 — Terrain, ombres et eau
@@ -996,7 +1019,9 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
   600 m), scripts gardés dans le scratchpad.
 - Commits : correctif de la carte des ombres, traversée des nuages, documentation (non poussés).
 - Validé en vol par l'utilisateur : au-dessus, en dessous et à travers les nuages.
-- Prochaine étape : L4.7 (voir État courant).
+- Fait ensuite : L4.7, rayons crépusculaires des nuages (intensité choisie sur planche) et reflet
+  d'objectif en option (voir la tâche). Captures `clouds-8`, `clouds-8b`.
+- Prochaine étape : L4.8 (voir État courant).
 
 ### 2026-11-26 (22)
 - Mesuré : capture `clouds-3` (état de la session 21) ; une première série à coûts doublés venait
