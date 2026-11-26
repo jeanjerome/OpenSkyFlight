@@ -1,8 +1,9 @@
-import { Fn, float, vec2, vec3, uv, positionWorld, fract, smoothstep, mix, min, max, sin, step, clamp, fwidth, sRGBTransferEOTF } from 'three/tsl';
+import { Fn, float, vec2, vec3, uv, fract, mix, sin } from 'three/tsl';
 import * as THREE from 'three';
 import { LoaderFactory, TileMap, TileSource, applyTerrariumElevation } from 'three-tile';
 import { CONFIG, onChange, update } from '../utils/config.js';
 import ElevationProvider from '../geo/ElevationProvider.js';
+import { createContourMapNodes } from './ContourMap.js';
 
 // Web Mercator constants (WGS84)
 const EARTH_RAD = 6378137;
@@ -41,6 +42,7 @@ export default class GeoTerrainManager {
     this._wireframedMeshes = new WeakSet();
     this._syntheticNodes = {};
     this._emissiveNode = null;
+    this._exposureNode = null;
 
     onChange((key, value) => {
       if (key === 'terrainLodThreshold' && this.tileMap) this.tileMap.LODThreshold = value;
@@ -202,11 +204,21 @@ export default class GeoTerrainManager {
       if (!child.isMesh || !child.material) return;
       const materials = Array.isArray(child.material) ? child.material : [child.material];
       for (const mat of materials) {
-        if (!mat._terrariumApplied) continue;
+        // The synthetic modes have their own emission
+        if (!mat._terrariumApplied || this._wireframedMeshes.has(mat)) continue;
         mat.emissiveNode = node;
         mat.needsUpdate = true;
       }
     });
+  }
+
+  /**
+   * Night exposure of the scene, which the glowing contour lines follow
+   * (AtmosphericSky.preExposure). Set before the terrain is drawn.
+   * @param {Node<float>} node
+   */
+  setExposureNode(node) {
+    this._exposureNode = node;
   }
 
   update(_cameraPosition) {
@@ -244,66 +256,23 @@ export default class GeoTerrainManager {
     })();
   }
 
-  _createLinesNode() {
-    return Fn(() => {
-      const elev = positionWorld.y;
-
-      const t = clamp(elev.div(float(4000.0)), 0.0, 1.0);
-
-      const c0 = vec3(0.02, 0.18, 0.08);
-      const c1 = vec3(0.12, 0.30, 0.05);
-      const c2 = vec3(0.35, 0.30, 0.10);
-      const c3 = vec3(0.55, 0.50, 0.45);
-      const c4 = vec3(0.85, 0.85, 0.90);
-
-      const t1 = clamp(t.mul(float(8.0)), 0.0, 1.0);
-      const t2 = clamp(t.sub(float(0.125)).mul(float(2.667)), 0.0, 1.0);
-      const t3 = clamp(t.sub(float(0.5)).mul(float(4.0)), 0.0, 1.0);
-      const t4 = clamp(t.sub(float(0.75)).mul(float(4.0)), 0.0, 1.0);
-
-      const bg = mix(mix(mix(mix(c0, c1, t1), c2, t2), c3, t3), c4, t4);
-
-      const belowSea = clamp(elev.negate().div(float(200.0)), 0.0, 1.0);
-      const seaColor = vec3(0.0, 0.05, 0.12);
-      const baseColor = mix(bg, seaColor, belowSea);
-
-      const fracMinor = fract(elev.div(float(50.0)));
-      const distMinor = min(fracMinor, float(1.0).sub(fracMinor));
-      const fwMinor = fwidth(fracMinor);
-      const lineMinor = smoothstep(fwMinor.mul(float(1.5)), fwMinor.mul(float(0.5)), distMinor);
-
-      const fracMed = fract(elev.div(float(100.0)));
-      const distMed = min(fracMed, float(1.0).sub(fracMed));
-      const fwMed = fwidth(fracMed);
-      const lineMed = smoothstep(fwMed.mul(float(1.5)), fwMed.mul(float(0.5)), distMed);
-
-      const fracMaj = fract(elev.div(float(500.0)));
-      const distMaj = min(fracMaj, float(1.0).sub(fracMaj));
-      const fwMaj = fwidth(fracMaj);
-      const lineMaj = smoothstep(fwMaj.mul(float(2.0)), fwMaj.mul(float(0.5)), distMaj);
-
-      const minorColor = mix(baseColor, vec3(0.0, 0.6, 0.7), float(0.3));
-      const medColor   = vec3(0.0, 0.80, 0.90);
-      const majColor   = vec3(0.9, 0.95, 1.0);
-
-      const lineAlpha = max(lineMinor.mul(float(0.25)), max(lineMed.mul(float(0.55)), lineMaj));
-      const lineColor = mix(
-        mix(minorColor, medColor, step(float(0.25), lineMed)),
-        majColor,
-        step(float(0.5), lineMaj)
-      );
-
-      // The palette is authored in sRGB; the lit material expects linear albedo
-      return sRGBTransferEOTF(mix(baseColor, lineColor, lineAlpha));
-    })();
-  }
-
+  /** Colour and emission of the synthetic modes: { color, emissive } */
   _getSyntheticNode(mode) {
     if (!this._syntheticNodes[mode]) {
       this._syntheticNodes[mode] =
-        mode === 'elevation' ? this._createLinesNode() : this._createRadarNode();
+        mode === 'elevation'
+          ? createContourMapNodes(this._exposureNode ?? float(1))
+          : { color: this._createRadarNode(), emissive: null };
     }
     return this._syntheticNodes[mode];
+  }
+
+  _applySyntheticNode(mat, node) {
+    mat.colorNode = node.color;
+    mat.emissiveNode = node.emissive ?? this._emissiveNode;
+    mat.map = null;
+    mat.wireframe = false;
+    mat.needsUpdate = true;
   }
 
   _applyWireframeToMesh(mesh) {
@@ -312,10 +281,7 @@ export default class GeoTerrainManager {
     const node = this._getSyntheticNode(CONFIG.textureMode);
     for (const mat of materials) {
       if (this._wireframedMeshes.has(mat)) continue;
-      mat.colorNode = node;
-      mat.map = null;
-      mat.wireframe = false;
-      mat.needsUpdate = true;
+      this._applySyntheticNode(mat, node);
       this._wireframedMeshes.add(mat);
     }
   }
@@ -328,10 +294,7 @@ export default class GeoTerrainManager {
       const materials = Array.isArray(child.material) ? child.material : [child.material];
       for (const mat of materials) {
         if (this._wireframedMeshes.has(mat)) continue;
-        mat.colorNode = node;
-        mat.map = null;
-        mat.wireframe = false;
-        mat.needsUpdate = true;
+        this._applySyntheticNode(mat, node);
         this._wireframedMeshes.add(mat);
       }
     });

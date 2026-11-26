@@ -73,6 +73,7 @@ async function initApp() {
   });
   const cityLights = new CityLights(geoTerrainManager, atmosphericSky.preExposure);
   geoTerrainManager.setEmissiveNode(cityLights.node);
+  geoTerrainManager.setExposureNode(atmosphericSky.preExposure);
   // Volumetric clouds need compute shaders (their noise textures): none on the WebGL2 backend
   let volumetricClouds = null;
   if (renderer.backend.isWebGPUBackend) {
