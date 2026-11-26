@@ -8,25 +8,41 @@ drones de combat.
 Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes conventions. Il est la
 **source de vérité de l'avancement** des lots G0 à G6.
 
-## État courant (mis à jour le 2026-11-26)
+## État courant (mis à jour le 2026-11-27)
 
-- **Statut** : plan validé le 2026-11-25 (voir **Décisions**). **G0, G1 et G2 (sauf l'option G2.7)
-  faits et commités**, fusionnés dans `main` et poussés le 2026-11-25 (branche `feat/flight-model` supprimée), sauf le préchargement et les requêtes par lot de G0.4 (reportés à
-  G3 et G5) et la récupération automatique de G1.2 (reportée). Le lot de rendu 4 (nuages
-  volumétriques) est terminé et fusionné dans `main` le 2026-11-26 (voir `docs/rendering-roadmap.md`).
-  Le lot de rendu 5 (terrain et ombres) est terminé et fusionné dans `main` le 2026-11-26 et
-  poussé. **G3 (décollage et atterrissage) en cours sur `feat/takeoff-landing`** depuis le
-  2026-11-26 : G3.1 (train animé), G3.2 (physique au sol), G3.3 (crash et écran de reprise) et
-  G3.4 (aéroports, départ d'une piste depuis le menu : onglet World, section Airports) et G3.5
-  (terrain aplani sous les pistes), G3.6 (pistes et marquages peints, tuiles au zoom 18 autour) et
-  G3.7 (balisage lumineux et PAPI) et G3.8 (guidage d'approche, pilote automatique `C`) faits :
-  **lot G3 terminé** le 2026-11-27, puis le banc de pilotage (voir **Banc de pilotage**) ;
-  `feat/takeoff-landing` fusionnée dans `main` (avance rapide) le 2026-11-27 à la demande de
-  l'utilisateur, non poussée. Suite au choix de l'utilisateur : ses essais en vol, le lot de rendu 6
-  ou G4 (radar de nuit). Bundle three-tile à reconstruire après un changement de branche (`cd vendor/three-tile &&
-  npm run build:lib`) : l'aplanissement est dans son worker. L'avion porte désormais
-  son ombre et reçoit celle du relief (`js/aircraft/AircraftShadow.js`, calque `SHADOW_CASTER_LAYER`
-  pour ce qui doit la projeter : penser au train d'atterrissage de G3).
+- **Où reprendre** : G0 à G3 et le banc de pilotage sont faits et dans `main` (lot G3 fusionné en
+  avance rapide depuis `feat/takeoff-landing` le 2026-11-27, **non poussé** : `git status -sb`). La
+  suite est au choix de l'utilisateur en début de session : ses essais en vol (décollage d'une piste,
+  tour de piste, approche guidée, atterrissage, de jour et de nuit), puis le lot de rendu 6 (voir
+  `docs/rendering-roadmap.md`) ou G4 (radar de nuit). Les branches `feat/takeoff-landing` et
+  `feat/render-terrain` existent encore (à supprimer seulement à sa demande).
+- **Avant de mesurer ou de voler** : reconstruire le bundle three-tile après un changement de branche
+  (`cd vendor/three-tile && npm run build:lib` : l'aplanissement des pistes et le niveau maximal par
+  tuile y sont) ; relancer le serveur de l'utilisateur (`npm run dev`, port 3000) s'il date d'avant
+  G3.4 (routes `/api/airports` et `/api/runways`). Les données OurAirports sont dans
+  `cache/ourairports/` (téléchargées une fois par le serveur).
+- **Vérifier un changement de vol de bout en bout** : `npm test` (dont le tour de piste du pilote
+  scripté sur piste plate) et `npm run flight:scenario -- --url http://localhost:3002/ --out
+  <dossier> --airport LSGG --time-scale 3` sur un serveur de test (`node scripts/serve.js --port
+  3002`), voir **Banc de pilotage**. Référence : LSGG 04 et LFPG 08R de nuit, tous deux réussis.
+- **Ce que G3 a apporté (pour la suite)** : train animé et poignée `G` (bouton X), physique au sol
+  (`GearContact`, loi sol des commandes de vol, centre de gravité `AIRCRAFT_CG`), crash et écran de
+  reprise (`GroundStrike`, `CrashScreen`), aéroports d'OurAirports (recherche dans le menu, onglet
+  World, section Airports ; `RunwayCatalog` autour de l'avion), terrain aplani sous les pistes (worker
+  d'altitude), pistes et marquages peints (`RunwayMarkings`) et tuiles jusqu'au zoom 18 autour,
+  balisage lumineux et PAPI (`RunwayLights`), guidage d'approche sur le HUD (`ApproachGuide`), pilote
+  automatique de cap et d'altitude (`C`). Les objets placés loin dans le monde (drones, sites, G5)
+  devront, comme le terrain et les feux de piste, être abaissés de la courbure `d²/2R` au rendu.
+- **Points ouverts relevés** : de nuit, les lumières de ville (Black Marble) font de grandes taches
+  floues au sol près des aéroports ; au zoom 18, les vrais marquages de l'imagerie se devinent sous
+  la peinture (25 % d'imagerie gardés) ; les pistes en herbe restent celles de l'imagerie ; les zones
+  avant un seuil décalé n'ont pas leurs flèches ; le décollage du pilote scripté se fait plein sec
+  (sans PC) ; tuiles chargées avant que leurs pistes soient connues non recalculées (aucun cas
+  courant).
+- **Historique** : G0, G1 et G2 (sauf l'option G2.7) fusionnés et poussés le 2026-11-25, sauf le
+  préchargement et les requêtes par lot de G0.4 (reportés) et la récupération automatique de G1.2
+  (reportée) ; lots de rendu 4 et 5 fusionnés et poussés le 2026-11-26 ; G3 et le banc de pilotage
+  fusionnés le 2026-11-27.
 - **Vue orbite** (demandée par l'utilisateur, hors lots) : `CONFIG.cameraMode = 'orbit'`, entre la
   poursuite et le cockpit (`V`), `js/camera/OrbitCameraController.js`. La caméra tourne autour de
   l'avion dans son repère (roulis compris, rattrapé comme la poursuite liée), vise 3 m derrière son
@@ -113,12 +129,10 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
   - Le modèle vient de CGTrader (modèle gratuit « Dassault Rafale B ») sous licence Royalty Free,
     incompatible avec sa présence dans le dépôt public (voir Décisions, « Encore ouvert ») : laissé
     tel quel à la demande de l'utilisateur, le 2026-11-25.
-- **Prochaine session de vol** : le 2026-11-25, l'utilisateur n'a rien demandé à régler après ses vols
-  (brume, visée souris, son, flamme, vue orbite) ; G0 à G2 fusionnés dans `main` et poussés. Le lot 4
-  du rendu (nuages volumétriques) est en cours sur `feat/render-clouds` ; G3 (décollage et
-  atterrissage) vient ensuite, depuis `main`. Points de réglage connus si l'utilisateur les demande :
-  convergence latérale de la visée souris (`SIDE_BANK_GAIN`), roulis clavier (`KEY_STICK_TIME`),
-  force de la brume (`HAZE_BEND`, `HAZE_FLOW`).
+- **Points de réglage connus** si l'utilisateur les demande après ses vols : convergence latérale de
+  la visée souris (`SIDE_BANK_GAIN`), roulis clavier (`KEY_STICK_TIME`), force de la brume
+  (`HAZE_BEND`, `HAZE_FLOW`), au sol la rotation (`GROUND_PITCH_CONTROL`, `GROUND_PITCH_RATE`), le
+  freinage (`BRAKE_FRICTION`) et le braquage de la roue avant (`STEERING_SIDE_ACCELERATION`).
 - **Outils** : `npm test` (tests Node, dont le banc du modèle de vol et l'instructeur de visée),
   `npm run flight:bench` (tableau du banc), scripts Playwright ad hoc dans le scratchpad de session
   (vue orbite par `?cameraMode=orbit` et la molette pour cadrer l'avion, `window.osf.setConfig(clé,

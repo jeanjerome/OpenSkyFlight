@@ -19,7 +19,15 @@ en fin de session.
   mis à jour par `GeoTerrainManager.update`, plus par le rendu. Bundle three-tile à reconstruire après
   chaque `git pull` ou changement de branche (`cd vendor/three-tile && npm run build:lib`) : le worker
   d'altitude y est intégré.
-- **Prochaine étape** : au choix de l'utilisateur, lot de jeu G3, lot 6, ou reprise de L5.6 / L5.7.
+- **Prochaine étape** (mise à jour le 2026-11-27) : le lot de jeu G3 est fait et fusionné dans
+  `main` (voir `docs/gameplay-roadmap.md`) ; au choix de l'utilisateur, lot 6, lot de jeu G4, ou
+  reprise de L5.6 / L5.7. G3 a touché au rendu : pistes et marquages peints dans la couleur du
+  terrain (`js/terrain/RunwayMarkings.js`, coût non mesurable), tuiles jusqu'au zoom 18 à moins de
+  1,5 km des pistes (`TileMap.maxLevelOf` dans three-tile, ≈ +0,45 ms au sol sur un aéroport, rien
+  ailleurs), terrain aplani sous les pistes dans le worker d'altitude, balisage lumineux dans la passe
+  de halo (`js/airports/RunwayLights.js`, coût dans le bruit). Les vues de référence (Mont Blanc)
+  peuvent montrer quelques petites pistes peintes à moins de 30 km ; l'avion est dessiné autour de son
+  centre de gravité estimé depuis G3.2 (décalé de 0,7 m vers le haut et 1,5 m vers l'avant).
 
 - **Lot 4 terminé** le 2026-11-26 (toutes ses tâches faites, bilan dans **Mesures**, lignes
   « Clôture du lot 4 », captures `docs/screenshots/render/lot4/`), fusionné dans `main` le même jour
@@ -31,8 +39,9 @@ en fin de session.
   plus. Bilan dans **Mesures** (lignes « Clôture du lot 2 ») et constats visuels sous les tableaux.
 - **three.js** : r187 (import map d'`index.html`), mis à jour depuis r183 pour le TRAA compatible avec
   la profondeur inversée.
-- **Git** : lots 0 à 5 et lots de jeu G0 à G2 dans `main` (voir `git status -sb` pour les commits
-  non poussés) ; la branche `feat/render-terrain` existe encore. Plus de worktree de comparaison : en
+- **Git** : lots 0 à 5 et lots de jeu G0 à G3 dans `main` (voir `git status -sb` pour les commits
+  non poussés : G3 fusionné le 2026-11-27, non poussé) ; les branches `feat/render-terrain` et
+  `feat/takeoff-landing` existent encore. Plus de worktree de comparaison : en
   recréer un si besoin (voir Outillage).
 - **Environnement local** : bundle three-tile construit, `npm install` fait (racine et
   `vendor/three-tile`), cache `cache/` chaud pour les vues de référence et les deux vols. Lancer
