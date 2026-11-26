@@ -95,10 +95,16 @@ en fin de session.
   cirrus fibreux −0,08 ms, marche stratifiée +0,15 ms, ombres +0,12 ms). Les vues de référence remettent le vent à zéro,
   sinon la couverture en vue dérive pendant une capture et le coût de la vue 5 varie de ±0,6 ms. Une
   instance de l'app ouverte ailleurs (navigateur de l'utilisateur) double tous les coûts GPU d'une
-  capture : vérifier qu'aucune ne tourne avant de mesurer. Branche non poussée ni fusionnée.
-- **Prochaine étape** : L4.6 (traversée des nuages, caméra dans la couche). Couverture dans le menu
-  avec L4.8.
-  Fait avec l'utilisateur : scintillement (rognage de l'historique, L4.4), cirrus gris, contraste de
+  capture : vérifier qu'aucune ne tourne avant de mesurer. Tout est commité (dernier commit de code :
+  ombres des nuages sur l'avion), branche non poussée ni fusionnée.
+- **Prochaine étape** : L4.6 (traversée des nuages, caméra dans la couche) : brouillard autour de
+  la caméra, entrée et sortie, et lumière dans un nuage (l'avion et le sol à l'ombre n'y reçoivent
+  que la lumière bleutée d'un ciel clair, pas celle, plus blanche, diffusée par le nuage). Les points
+  sur l'avion dans un nuage sont déjà corrigés (marche stratifiée). Couverture dans le menu avec L4.8.
+  Outils de la session 22 pour les défauts en mouvement : variantes passées dans l'URL que
+  l'utilisateur essaie en vol, vol rejoué à pas de temps fixe (crochet temporaire
+  `window.__advance(n)` dans la boucle de rendu, à recréer : les patchs du scratchpad ne survivent
+  pas à la session). Fait avec l'utilisateur : scintillement (rognage de l'historique, L4.4), cirrus gris, contraste de
   l'ombre propre et forme des cirrus (L4.3).
 - **Suite** : lot 4 (nuages volumétriques). Points ouverts : culling des tuiles par three presque
   inopérant (sphère englobante calculée en coordonnées locales où l'épaisseur est en mètres et la
@@ -659,7 +665,11 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       lune), avec `renderer.shadowMap.enabled` et `castShadow` mais sans carte de profondeur (le nœud
       personnalisé remplace celle de three : aucun draw call de plus) ; le facteur ne multiplie que la
       lumière directe, pas celle du ciel ni l'émission des villes. Le terrain reçoit les ombres
-      (`tileMap.receiveShadow`, recopié par three-tile sur chaque tuile) ; l'avion non. La carte est
+      (`tileMap.receiveShadow`, recopié par three-tile sur chaque tuile), et la cellule de l'avion
+      (ajoutée à la demande de l'utilisateur ; ses feux et ses jets restent lumineux) : sous un nuage
+      ou dedans, il n'est plus éclairé que par le ciel, comme le sol autour de lui. Dans un nuage,
+      cette lumière du ciel est celle d'un ciel clair (bleutée) : la lumière diffusée par le nuage
+      lui-même, plus blanche, reste à ajouter (traversée des nuages, L4.6). La carte est
       dessinée avant chaque rendu du pipeline (`ScenePipeline.setBeforeRender`), donc comptée dans les
       rendus répétés de la mesure GPU. Coût (vue 5, captures alternées) : +0,12 ms (carte redessinée à
       chaque rendu : +0,45 à +0,75 ms ; lecture par fragment : rien de mesurable). En vol, carte
@@ -947,8 +957,10 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
   rejoué à pas de temps fixe (crochet temporaire `window.__advance(n)` dans la boucle de rendu, patch
   gardé dans le scratchpad de la session) pour comparer images en mouvement et images convergées à
   la même pose. Capture `clouds-5`.
-- Fait : L4.5, ombres des nuages sur le terrain (voir la tâche). Capture `clouds-6`.
-- Prochaine étape : L4.6 (traversée des nuages).
+- Fait : L4.5, ombres des nuages sur le terrain et sur l'avion (voir la tâche). Capture `clouds-6`.
+- Commits : cirrus, marche stratifiée, ombres sur le terrain puis sur l'avion, et leur documentation,
+  sur `feat/render-clouds` (non poussée).
+- Prochaine étape : L4.6 (traversée des nuages, voir État courant).
 
 ### 2026-11-25 (21)
 - Corrigé : taches noires après la traversée d'un nuage (NaN de la perspective aérienne à distance
