@@ -95,6 +95,13 @@ export default class MouseAim {
     this._update();
   }
 
+  /** Put the aim on a heading and an elevation (rad) */
+  set(yaw, pitch) {
+    this.yaw = yaw;
+    this.pitch = clamp(pitch, -AIM_PITCH_MAX, AIM_PITCH_MAX);
+    this._update();
+  }
+
   /** Move the aim by mouse deltas (rad) */
   move(dYaw, dPitch) {
     this.yaw += dYaw;

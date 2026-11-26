@@ -20,6 +20,16 @@ const KEY_STICK_TIME = 0.3;
 /** Time for it to come back to neutral when the key is released (s) */
 const KEY_RELEASE_TIME = 0.08;
 
+/**
+ * Autopilot: time over which it closes an altitude gap at the current speed
+ * (s), and the steepest climb or descent it flies (rad)
+ */
+const AUTOPILOT_ALTITUDE_TIME = 20;
+const AUTOPILOT_PATH_MAX = (8 * Math.PI) / 180;
+
+/** Stick or aim input that disconnects the autopilot */
+const AUTOPILOT_OVERRIDE = 0.05;
+
 /** Height of the centre of gravity above the ground with the wheels just touching (m) */
 const WHEELS_HEIGHT = -Math.min(...GEAR_LEGS.map((leg) => leg.position[1]));
 
@@ -33,7 +43,9 @@ const WHEELS_HEIGHT = -Math.min(...GEAR_LEGS.map((leg) => leg.position[1]));
  * into the afterburner. Space or the B button opens the airbrake and, on the
  * ground, brakes the wheels; G or the X button lowers or raises the landing
  * gear. On the ground the mouse aim steers the nose wheel towards the aim and
- * keeps the wings level.
+ * keeps the wings level. The autopilot (C) holds the heading and the
+ * altitude it was engaged at, through the mouse aim's instructor; moving the
+ * stick or the aim disconnects it.
  *
  * The wheels carry the aircraft (FlightModel, GearContact). A wheel touching
  * down faster than the gear takes, or any other part of the airframe touching
@@ -72,6 +84,10 @@ export default class SimulatedFlight {
     this.groundStart = null;
     /** Standing still, waiting for the ground to load before placeOnGround */
     this.holding = false;
+    /** Heading (rad, 0 north, positive west) and altitude (m) held by the autopilot; null when off */
+    this.autopilot = null;
+    /** Called when the autopilot disconnects itself (stick input, touchdown) */
+    this.onAutopilotOff = null;
 
     this._stick = { pitch: 0, roll: 0, yaw: 0 };
     this._rudder = 0;
@@ -116,6 +132,7 @@ export default class SimulatedFlight {
     this._detentFree = false;
     this.crash = null;
     this.holding = false;
+    this.autopilot = null;
     this.aim.syncTo(model.quaternion);
     this._publish(true);
   }
@@ -131,6 +148,7 @@ export default class SimulatedFlight {
     this._quaternion.setFromEuler(this._euler);
     this.model.reset(position, this._quaternion, 0, 0, true);
     this.crash = null;
+    this.autopilot = null;
     this.holding = true;
     this.aim.syncTo(this.model.quaternion);
     this._publish(true);
@@ -153,6 +171,9 @@ export default class SimulatedFlight {
     this._keyStick.pitch = ease(f.pitch, this._keyStick.pitch);
     this._keyStick.roll = ease(f.roll, this._keyStick.roll);
     this._rudder = f.yaw;
+
+    const input = Math.max(Math.abs(f.pitch), Math.abs(f.roll), Math.abs(f.yaw));
+    if (this.autopilot && (input > AUTOPILOT_OVERRIDE || f.aimYaw || f.aimPitch)) this._autopilotOff();
 
     if (f.aimYaw || f.aimPitch) {
       this.aiming = true;
@@ -188,11 +209,32 @@ export default class SimulatedFlight {
     model.reset(new THREE.Vector3(x, ground + WHEELS_HEIGHT, z), this._quaternion, 0, 0, true);
     this._detentFree = false;
     this.crash = null;
+    this.autopilot = null;
     this.holding = false;
     this.groundStart = { x, z, yaw };
     this.aim.syncTo(model.quaternion);
     this._publish(true);
     return true;
+  }
+
+  /**
+   * Engages the autopilot on the current heading and altitude, or disengages it
+   * @returns {boolean} whether it is now engaged
+   */
+  toggleAutopilot() {
+    if (this.autopilot) {
+      this.autopilot = null;
+      return false;
+    }
+    if (this.model.onGround) return false;
+    this.autopilot = { heading: this.aircraft.yaw, altitude: this.model.position.y };
+    this.aiming = true;
+    return true;
+  }
+
+  _autopilotOff() {
+    this.autopilot = null;
+    this.onAutopilotOff?.();
   }
 
   /**
@@ -212,6 +254,19 @@ export default class SimulatedFlight {
     if (!this.enabled || this.crash || this.holding) return;
     const model = this.model;
     this.aircraft.beginStep();
+
+    // The autopilot sets the aim: its heading, and the nose above the path that
+    // closes the altitude gap by the angle of attack
+    if (this.autopilot) {
+      if (model.onGround) {
+        this._autopilotOff();
+      } else {
+        const gap = this.autopilot.altitude - model.position.y;
+        const path = Math.atan(gap / (Math.max(model.airspeed, 50) * AUTOPILOT_ALTITUDE_TIME));
+        const clamped = Math.max(-AUTOPILOT_PATH_MAX, Math.min(AUTOPILOT_PATH_MAX, path));
+        this.aim.set(this.autopilot.heading, clamped + model.alpha);
+      }
+    }
 
     // Direct stick where a key or the gamepad moves it, the instructor elsewhere
     const stick = this._stick;

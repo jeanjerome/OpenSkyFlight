@@ -14,6 +14,7 @@ export const SHORTCUTS = [
       { keys: ['W', 'S'], action: 'Throttle up or down; W again past full power for the afterburner' },
       { keys: ['Space'], action: 'Airbrake; on the ground, also the wheel brakes' },
       { keys: ['G'], action: 'Landing gear down or up' },
+      { keys: ['C'], action: 'Autopilot: hold the heading and altitude (any stick or aim input disconnects it)' },
       { keys: ['Enter'], action: 'After a crash: restart in flight' },
       { keys: ['Space'], action: 'After a crash: restart on the ground, where the flight started' },
       { keys: ['F'], action: 'Simulation or Exploration flight' },

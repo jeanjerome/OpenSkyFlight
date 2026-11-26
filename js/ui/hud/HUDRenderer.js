@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GEAR_SPEED_LIMIT } from '../../flight/GearSequence.js';
+import { GLIDE_FULL_SCALE, LOCALIZER_FULL_SCALE } from '../../flight/ApproachGuide.js';
 import {
   HUD_COLOR,
   HUD_ALPHA,
@@ -93,6 +94,11 @@ export default class HUDRenderer {
     ctx.fillText(`FUEL ${Math.round(m.fuel)} kg`, right, below + 56);
     ctx.fillStyle = HUD_COLOR;
     if (m.controls.airbrake) ctx.fillText(m.onGround ? 'AIRBRAKE  BRAKES' : 'AIRBRAKE', right, below + 74);
+    if (state.autopilot) {
+      const { heading, altitude } = state.autopilot;
+      const degrees = Math.round((((-heading * 180) / Math.PI) % 360) + 360) % 360;
+      ctx.fillText(`AP ${String(degrees).padStart(3, '0')}° ${Math.round(altitude)} m`, right, below + 92);
+    }
 
     ctx.lineWidth = 1.5;
     // Flight path marker: circle with wings and fin
@@ -143,6 +149,80 @@ export default class HUDRenderer {
     const p = this._point.copy(from).addScaledVector(direction, 5000).project(camera);
     if (p.z > 1 || p.z < -1) return null;
     return { x: ((p.x + 1) / 2) * w, y: ((1 - p.y) / 2) * h };
+  }
+
+  /**
+   * Approach guidance (see flight/ApproachGuide.js): the runway and its
+   * distance and a virtual PAPI above the centre, the glide path deviation
+   * on a vertical scale right of it and the localizer deviation on a
+   * horizontal scale below it (two dots either side, the diamond where the
+   * guidance lies)
+   * @param {ReturnType<import('../../flight/ApproachGuide.js').approachGuidance>} approach
+   */
+  drawApproach(w, h, approach) {
+    const ctx = this._ctx;
+    ctx.save();
+    this._applyHudShadow(ctx);
+    ctx.globalAlpha = HUD_ALPHA;
+    ctx.strokeStyle = HUD_COLOR;
+    ctx.fillStyle = HUD_COLOR;
+    ctx.lineWidth = 1.5;
+    const cx = w / 2;
+    const cy = h / 2;
+    const dot = 30;
+    const clamp = (v) => Math.max(-2.3, Math.min(2.3, v));
+    const diamond = (x, y) => {
+      ctx.beginPath();
+      ctx.moveTo(x, y - 7);
+      ctx.lineTo(x + 7, y);
+      ctx.lineTo(x, y + 7);
+      ctx.lineTo(x - 7, y);
+      ctx.closePath();
+      ctx.fill();
+    };
+    const dots = (horizontal, x0, y0) => {
+      for (const k of [-2, -1, 1, 2]) {
+        ctx.beginPath();
+        ctx.arc(horizontal ? x0 + k * dot : x0, horizontal ? y0 : y0 + k * dot, 3, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      if (horizontal) {
+        ctx.moveTo(x0, y0 - 9);
+        ctx.lineTo(x0, y0 + 9);
+      } else {
+        ctx.moveTo(x0 - 9, y0);
+        ctx.lineTo(x0 + 9, y0);
+      }
+      ctx.stroke();
+    };
+    // Glide path: the diamond above the centre when the path is above the aircraft
+    const gx = cx + 150;
+    dots(false, gx, cy);
+    diamond(gx, cy - clamp((approach.glide / GLIDE_FULL_SCALE) * 2) * dot);
+    // Localizer: the diamond right of the centre when the centre line is to the
+    // right, just below the centre (the chase view draws the aircraft lower)
+    const ly = cy + 70;
+    dots(true, cx, ly);
+    diamond(cx + clamp((approach.localizer / LOCALIZER_FULL_SCALE) * 2) * dot, ly);
+
+    // Runway, distance and glide angle; virtual PAPI beside
+    ctx.font = 'bold 13px Courier New';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const km = Math.max(0, approach.distance) / 1000;
+    const label = `${approach.airport} ${approach.ident}  ${km.toFixed(1)} km  ${((approach.glideAngle * 180) / Math.PI).toFixed(1)}°`;
+    // Above the centre, clear of the aircraft in the chase view
+    ctx.fillText(label, cx, cy - 110);
+    const papiY = cy - 90;
+    approach.papi.forEach((white, i) => {
+      ctx.beginPath();
+      // The unit nearest the runway on the right, as seen from the left of the runway
+      ctx.arc(cx + 27 - i * 18, papiY, 5, 0, Math.PI * 2);
+      ctx.fillStyle = white ? '#ffffff' : '#ff3020';
+      ctx.fill();
+    });
+    ctx.restore();
   }
 
   drawBadges(w, benchmarkRunner, isRecording, wpCount, isAutopilot, fpRec) {

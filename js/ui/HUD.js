@@ -124,6 +124,7 @@ export default class HUD {
       model ? 'IAS km/h' : 'SPD',
     );
     if (model) this._renderer.drawFlightData(this.w, this.h, camera, aircraftState);
+    if (model && aircraftState.approach) this._renderer.drawApproach(this.w, this.h, aircraftState.approach);
     // Leaving the Simulation mode redraws without its flight data
     if (model) this._forceRedraw = true;
     this._renderer.drawBadges(this.w, benchmarkRunner, isRecording, wpCount, isAutopilot, fpRec);

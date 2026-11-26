@@ -41,6 +41,8 @@ import FlightPlanRecorder from './flightplan/FlightPlanRecorder.js';
 import { RunwayCatalog, offsetPosition } from './airports/Airports.js';
 import RunwayMarkings from './terrain/RunwayMarkings.js';
 import RunwayLights from './airports/RunwayLights.js';
+import RunwaysInWorld from './airports/RunwaysInWorld.js';
+import { approachGuidance } from './flight/ApproachGuide.js';
 import Stats from 'stats.js';
 
 async function initApp() {
@@ -373,6 +375,19 @@ async function initApp() {
     );
   };
   input.onKey('g', toggleGear);
+
+  // Autopilot: hold the heading and altitude of the moment
+  input.onKey('c', () => {
+    if (flight !== simulation || !simulation.enabled || simulation.crash) return;
+    if (!simulation.toggleAutopilot()) {
+      showNotification(simulation.model.onGround ? 'Autopilot: not on the ground' : 'Autopilot off');
+      return;
+    }
+    const { heading, altitude } = simulation.autopilot;
+    const degrees = Math.round((((-heading * 180) / Math.PI) % 360) + 360) % 360;
+    showNotification(`Autopilot: heading ${String(degrees).padStart(3, '0')}°, ${Math.round(altitude)} m`);
+  });
+  simulation.onAutopilotOff = () => showNotification('Autopilot disconnected');
   controls.onButton(GAMEPAD.X, () => {
     if (!paused) toggleGear();
   });
@@ -494,6 +509,19 @@ async function initApp() {
     simulation.groundStart = null;
     chaseCameraController.reset();
     runwayStart = { yaw, since: performance.now(), settled: 0, label };
+  }
+
+  // Approach guidance on the HUD, to the runway end the aircraft heads for,
+  // once the gear is commanded down or below APPROACH_HEIGHT above it
+  const guidedRunways = new RunwaysInWorld();
+  const APPROACH_HEIGHT = 600;
+  function approachFor(model) {
+    guidedRunways.update(runwayCatalog.runways, geoTerrainManager);
+    const { x, z } = model.velocity;
+    const speed = Math.hypot(x, z);
+    if (speed < 20) return null;
+    const approach = approachGuidance(guidedRunways.placed, model.position, x / speed, z / speed);
+    return approach && (model.controls.gear || approach.height < APPROACH_HEIGHT) ? approach : null;
   }
 
   /** Stand the aircraft on the runway once the ground there has loaded */
@@ -741,6 +769,8 @@ async function initApp() {
         // Flight data for the HUD and the control surfaces, in the Simulation mode
         model: simulated ? model : null,
         aim: simulated && simulation.aiming ? simulation.aim.direction : null,
+        approach: simulated ? approachFor(model) : null,
+        autopilot: simulated ? simulation.autopilot : null,
       };
     }
 
