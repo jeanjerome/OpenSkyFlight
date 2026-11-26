@@ -6,19 +6,21 @@ contrainte : l'application doit continuer à fonctionner dans un navigateur (Web
 Ce document est la **source de vérité de l'avancement**. Il est lu en début de session et mis à jour
 en fin de session.
 
-## État courant (mis à jour le 2026-11-26, session 24)
+## État courant (mis à jour le 2026-11-26, session 25)
 
-- **Lot 5 en cours** sur `feat/render-terrain` (depuis `main`, non poussée). Faits : L5.1 (raccord exact
-  des bords entre tuiles, altitudes dans un worker), L5.2 (geomorphing du relief et fondu de
-  l'imagerie), L5.3 (ombres du relief et de l'avion), L5.8 (mode courbes de niveau tactique
-  phosphore), L5.9 (normales par pixel) ; L5.5 abandonnée, L5.4 écartée (coût sans gain visible).
-  Suite : L5.6 et L5.7 (l'utilisateur a demandé d'enchaîner seul). Référence des vues :
-  `benchmarks/render/pixel-normals-2` ;
-  vols : `pixel-normals-flight`, `pixel-normals-plan1` (p1 86,2 et 87,0 ; la colonne GPU des vols est
-  faussée par la passe d'ombre de l'avion, voir Mesures). L'arbre des tuiles est mis à jour par `GeoTerrainManager.update`, plus par
-  le rendu. Bundle three-tile à reconstruire après chaque
-  `git pull` ou changement de branche (`cd vendor/three-tile && npm run build:lib`) : le worker
+- **Lot 5 terminé** le 2026-11-26 à la demande de l'utilisateur, sur `feat/render-terrain` (depuis
+  `main`, ni poussée ni fusionnée). Faits : L5.1 (raccord exact des bords entre tuiles, altitudes
+  dans un worker), L5.2 (geomorphing du relief et fondu de l'imagerie), L5.3 (ombres du relief et de
+  l'avion), L5.8 (mode courbes de niveau tactique phosphore), L5.9 (normales par pixel). L5.5
+  abandonnée, L5.4 écartée (coût sans gain visible), L5.6 et L5.7 reportées (elles demandent des
+  sources de données nouvelles, occupation du sol et masque d'eau, à choisir avec l'utilisateur).
+  Bilan dans **Mesures** (lignes « Clôture du lot 5 »), captures `docs/screenshots/render/lot5/`.
+  L5.2, L5.3 et L5.9 n'ont pas encore été jugées en vol par l'utilisateur. L'arbre des tuiles est
+  mis à jour par `GeoTerrainManager.update`, plus par le rendu. Bundle three-tile à reconstruire après
+  chaque `git pull` ou changement de branche (`cd vendor/three-tile && npm run build:lib`) : le worker
   d'altitude y est intégré.
+- **Prochaine étape** : au choix de l'utilisateur, fusion du lot 5 dans `main`, lot de jeu G3, lot 6,
+  ou reprise de L5.6 / L5.7.
 
 - **Lot 4 terminé** le 2026-11-26 (toutes ses tâches faites, bilan dans **Mesures**, lignes
   « Clôture du lot 4 », captures `docs/screenshots/render/lot4/`), fusionné dans `main` le même jour
@@ -30,15 +32,18 @@ en fin de session.
   plus. Bilan dans **Mesures** (lignes « Clôture du lot 2 ») et constats visuels sous les tableaux.
 - **three.js** : r187 (import map d'`index.html`), mis à jour depuis r183 pour le TRAA compatible avec
   la profondeur inversée.
-- **Git** : lots 0 à 4 et lots de jeu G0 à G2 dans `main` ; `main` a deux commits de documentation non
-  poussés (voir `git status -sb`). Lot 5 sur `feat/render-terrain`. Plus de worktree de comparaison : en
+- **Git** : lots 0 à 4 et lots de jeu G0 à G2 dans `main` (voir `git status -sb` pour les commits
+  non poussés). Lot 5 terminé sur `feat/render-terrain`, non fusionné. Plus de worktree de comparaison : en
   recréer un si besoin (voir Outillage).
 - **Environnement local** : bundle three-tile construit, `npm install` fait (racine et
   `vendor/three-tile`), cache `cache/` chaud pour les vues de référence et les deux vols. Lancer
   `npm run dev` en tâche de fond avant toute mesure. Mesurer **sur l'écran intégré 120 Hz** : sur un
   écran 60 Hz, Chrome plafonne à 60 FPS (la résolution dynamique ne se déclenche plus à tort depuis
   L2.4, mais les FPS ne sont pas comparables).
-- **Référence de comparaison** : `benchmarks/render/lot4/` (état de clôture du lot 4, 6 vues ; la vue
+- **Référence de comparaison** : `benchmarks/render/lot5/` (état de clôture du lot 5, 6 vues) et vols
+  `lot5-flight`, `lot5-plan1` (p1 87,7 et 87,7 ; leur colonne GPU est faussée par la passe d'ombre de
+  l'avion, voir Mesures), captures versionnées dans `docs/screenshots/render/lot5/`. Avant elle :
+  `benchmarks/render/lot4/` (état de clôture du lot 4, 6 vues ; la vue
   5 seule a des nuages) et vols `lot4-flight`, `lot4-plan1` (nuages désactivés, le réglage par défaut)
   et `lot4-flight-clouds`, `lot4-plan1-clouds` (nuages activés) ; captures versionnées dans
   `docs/screenshots/render/lot4/`. Avant elle : `benchmarks/render/lot3/` (état de clôture du lot 3 ; coût GPU des
@@ -862,9 +867,11 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
 - [-] **L5.5** Neutralisation de l'éclairage incrusté dans l'imagerie satellite (abandonnée, voir
       Décisions).
 - [ ] **L5.6** Détail procédural : occupation du sol (ESA WorldCover), roche triplanaire sur les
-      pentes, neige selon altitude/pente, textures de détail selon la distance.
+      pentes, neige selon altitude/pente, textures de détail selon la distance. Reportée à la
+      clôture du lot 5 (source d'occupation du sol à choisir avec l'utilisateur).
 - [ ] **L5.7** Eau : masque (OSM/JRC), matériau Fresnel + reflet du ciel + scintillement solaire,
-      vagues FFT en compute, `SSRNode` sur les lacs.
+      vagues FFT en compute, `SSRNode` sur les lacs. Reportée à la clôture du lot 5 (source du
+      masque d'eau à choisir avec l'utilisateur).
 - [x] **L5.8** (ajoutée à la demande de l'utilisateur) Refonte du mode « Contour lines »
       (`textureMode=elevation`), jugé peu moderne. Quatre styles proposés sur planches (carte topo,
       tactique, maquette, isobandes), puis six coloris du style tactique, puis l'affinage avec la
@@ -1014,6 +1021,8 @@ Notes de lecture :
 | 2026-11-26 | **L5.3 relief + avion** (`shadows-plan1-2`) | Plan 1 (basse alt.) | 94 s | 119,7 | 100,0 | 79,4 | 7,9 (9,4) | 0 / 0 | 1,70 M | 440 |
 | 2026-11-26 | L5.9 normales par pixel (`pixel-normals-flight`) | Vol par défaut | 128 s | 119,2 | 101,0 | 86,2 | 8,6 (9,6) | 0 / 0 | 1,41 M | 375 |
 | 2026-11-26 | L5.9 normales par pixel (`pixel-normals-plan1`) | Plan 1 (basse alt.) | 94 s | 119,4 | 99,0 | 87,0 | 8,4 (9,8) | 0 / 0 | 1,70 M | 440 |
+| 2026-11-26 | **Clôture du lot 5** (preset High) (`lot5-flight`) | Vol par défaut | 128 s | 119,3 | 102,0 | 87,7 | 8,5 (9,7) | 0 / 0 | 1,41 M | 375 |
+| 2026-11-26 | **Clôture du lot 5** (preset High) (`lot5-plan1`) | Plan 1 (basse alt.) | 94 s | 119,5 | 99,0 | 87,7 | 8,4 (9,8) | 0 / 0 | 1,70 M | 440 |
 | 2026-11-24 | L2.7 preset Ultra, LODThreshold 1,4 | Vol par défaut | 128 s | 115,6 | 85,5 | 53,5 | 5,0 (6,5) | 1 / 0 | 2,84 M | 714 |
 
 Pour mémoire, la configuration n°4 de `BENCHMARKS.md` (même machine, Chrome 146, ancien moteur
@@ -1083,6 +1092,8 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 | 2026-11-26 | **Pleine résolution** — L5.3 relief + avion (`terrain-shadow-2`) | 3,86 | 4,01 | 4,10 | 4,01 | 8,06 | 4,11 |
 | 2026-11-26 | **Pleine résolution** — L5.9 normales par pixel (`pixel-normals-1`) | 3,82 | 3,93 | 4,02 | 4,25 | 8,06 | 4,38 |
 | 2026-11-26 | **Pleine résolution** — L5.9 normales sur 25 m au moins (`pixel-normals-2`) | 3,83 | 3,96 | 4,09 | 4,04 | 8,03 | 4,02 |
+| 2026-11-26 | **Pleine résolution** — **Clôture du lot 5** (`lot5`) | 3,85 | 4,37 | 4,00 | 3,79 | 7,67 | 4,37 |
+| 2026-11-26 | **Clôture du lot 5** — draw calls / triangles | 361 / 1,21 M | 415 / 1,55 M | 421 / 1,59 M | 388 / 1,28 M | 404 / 1,41 M | 388 / 1,32 M |
 
 Raccord des bords (L5.1) : captures alternées contre `main` (worktree, port 3001), vues 1 et 6, deux
 séries : `main` 3,62 / 3,98 ms (vue 1) et 4,15 / 3,66 ms (vue 6), raccord 3,64 / 3,64 et 4,16 / 4,17 ms :
@@ -1118,6 +1129,24 @@ pour la géométrie seulement. Le coût GPU réel d'une frame est ≈ 3–5 ms �
 Bilan du lot 2 (état de clôture contre lot 1 + altitude CPU) : vol par défaut p5 73,0 → 106,4 et
 p1 33,6 → 61,3 (frames > 33 ms 50 → 4), plan 1 p5 62,5 → 81,3 et p1 43,1 → 61,7 ; coût GPU d'une frame
 3,1 à 5,1 ms à 4112×2580, loin du budget de 16,6 ms. Critère de sortie respecté (p1 en hausse).
+
+Bilan du lot 5 (état de clôture, `benchmarks/render/lot5*`) : tuiles raccordées sans marche et
+altitudes calculées dans un worker, transitions de niveau de détail en fondu (relief et imagerie),
+ombres du relief (vallées à l'ombre au soleil bas, avion compris) et de l'avion, normales à la
+résolution de la source, mode courbes de niveau refait. Vues : 3,8 à 4,4 ms (lot 4 : 3,6 à 4,1 ;
+écarts de série ±0,4 ms ; les ombres ajoutent ≈ 0,1 à 0,2 ms, l'avion dessiné dans sa carte d'ombre
+53 draw calls), triangles +16 à +22 % (grilles emboîtées de L5.1). Vols : p1 62,9 → 87,7 (vol par
+défaut) et 59,2 → 87,7 (plan 1), sans frame lente : le calcul des altitudes sorti du thread
+principal (L5.1) compte pour l'essentiel. Critère de sortie respecté (p1 en hausse).
+
+Constats visuels après le lot 5 (`docs/screenshots/render/lot5/` : 6 vues, courbes de niveau sur la
+vue 4, ombre de l'avion à 15 m du sol près d'Annecy) :
+- Relief continu, sans fissures ni sauts aux changements de niveau ; versants plus détaillés.
+- Au soleil bas (vues 4 et 6) les vallées tombent dans l'ombre des sommets, ce qui rend le massif
+  lisible ; l'avion s'assombrit dans l'ombre du relief et porte la sienne.
+- Restent : zones sombres de l'imagerie (ombres incrustées, L5.5 abandonnée), lacs plats sans
+  reflet (L5.7), premier plan flou à basse altitude (imagerie z15), pas de rayons crépusculaires
+  derrière le relief (les ombres du terrain ne touchent pas encore l'air).
 
 Bilan du lot 4 (état de clôture, `benchmarks/render/lot4*`) : nuages volumétriques (cumulus, nuages
 moyens et cirrus fibreux) qu'on traverse, ombres sur le sol et l'avion, lumière des nuages sur l'avion,
@@ -1248,6 +1277,9 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 - Fait (seul) : L5.9, normales par pixel calculées dans le worker ; corrigé la fuite des textures
   d'altitude des tuiles déchargées, puis les stries des normales sur les tuiles fines.
 - Essayé puis écarté : L5.4, `GTAONode` (voir Décisions).
+- Lot 5 clôturé à la demande de l'utilisateur (L5.6 et L5.7 reportées) : captures `lot5`, vols
+  `lot5-flight` et `lot5-plan1`, captures versionnées `docs/screenshots/render/lot5/`. Branche
+  `feat/render-terrain` ni poussée ni fusionnée.
 - Outils (scratchpad, non versionnés) : saut du sol d'une frame à l'autre sur 2 500 points par
   `groundHeight` pendant des changements forcés du seuil de LOD, écart entre bords voisins
   reconstruits sur le CPU à chaque frame, morph figé à 0 pour comparer l'imagerie des parents ; accès
