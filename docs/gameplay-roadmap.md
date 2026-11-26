@@ -17,8 +17,10 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
   Le lot de rendu 5 (terrain et ombres) est terminé et fusionné dans `main` le 2026-11-26 et
   poussé. **G3 (décollage et atterrissage) en cours sur `feat/takeoff-landing`** depuis le
   2026-11-26 : G3.1 (train animé), G3.2 (physique au sol), G3.3 (crash et écran de reprise) et
-  G3.4 (aéroports, départ d'une piste depuis le menu : onglet World, section Airports) faits ;
-  suite G3.5 (aplanir le terrain sous les pistes), voir le lot G3. L'avion porte désormais
+  G3.4 (aéroports, départ d'une piste depuis le menu : onglet World, section Airports) et G3.5
+  (terrain aplani sous les pistes) faits ; suite G3.6 (pistes et marquages dessinés), voir le lot
+  G3. Bundle three-tile à reconstruire après un changement de branche (`cd vendor/three-tile &&
+  npm run build:lib`) : l'aplanissement est dans son worker. L'avion porte désormais
   son ombre et reçoit celle du relief (`js/aircraft/AircraftShadow.js`, calque `SHADOW_CASTER_LAYER`
   pour ce qui doit la projeter : penser au train d'atterrissage de G3).
 - **Vue orbite** (demandée par l'utilisateur, hors lots) : `CONFIG.cameraMode = 'orbit'`, entre la
@@ -388,9 +390,26 @@ sol) ; les nuages volumétriques (lot 4) n'ont pas de dépendance avec ces lots.
       posé sur ses roues dans l'axe (`placeOnGround`), point de reprise après un crash. Tests
       `tests/airports.test.js`. Vérifié dans Chrome : LSGG piste 04, cap 45,6° (46° publié), posé en
       3,9 s. Le serveur de l'utilisateur doit être relancé pour avoir les nouvelles routes.
-- [ ] **G3.5** Aplanir le terrain sous les pistes : distance signée au rectangle de piste dans le
+- [x] **G3.5** Aplanir le terrain sous les pistes : distance signée au rectangle de piste dans le
       vertex shader du terrain, altitude interpolée entre les deux seuils, raccord smoothstep sur
       150–300 m ; **même fonction** pour l'altitude CPU (G0.4) et la physique au sol.
+      Fait autrement que prévu : pas dans le vertex shader mais dans le worker d'altitude de
+      three-tile, en enveloppant la fonction unique de la position sur le globe qui donne toutes les
+      altitudes d'une tuile (`heights.ts`, `flattened`) : la grille, les profils de raccord, la
+      surface du parent (morphing), les normales par pixel et l'altitude lue sur le CPU (physique,
+      `groundHeight`) sont aplanies ensemble, et les tuiles voisines restent sans couture (seules
+      les pistes à moins d'une tuile sont testées). Bande aplanie : la piste élargie à 150 m de part
+      et d'autre de l'axe (75 m sous 1 200 m de long) et prolongée de 60 m à chaque bout, sur la droite
+      entre les altitudes publiées des deux seuils ; raccord au relief par smoothstep sur 150 m
+      autour. `TerrariumShaderLoader.setRunways` (worker informé, tuiles chargées ensuite),
+      `GeoTerrainManager.setRunways`, alimenté par le catalogue des pistes ; les pistes d'un lieu sont
+      chargées avant son terrain (démarrage, « Fly there », départ d'une piste, attente ≤ 3 s), et
+      celles qui arrivent en vol sont à plus d'une tuile z7 (≥ ≈ 200 km), chargées avant que leur
+      terrain fin ne le soit. Vérifié dans Chrome à Genève (04/22) : l'axe suit la droite publiée à
+      1 cm près sur 3,9 km, plat à 100 m de l'axe ; décollage sans à-coup (inclinaison 0,0°,
+      amortisseurs à ±0,01 m, contre ±4° et des écarts de 1 m auparavant). Le relief Terrarium est
+      5 à 8 m sous l'altitude publiée autour de LSGG : léger remblai, ≈ 3 % de pente. Reste : tuiles
+      chargées avant que leurs pistes soient connues (aucun cas courant) non rechargées.
 - [ ] **G3.6** Pistes et marquages procéduraux (OACI Annexe 14) calculés dans le shader en coordonnées
       piste : barres de seuil selon la largeur, numéros, point de visée, zone de toucher, axe.
 - [ ] **G3.7** Balisage instancié dans la passe de halo : seuil vert, extrémité rouge, axe et bords
@@ -717,6 +736,7 @@ piqué dans le relief : crash et redémarrage ; aucune erreur console.
 
 | Date | Fait | Reste / prochaine étape |
 |---|---|---|
+| 2026-11-26 | G3.5 : terrain aplani sous les pistes dans le worker d'altitude (relief, normales, morphing et altitude CPU ensemble, sans couture), pistes chargées avant le terrain d'un lieu ; vérifié dans Chrome à Genève (axe à 1 cm du profil publié, décollage sans à-coup) | G3.6 (pistes et marquages dessinés) |
 | 2026-11-26 | G3.4 : données OurAirports servies par le proxy (recherche, pistes par tuile), catalogue des pistes autour de l'avion, recherche d'aéroport dans le menu et départ aligné sur un seuil ; tests ; vérifié dans Chrome (LSGG 04) | G3.5 (aplanir le terrain sous les pistes) |
 | 2026-11-26 | G3.3 : points de structure du modèle, crash au contact de la cellule ou au-delà de 3 m/s au toucher, écran de reprise (en vol ou au point de départ au sol), commande du train verrouillée au sol ; tests ; vérifié dans Chrome | G3.4 (aéroports d'OurAirports, départ d'une piste) |
 | 2026-11-26 | G3.2 : physique au sol (jambes ressort-amortisseur, pneus, freins, roue avant orientable, effet de sol), loi sol des commandes de vol, centre de gravité du modèle, visée souris au sol ; banc au sol (125 kt en 9,5 s, décollage 394 m, atterrissage 446 m) ; vérifié dans Chrome à Genève | G3.3 (contacts de structure et crash : queue au décollage, toucher trop dur, train rentré) ; ressenti au sol par l'utilisateur |
