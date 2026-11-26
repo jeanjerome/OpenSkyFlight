@@ -29,7 +29,8 @@ const CRASH_HEIGHT = 1;
  * (MouseAim); the keys and the gamepad move the stick directly, and while
  * they do the aim follows the nose. The throttle lever moves while W/S or the
  * triggers are held; it stops at full dry power, and a new press goes on
- * into the afterburner. Space or the B button opens the airbrake.
+ * into the afterburner. Space or the B button opens the airbrake; G or the
+ * X button lowers or raises the landing gear.
  *
  * Until the landing gear and the ground physics exist, touching the ground is
  * a crash: `onCrash` is called and the flight restarts above that point.
@@ -130,6 +131,16 @@ export default class SimulatedFlight {
     if (next < DRY_DETENT) this._detentFree = false;
     model.controls.lever = next;
     model.controls.airbrake = f.airbrake ? 1 : 0;
+  }
+
+  /**
+   * Commands the landing gear the other way
+   * @returns {boolean} whether it is now commanded down
+   */
+  toggleGear() {
+    const controls = this.model.controls;
+    controls.gear = !controls.gear;
+    return controls.gear;
   }
 
   /** Advance one simulation step */

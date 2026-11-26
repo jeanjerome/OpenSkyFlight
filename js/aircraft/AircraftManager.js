@@ -6,6 +6,8 @@ import AircraftLights from './AircraftLights.js';
 import EngineExhaust from './EngineExhaust.js';
 import { exhaustJet } from '../flight/exhaust.js';
 import ControlSurfaces from './ControlSurfaces.js';
+import LandingGear from './LandingGear.js';
+import GearSequence from '../flight/GearSequence.js';
 import { SHADOW_CASTER_LAYER } from '../constants/rendering.js';
 import {
   AIRCRAFT_TARGET_LENGTH,
@@ -91,38 +93,12 @@ export default class AircraftManager {
       }
     });
 
-    const hiddenGearParts = new Set([
-      'GearBoxRear',
-      'GearBoxFront',
-      'WheelL',
-      'WheelR',
-      'NoseWheelL',
-      'NoseWheelR',
-      'UpperStrutL',
-      'UpperStrutR',
-      'MainStrutL',
-      'MainStrutR',
-      'SideStrutL',
-      'SideStrutR',
-      'Strut1L',
-      'Strut1R',
-      'Strut2L',
-      'Strut2R',
-      'Strut3L',
-      'Strut3R',
-      'FrontMainStrut',
-      'FrontLowerStrut',
-      'FrontStrut1',
-      'FrontStrut2',
-      'FrontLights',
-    ]);
-    this.mesh.traverse((child) => {
-      if (hiddenGearParts.has(child.name)) child.visible = false;
-    });
-
     this.lights = new AircraftLights(this.mesh, this.rendering);
     this.exhaust = new EngineExhaust(this.mesh, this.rendering);
     this.surfaces = new ControlSurfaces(this.mesh);
+    this.gear = new LandingGear(this.mesh);
+    // Outside the Simulation mode the gear stays up
+    this._gearUp = new GearSequence();
 
     this.group.traverse((child) => {
       child.frustumCulled = false;
@@ -162,6 +138,7 @@ export default class AircraftManager {
 
     // Control surfaces as the flight control system moves them, neutral in free flight
     this.surfaces.update(dt, state.model ? state.model.surfaces : null);
+    this.gear.update(state.model ? state.model.gear : this._gearUp);
 
     this._updateEngines(state, dt);
     exhaustJet(this.engines.core, this.engines.reheat, this.engines.mach, this.jet);

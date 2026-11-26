@@ -51,6 +51,12 @@ export const SIDE_FORCE_SLOPE = -0.9;
 /** Zero-lift drag added by the canards and elevons deflected as an airbrake */
 export const AIRBRAKE_DRAG = 0.06;
 
+/**
+ * Zero-lift drag added by the landing gear down and its open doors, an
+ * estimate in the range of fighters' gear (≈ 0.015–0.025 on the wing area)
+ */
+export const GEAR_DRAG = 0.02;
+
 // ── Engines: 2 × Safran M88-2 ──
 
 /** Sea-level static thrust of one engine at full dry power (N) [official] */

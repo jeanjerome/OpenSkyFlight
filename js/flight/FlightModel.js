@@ -2,12 +2,14 @@ import * as THREE from 'three';
 import { isa, SEA_LEVEL_DENSITY } from '../sim/atmosphere.js';
 import { alphaForLift, dragCoefficient, liftCoefficient } from './aerodynamics.js';
 import Engines from './Engines.js';
+import GearSequence from './GearSequence.js';
 import {
   AIRBRAKE_DRAG,
   ALPHA_MAX,
   ALPHA_MIN,
   ANGULAR_ACCELERATION_MAX,
   BASIC_MASS,
+  GEAR_DRAG,
   INTERNAL_FUEL,
   LOAD_FACTOR_MAX,
   LOAD_FACTOR_MIN,
@@ -88,8 +90,9 @@ export default class FlightModel {
     this.engines = new Engines();
     this.air = isa(0);
 
-    /** Pilot commands: stick pitch (pull +), roll (right +), yaw (right +), throttle lever, airbrake */
-    this.controls = { pitch: 0, roll: 0, yaw: 0, lever: 0.6, airbrake: 0 };
+    /** Pilot commands: stick pitch (pull +), roll (right +), yaw (right +), throttle lever, airbrake, gear down */
+    this.controls = { pitch: 0, roll: 0, yaw: 0, lever: 0.6, airbrake: 0, gear: false };
+    this.gear = new GearSequence();
 
     // Flight data of the last step
     this.alpha = 0;
@@ -145,8 +148,9 @@ export default class FlightModel {
    * @param {THREE.Quaternion} quaternion - orientation of the flight path (nose along it, wings level or banked)
    * @param {number} speed - true airspeed (m/s)
    * @param {number} lever - throttle lever, 0 to 1
+   * @param {boolean} [gearDown=false] - whether the gear is down and locked
    */
-  reset(position, quaternion, speed, lever) {
+  reset(position, quaternion, speed, lever, gearDown = false) {
     this.position.copy(position);
     this.angularVelocity.set(0, 0, 0);
     const air = isa(position.y, this.air);
@@ -164,6 +168,8 @@ export default class FlightModel {
     this._pathHold = null;
     this.controls.lever = lever;
     this.engines.setLever(lever);
+    this.controls.gear = gearDown;
+    this.gear = new GearSequence(gearDown);
     this.peakLoadFactor = 1;
   }
 
@@ -188,6 +194,9 @@ export default class FlightModel {
     this.fuel = Math.max(0, this.fuel - this.engines.fuelFlow * dt);
     const mass = this.mass;
     const weight = mass * G;
+    this.gear.command(c.gear);
+    this.gear.update(dt);
+    const gearDrag = GEAR_DRAG * this.gear.legs;
 
     // ── Forces ──
     const right = this._right.set(1, 0, 0).applyQuaternion(q);
@@ -200,7 +209,7 @@ export default class FlightModel {
       vHat.copy(this.velocity).divideScalar(speed);
       const liftDir = this._liftDir.crossVectors(right, vHat).normalize();
       const sideDir = this._sideDir.crossVectors(vHat, liftDir).normalize();
-      const cd = dragCoefficient(alpha, cl, mach, c.airbrake * AIRBRAKE_DRAG);
+      const cd = dragCoefficient(alpha, cl, mach, c.airbrake * AIRBRAKE_DRAG + gearDrag);
       force.addScaledVector(liftDir, qS * cl);
       force.addScaledVector(vHat, -qS * cd);
       force.addScaledVector(sideDir, qS * SIDE_FORCE_SLOPE * beta);

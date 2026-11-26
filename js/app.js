@@ -334,7 +334,17 @@ async function initApp() {
     if (flightPlanRecorder.isRecording()) flightPlanRecorder.addWaypoint(flight);
   });
 
-  input.onKey('g', () => {
+  const toggleGear = () => {
+    if (flight !== simulation || !simulation.enabled) return;
+    const down = simulation.toggleGear();
+    showNotification(down ? 'Gear down' : 'Gear up');
+  };
+  input.onKey('g', toggleGear);
+  controls.onButton(GAMEPAD.X, () => {
+    if (!paused) toggleGear();
+  });
+
+  input.onKey('u', () => {
     if (flightPlanRecorder.autopilotActive) {
       flightPlanRecorder.autopilotActive = false;
       flight.enabled = true;
@@ -519,6 +529,7 @@ async function initApp() {
           lever: simulation.model.controls.lever,
           thrust: simulation.model.engines.thrust,
           fuel: simulation.model.fuel,
+          gear: simulation.model.gear.position,
         }),
       };
     },

@@ -20,7 +20,7 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 - **Rafale aircraft** — 3D GLTF model with retracted landing gear, canards, elevons, rudder and slats moved by the flight control system, chase camera (30 m behind)
 - **Flight model** — the Rafale flies by its weight, wings and engines: six degrees of freedom, lift and drag with angle of attack and Mach, two M88-2 engines (2 × 50 kN dry, 2 × 75 kN with afterburner) whose thrust follows altitude and speed, fuel burn, standard atmosphere; a fly-by-wire control system holds the flight path at neutral stick and limits the aircraft to +9 / −3.2 g and 29° of angle of attack, rolling at up to 270°/s. Its performance is checked against the published figures by `npm run flight:bench` (turn rates, top speed at sea level and at 11 000 m, ceiling, approach speed). The previous free flight remains as the Exploration mode (`F`)
 - **Cockpit / chase toggle** — press `V` to switch between first-person cockpit (roll applied to horizon) and third-person chase view
-- **Flight controls** — mouse aim (the mouse moves an aim circle and an instructor flies the nose to it within the aircraft's limits), keyboard stick and rudder, throttle with a detent before the afterburner, airbrake, gamepad (standard layout); simulated at a fixed 240 Hz step whatever the frame rate
+- **Flight controls** — mouse aim (the mouse moves an aim circle and an instructor flies the nose to it within the aircraft's limits), keyboard stick and rudder, throttle with a detent before the afterburner, airbrake, landing gear, gamepad (standard layout); simulated at a fixed 240 Hz step whatever the frame rate
 - **Aircraft-style HUD** — compass, artificial horizon, altimeter (MSL + AGL), speed indicator; in the Simulation mode indicated airspeed, Mach, load factor, angle of attack, throttle, fuel, flight path marker, nose cross and aim circle
 - **Settings menu** — `Esc` pauses the flight and opens a game-style menu (Graphics, World, Flight, Controls) over the live scene, driven by mouse or keyboard (`↑` `↓` select, `←` `→` change, `Q` / `E` switch tab, `R` restore the default), with the performance impact and visual gain of each graphics setting, synthesised interface sounds and an Audio tab (master, interface, engine and radio volumes); a quality preset (Low / Medium / High / Ultra) sets the graphics settings at once, settings are remembered across sessions and can be given in the URL (`?quality=low&showClouds=true`); `?dev=1` adds a Developer tab (live GPU figures, reference views, benchmark, raw rendering values)
 - **OSM minimap** — real-time 2D map overlay with airplane marker and independent zoom
@@ -98,6 +98,7 @@ Available scripts:
 | `Q` / `E` | Rudder left / right (`A` / `E` on AZERTY) |
 | `W` / `S` | Throttle up / down; release and press `W` again at full power for the afterburner (`Z` / `S` on AZERTY; Exploration: move forward / backward) |
 | `Space` | Airbrake (hold) |
+| `G` | Landing gear down / up (Simulation flight) |
 | `F` | Simulation or Exploration (free flight) mode |
 | `T` | Cycle texture mode (Satellite / Road map / SAR / Elevation) |
 | `V` | Toggle cockpit / chase view |
@@ -114,7 +115,7 @@ Available scripts:
 | `Shift+N` | Clear current flight plan |
 | `P` | Add waypoint (while recording) |
 | `L` | Open / close flight plan menu |
-| `G` | Engage / disengage autopilot |
+| `U` | Engage / disengage autopilot |
 | `1`–`9` | Select flight plan from menu |
 | `Esc` | Pause and open the settings menu / resume / close the flight plan menu |
 
@@ -122,7 +123,7 @@ Available scripts:
 
 > **Keyboard layouts:** Flight controls (WASD) use physical key positions, so they map to ZQSD on AZERTY keyboards. All other shortcuts use the character printed on the key and work identically on any layout.
 
-> **Gamepad:** a gamepad in the standard layout (Xbox, PlayStation) flies without clicking the view: left stick for pitch and roll (pull back to raise the nose, invertible in the Flight tab), triggers for the throttle, right stick or bumpers for the rudder, `B` for the airbrake, `Y` for the chase or cockpit view and the menu button to pause or resume; in the Exploration mode the left stick steers, the triggers move forward and backward and the right stick slides sideways. Its sensitivity is set in the Flight tab. Flown with the keys or the gamepad, the chase view follows the airframe, roll included; with the mouse it looks along the aim.
+> **Gamepad:** a gamepad in the standard layout (Xbox, PlayStation) flies without clicking the view: left stick for pitch and roll (pull back to raise the nose, invertible in the Flight tab), triggers for the throttle, right stick or bumpers for the rudder, `B` for the airbrake, `X` for the landing gear, `Y` for the chase or cockpit view and the menu button to pause or resume; in the Exploration mode the left stick steers, the triggers move forward and backward and the right stick slides sideways. Its sensitivity is set in the Flight tab. Flown with the keys or the gamepad, the chase view follows the airframe, roll included; with the mouse it looks along the aim.
 
 The settings menu (`Esc`) also lists every shortcut in its Controls tab.
 

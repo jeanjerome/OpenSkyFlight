@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GEAR_SPEED_LIMIT } from '../../flight/GearSequence.js';
 import {
   HUD_COLOR,
   HUD_ALPHA,
@@ -70,6 +71,15 @@ export default class HUDRenderer {
     ctx.fillText(`M ${m.mach.toFixed(2)}`, left, below + 20);
     ctx.fillText(`G ${m.loadFactor.toFixed(1)}  ${m.peakLoadFactor.toFixed(1)}`, left, below + 38);
     ctx.fillText(`\u03b1 ${Math.round((m.alpha * 180) / Math.PI)}\u00b0`, left, below + 56);
+    // Landing gear: in transit, or down and locked; red beyond its speed limit
+    const gear = m.gear;
+    if (!gear.upLocked) {
+      const overspeed = m.indicatedAirspeed > GEAR_SPEED_LIMIT;
+      ctx.fillStyle = overspeed ? WARN_COLOR : HUD_COLOR;
+      const label = gear.downLocked ? 'GEAR DOWN' : 'GEAR TRANSIT';
+      ctx.fillText(overspeed ? `${label}  SPEED` : label, left, below + 74);
+      ctx.fillStyle = HUD_COLOR;
+    }
 
     const right = w / 2 + INSTRUMENT_OFFSET_X - 10;
     const engines = m.engines;
