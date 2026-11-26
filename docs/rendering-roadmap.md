@@ -8,8 +8,8 @@ en fin de session.
 
 ## État courant (mis à jour le 2026-11-26, session 25)
 
-- **Lot 5 terminé** le 2026-11-26 à la demande de l'utilisateur, sur `feat/render-terrain` (depuis
-  `main`, ni poussée ni fusionnée). Faits : L5.1 (raccord exact des bords entre tuiles, altitudes
+- **Lot 5 terminé** le 2026-11-26 à la demande de l'utilisateur, fusionné dans `main` le même jour à
+  sa demande (avance rapide depuis `feat/render-terrain`, non poussé). Faits : L5.1 (raccord exact des bords entre tuiles, altitudes
   dans un worker), L5.2 (geomorphing du relief et fondu de l'imagerie), L5.3 (ombres du relief et de
   l'avion), L5.8 (mode courbes de niveau tactique phosphore), L5.9 (normales par pixel). L5.5
   abandonnée, L5.4 écartée (coût sans gain visible), L5.6 et L5.7 reportées (elles demandent des
@@ -19,8 +19,7 @@ en fin de session.
   mis à jour par `GeoTerrainManager.update`, plus par le rendu. Bundle three-tile à reconstruire après
   chaque `git pull` ou changement de branche (`cd vendor/three-tile && npm run build:lib`) : le worker
   d'altitude y est intégré.
-- **Prochaine étape** : au choix de l'utilisateur, fusion du lot 5 dans `main`, lot de jeu G3, lot 6,
-  ou reprise de L5.6 / L5.7.
+- **Prochaine étape** : au choix de l'utilisateur, lot de jeu G3, lot 6, ou reprise de L5.6 / L5.7.
 
 - **Lot 4 terminé** le 2026-11-26 (toutes ses tâches faites, bilan dans **Mesures**, lignes
   « Clôture du lot 4 », captures `docs/screenshots/render/lot4/`), fusionné dans `main` le même jour
@@ -32,8 +31,8 @@ en fin de session.
   plus. Bilan dans **Mesures** (lignes « Clôture du lot 2 ») et constats visuels sous les tableaux.
 - **three.js** : r187 (import map d'`index.html`), mis à jour depuis r183 pour le TRAA compatible avec
   la profondeur inversée.
-- **Git** : lots 0 à 4 et lots de jeu G0 à G2 dans `main` (voir `git status -sb` pour les commits
-  non poussés). Lot 5 terminé sur `feat/render-terrain`, non fusionné. Plus de worktree de comparaison : en
+- **Git** : lots 0 à 5 et lots de jeu G0 à G2 dans `main` (voir `git status -sb` pour les commits
+  non poussés) ; la branche `feat/render-terrain` existe encore. Plus de worktree de comparaison : en
   recréer un si besoin (voir Outillage).
 - **Environnement local** : bundle three-tile construit, `npm install` fait (racine et
   `vendor/three-tile`), cache `cache/` chaud pour les vues de référence et les deux vols. Lancer
@@ -1279,7 +1278,7 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 - Essayé puis écarté : L5.4, `GTAONode` (voir Décisions).
 - Lot 5 clôturé à la demande de l'utilisateur (L5.6 et L5.7 reportées) : captures `lot5`, vols
   `lot5-flight` et `lot5-plan1`, captures versionnées `docs/screenshots/render/lot5/`. Branche
-  `feat/render-terrain` ni poussée ni fusionnée.
+  `feat/render-terrain`, puis fusionnée dans `main` (avance rapide) à la demande de l'utilisateur.
 - Outils (scratchpad, non versionnés) : saut du sol d'une frame à l'autre sur 2 500 points par
   `groundHeight` pendant des changements forcés du seuil de LOD, écart entre bords voisins
   reconstruits sur le CPU à chaque frame, morph figé à 0 pour comparer l'imagerie des parents ; accès
