@@ -84,28 +84,30 @@ en fin de session.
     l'autre touchent aussi l'ancien code : seules des captures alternées (worktree de l'ancien état
     sur le port 3001, ou `--set` d'un réglage sur le même code) tranchent une régression.
 - **Lot 4 en cours** sur `feat/render-clouds` (depuis `main`, après la fusion de `feat/flight-model`
-  le 2026-11-25). Fait : L4.1, L4.4, et premières versions de L4.2 et L4.3 (voir les tâches). Le réglage
+  le 2026-11-25). Fait : L4.1, L4.4, L4.5, L4.6, et premières versions de L4.2 et L4.3 (voir les tâches). Le réglage
   « Clouds » (`showClouds`) dessine les nuages volumétriques en WebGPU (la couche plane `CloudLayer`
   reste en WebGL2 jusqu'à L4.8) ; `cloudAltitude` fixe la base des cumulus. Code : `js/clouds/`,
   `js/constants/clouds.js`, passe des nuages (`CloudsTemporalNode`) dans
   `ScenePipeline.setAtmosphere(apply, clouds)`, composition dans `AtmosphericSky._overScene`. Référence
-  des vues : `benchmarks/render/clouds-6` (ombres des nuages ; vue 5 : 7,51 ms, contre 7,13 dans
+  des vues : `benchmarks/render/clouds-7` (traversée des nuages ; vue 5 : 7,43 ms, rien de mesurable
+  sur les vues de référence, caméra loin des couches), avant elle `clouds-6` (ombres des nuages ; vue 5 : 7,51 ms, contre 7,13 dans
   `clouds-5`, marche stratifiée, 6,99 dans `clouds-4`, cirrus fibreux, et 6,80 dans `clouds-3`, l'état
   de la session 21 ; d'une série à l'autre ±0,4 ms : les captures alternées de la vue 5 donnent
   cirrus fibreux −0,08 ms, marche stratifiée +0,15 ms, ombres +0,12 ms). Les vues de référence remettent le vent à zéro,
   sinon la couverture en vue dérive pendant une capture et le coût de la vue 5 varie de ±0,6 ms. Une
   instance de l'app ouverte ailleurs (navigateur de l'utilisateur) double tous les coûts GPU d'une
   capture : vérifier qu'aucune ne tourne avant de mesurer. Tout est commité (dernier commit de code :
-  ombres des nuages sur l'avion), branche non poussée ni fusionnée.
-- **Prochaine étape** : L4.6 (traversée des nuages, caméra dans la couche) : brouillard autour de
-  la caméra, entrée et sortie, et lumière dans un nuage (l'avion et le sol à l'ombre n'y reçoivent
-  que la lumière bleutée d'un ciel clair, pas celle, plus blanche, diffusée par le nuage). Les points
-  sur l'avion dans un nuage sont déjà corrigés (marche stratifiée). Couverture dans le menu avec L4.8.
-  Outils de la session 22 pour les défauts en mouvement : variantes passées dans l'URL que
-  l'utilisateur essaie en vol, vol rejoué à pas de temps fixe (crochet temporaire
-  `window.__advance(n)` dans la boucle de rendu, à recréer : les patchs du scratchpad ne survivent
-  pas à la session). Fait avec l'utilisateur : scintillement (rognage de l'historique, L4.4), cirrus gris, contraste de
-  l'ombre propre et forme des cirrus (L4.3).
+  traversée des nuages), branche non poussée ni fusionnée.
+- **Prochaine étape** : L4.7 (rayons crépusculaires et reflet d'objectif), puis L4.8 (retrait de
+  l'ancien `CloudLayer`, couverture dans le menu). L4.6 n'a pas encore été essayée en vol par
+  l'utilisateur (commit fait à sa demande avant) : lui demander son avis sur la traversée (grain fin
+  du brouillard proche à l'entrée et à la sortie, avion éclairci dans le nuage) avant L4.7.
+  Outils pour les défauts en mouvement : variantes passées dans l'URL que l'utilisateur essaie en
+  vol, vol rejoué à pas de temps fixe (crochets temporaires `window.__advance(n)` et
+  `window.__move(m)` dans la boucle de rendu de `js/app.js`, à recréer : les patchs du scratchpad ne
+  survivent pas à la session). Fait avec l'utilisateur : scintillement (rognage de l'historique,
+  L4.4), cirrus gris, contraste de l'ombre propre et forme des cirrus (L4.3), lumière dans un nuage
+  et avion visible dans un nuage (L4.6).
 - **Suite** : lot 4 (nuages volumétriques). Points ouverts : culling des tuiles par three presque
   inopérant (sphère englobante calculée en coordonnées locales où l'épaisseur est en mètres et la
   largeur en tuiles : rayon démesuré une fois mis à l'échelle), piste CPU et GPU pour le lot 5 ; coût CPU de soumission (≈ 5 µs par
@@ -674,7 +676,45 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       rendus répétés de la mesure GPU. Coût (vue 5, captures alternées) : +0,12 ms (carte redessinée à
       chaque rendu : +0,45 à +0,75 ms ; lecture par fragment : rien de mesurable). En vol, carte
       redessinée tous les 4 rendus ou à chaque rendu : mêmes images à chaque phase du cycle.
-- [ ] **L4.6** Traversée des nuages (caméra dans la couche).
+- [x] **L4.6** Traversée des nuages (caméra dans la couche).
+      Lumière dans un nuage : au cœur d'un nuage épais, les octaves de la diffusion multiple de
+      Wrenninge s'éteignent en quelques centaines de mètres et seule restait la lumière du ciel, d'où
+      un brouillard gris bleuté. S'y ajoute la lumière diffusée en profondeur, qui décroît en
+      1 / (1 + rate × τ) vers le soleil (`CLOUD_DIFFUSION`, on garde le plus grand des deux termes).
+      Choisie par l'utilisateur parmi quatre réglages sur des planches (dedans et vue 5 de dehors) :
+      rate 0,05, scale 0,5 ; plus fort (0,1 ; 1), l'intérieur était plus blanc mais les flancs ombrés
+      des cumulus, vus de dehors, s'aplatissaient.
+      Brouillard proche : en vol à 560 m/s, l'entrée dans un nuage se couvrait de taches de la taille
+      de trois blocs 4×4. Le contenu des 100 premiers mètres change trop vite pour la reconstruction
+      temporelle (un pixel marché toutes les 16 frames, reprojeté à une seule distance pour tout un
+      volume) : marcher tous les pixels à chaque frame donnait une image propre ; ni la marche en pas
+      fins près de la caméra, ni le bruit de détail atténué, ni un noyau de repli plus large n'y
+      changeaient rien. Les nuages à moins de `CLOUD_NEAR_DISTANCE` (200 m) de la caméra, quand elle
+      est à moins de 200 m d'une couche, sont donc marchés à chaque frame
+      (`VolumetricClouds.nearFog`, 6 échantillons stratifiés) dans une cible à demi-résolution de la
+      passe de scène, filtrée en la posant sur le reste dans `_overScene` ; la marche temporelle part
+      au-delà. L'épaisseur optique vers la lumière y est lue dans la carte des ombres (L4.5) : la
+      marche vers la lumière à chaque pixel coûtait +6,5 ms en pleine résolution, +2,5 ms avec la
+      carte, +0,7 ms à demi-résolution (vue 5 dans la couche, `cloudAltitude` 6000 et avion avancé de
+      600 m). Pas de halo visible autour de l'avion. Reste un grain fin dans le brouillard proche en
+      mouvement (tirage stratifié par frame) ; des échantillons à places fixes l'effacent mais
+      risquent de ramener le contenu qui « roule » (voir L4.3), gardé tel quel.
+      Avion visible dans un nuage (demande de l'utilisateur) : la densité entre la caméra et l'avion
+      monte de 0 à 30 % de sa distance jusqu'à sa pleine valeur à l'avion (`CLOUD_CLEARING`) ; rien
+      en vue cockpit.
+      Lumière des nuages sur l'avion (`js/clouds/CloudAmbient.js`) : à chaque rendu, 16 rayons par
+      face d'un cube partent de l'avion (tirés selon le cosinus autour de l'axe de la face, marche
+      des nuages ordinaire depuis un point décalé de la caméra) ; la moyenne de chaque face, mêlée à
+      10 % aux rendus précédents, donne l'éclairement des nuages et la part de ciel restante (cube
+      ambiant de Valve). À moins de 60 m de l'avion, la lumière du ciel de l'`AtmosphereLight`
+      (sous-classe `CloudLitAtmosphereLightNode`, qui intercepte l'irradiance ajoutée par
+      `setupDirect`) et les reflets de l'environnement sont en partie masqués et complétés par la
+      lumière des nuages. Coût : +0,18 ms sur la vue 5 (captures alternées).
+      Défaut trouvé au passage : three force à 1 l'alpha de la couleur d'un matériau opaque ; la
+      carte des ombres gardait l'épaisseur des seuls cirrus dans ce canal, si bien qu'un point entre
+      le sommet des nuages moyens et les cirrus (l'avion de la vue 5) ne recevait que 37 % du soleil
+      sous un ciel clair. Les passes plein écran écrivent désormais leur `outputNode`.
+      Capture `clouds-7` : coûts des vues de référence inchangés (vue 5 : 7,43 ms).
 - [ ] **L4.7** Rayons crépusculaires (`GodraysNode`) et reflet d'objectif (`LensflareNode`).
 - [ ] **L4.8** Retirer l'ancien `CloudLayer` plan ; adapter les contrôles du panneau.
 
@@ -937,6 +977,7 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 | 2026-11-24 | Sol au-delà des tuiles | Sol diffus de l'ellipsoïde calculé dans la passe du ciel (éclairement et diffusion jusqu'au point de takram) plutôt que la luminance du ciel de takram sous l'horizon | Sous l'horizon, takram ne rend que la lumière diffusée le long du rayon, avec un saut de sa table de diffusion à l'horizon (trait clair) ; un maillage de sol supplémentaire coûterait des draw calls et de la géométrie pour un rendu identique |
 | 2026-11-24 | Adaptation aux lumières des villes | Moyenne logarithmique de leur luminance sur la zone en vue, calculée sur le CPU depuis la mosaïque Black Marble, ajoutée à l'éclairement de la pré-exposition | Déterministe comme la pré-exposition (pas de relecture GPU ni de boucle) ; la moyenne arithmétique laissait une ville lointaine assombrir tout un paysage au clair de lune, la moyenne logarithmique (comme l'adaptation de l'œil et le tone mapping de Reinhard) ne compte une ville que si elle remplit la vue |
 | 2026-11-25 | Nuages volumétriques | Implémentation propre en TSL, portée du modèle de takram three-clouds 0.7.6 (MIT) | takram three-clouds n'a pas de version WebGPU/TSL (effet `postprocessing` sur le renderer WebGL) ; son modèle (Schneider, Hillaire, Wrenninge) et ses paramètres par défaut sont éprouvés et s'éclairent avec le même contexte d'atmosphère que le reste de la scène |
+| 2026-11-26 | Brouillard des nuages proches | Marché à chaque frame à demi-résolution sur les 200 premiers mètres, lumière lue dans la carte des ombres, plutôt qu'un bloc de marche plus petit dans la couche ou un historique plus long | La reconstruction temporelle ne peut pas suivre un volume qui défile à quelques mètres de la caméra ; marcher 1 pixel sur 4 au lieu de 16 dans la couche quadruplerait le coût de toute la marche, là où le brouillard proche, sans bords nets, se contente de la demi-résolution |
 | 2026-11-25 | Repère des nuages | Coquilles sphériques centrées sur le centre de la Terre sous la caméra, coordonnées de texture tirées des x, z de la carte et de l'altitude, origine réduite modulo la répétition sur le CPU | Même courbure que le terrain (abaissé de d²/2R autour de la caméra) ; pas de coutures de projection cube-sphère ; précision des flottants conservée loin de l'origine de la carte |
 | 2026-11-25 | Suréchantillonnage temporel des nuages | Un pixel sur 16 marché par frame (Bayer 4×4), reprojection par pixel à la distance de sa scène ou du front des nuages, rejet de l'historique sur la distance de scène, repli pondéré par la ressemblance de profondeur | Comme takram pour le coût (marche à 1/16 des pixels) ; leur vitesse prise au fragment le plus proche d'un voisinage basse résolution laisse des halos aux silhouettes en mouvement, la reprojection à la profondeur pleine résolution de chaque pixel les évite |
 | 2026-11-25 | Reconstruction de l'atmosphère en cours de vol | Le TAAU marque ses matériaux internes à recompiler quand la passe d'atmosphère change | `TAAUNode.setup()` leur donne de nouveaux nœuds sans les marquer : couper la brume de distance, la brume de chaleur ou le volume de perspective aérienne depuis le menu ne s'appliquait qu'au rechargement (défaut antérieur, trouvé avec les nuages) |
@@ -945,6 +986,17 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 ## Journal des sessions
 
 <!-- Entrée la plus récente en haut. -->
+
+### 2026-11-26 (23)
+- Fait : L4.6, traversée des nuages (voir la tâche) : lumière dans un nuage choisie par
+  l'utilisateur sur planches, brouillard proche marché à chaque frame, avion visible dans un nuage
+  (choix de l'utilisateur), lumière des nuages sur l'avion. Corrigé : canal des cirrus de la carte
+  des ombres (alpha forcé à 1). Capture `clouds-7`.
+- Outils : vol rejoué à pas de temps fixe avec téléportation de l'avion (`window.__move`), mesure du
+  coût GPU dans un nuage par un script Playwright (vue 5, `cloudAltitude` 6000, avion avancé de
+  600 m), scripts gardés dans le scratchpad.
+- Commits : correctif de la carte des ombres, traversée des nuages, documentation (non poussés).
+- Prochaine étape : avis de l'utilisateur en vol sur la traversée, puis L4.7 (voir État courant).
 
 ### 2026-11-26 (22)
 - Mesuré : capture `clouds-3` (état de la session 21) ; une première série à coûts doublés venait
