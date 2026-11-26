@@ -9,7 +9,7 @@ en fin de session.
 ## État courant (mis à jour le 2026-11-26, session 25)
 
 - **Lot 5 terminé** le 2026-11-26 à la demande de l'utilisateur, fusionné dans `main` le même jour à
-  sa demande (avance rapide depuis `feat/render-terrain`, non poussé). Faits : L5.1 (raccord exact des bords entre tuiles, altitudes
+  sa demande (avance rapide depuis `feat/render-terrain`) et poussé par lui. Faits : L5.1 (raccord exact des bords entre tuiles, altitudes
   dans un worker), L5.2 (geomorphing du relief et fondu de l'imagerie), L5.3 (ombres du relief et de
   l'avion), L5.8 (mode courbes de niveau tactique phosphore), L5.9 (normales par pixel). L5.5
   abandonnée, L5.4 écartée (coût sans gain visible), L5.6 et L5.7 reportées (elles demandent des
