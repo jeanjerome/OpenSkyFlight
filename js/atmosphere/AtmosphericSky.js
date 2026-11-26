@@ -435,9 +435,9 @@ export default class AtmosphericSky {
    * WebGPU, see AerialPerspectiveVolume), and the sky behind it.
    *
    * The sky is only evaluated where the scene pass left no depth, and is seen
-   * through the coverage left by the transparent geometry drawn there (the
-   * cloud layer, which writes no depth): the scene is cleared to transparent
-   * black, so its color is the cloud premultiplied by its alpha, and the sky
+   * through the coverage left by the transparent geometry drawn there, which
+   * writes no depth: the scene is cleared to transparent black, so its color
+   * is that geometry premultiplied by its alpha, and the sky
    * adds behind it in proportion to 1 - alpha. Compared with a scene
    * background, the sky shader then runs only on the sky pixels instead of
    * under all the terrain.

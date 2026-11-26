@@ -1,14 +1,8 @@
 import * as THREE from 'three';
-import { CONFIG, onChange, update } from './utils/config.js';
+import { CONFIG, DEFAULTS, onChange, update } from './utils/config.js';
 import { loadSettings, isDevMode } from './utils/settingsStore.js';
 import { bindQualitySettings } from './utils/qualityPresets.js';
-import {
-  CLOUD_RENDER_ORDER,
-  GLOW_LAYER,
-  HEAT_LAYER,
-  REALWORLD_FAR_PLANE,
-  CLIP_PLANE_EPSILON,
-} from './constants/rendering.js';
+import { GLOW_LAYER, HEAT_LAYER, REALWORLD_FAR_PLANE, CLIP_PLANE_EPSILON } from './constants/rendering.js';
 import { REALWORLD_START_ALTITUDE, DEFAULT_NEAR, MAX_ROLL, ROLL_SENSITIVITY, ROLL_DAMP_SPEED } from './constants/camera.js';
 import { MAX_DELTA_TIME } from './constants/physics.js';
 import { SIMULATION_RATE, ENTITY_GRID_CELL } from './constants/simulation.js';
@@ -32,7 +26,6 @@ import { showNotification } from './ui/Notification.js';
 import AtmosphericSky from './atmosphere/AtmosphericSky.js';
 import CityLights from './terrain/CityLights.js';
 import { REFERENCE_VIEWS } from './constants/referenceViews.js';
-import CloudLayer from './atmosphere/CloudLayer.js';
 import VolumetricClouds from './clouds/VolumetricClouds.js';
 import BenchmarkRunner from './benchmark/BenchmarkRunner.js';
 import BenchmarkComparator from './benchmark/BenchmarkComparator.js';
@@ -80,21 +73,18 @@ async function initApp() {
   });
   const cityLights = new CityLights(geoTerrainManager, atmosphericSky.preExposure);
   geoTerrainManager.setEmissiveNode(cityLights.node);
-  // Volumetric clouds need compute shaders (their noise textures): the flat
-  // layer stands in for them on the WebGL2 backend
+  // Volumetric clouds need compute shaders (their noise textures): none on the WebGL2 backend
   let volumetricClouds = null;
-  let cloudLayer = null;
   if (renderer.backend.isWebGPUBackend) {
     volumetricClouds = new VolumetricClouds(atmosphericSky, camera);
     volumetricClouds.init(renderer);
     volumetricClouds.setBase(CONFIG.cloudAltitude);
+    volumetricClouds.setCover(CONFIG.cloudCover);
     onChange((key, value) => {
       if (key === 'cloudAltitude') volumetricClouds.setBase(value);
+      if (key === 'cloudCover') volumetricClouds.setCover(value);
     });
     atmosphericSky.setClouds(volumetricClouds);
-  } else {
-    cloudLayer = new CloudLayer(scene);
-    cloudLayer.mesh.renderOrder = CLOUD_RENDER_ORDER;
   }
 
   // --- Simulation ---
@@ -391,6 +381,7 @@ async function initApp() {
     update('timeOfDay', view.timeOfDay);
     update('showClouds', view.showClouds);
     if (view.cloudAltitude !== undefined) update('cloudAltitude', view.cloudAltitude);
+    update('cloudCover', view.cloudCover ?? DEFAULTS.cloudCover);
     // Clouds where the wind had not yet carried them
     volumetricClouds?.resetWind();
     update('cameraMode', view.cameraMode);
@@ -678,7 +669,6 @@ async function initApp() {
     }
 
     // --- Environment phase ---
-    cloudLayer?.update(dt, camera.position, aircraftState ? aircraftState.pitch : 0);
     volumetricClouds?.update(dt, camera.position, aircraft.position);
 
     const timer = benchmarkRunner.getSubsystemTimer();

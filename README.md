@@ -26,7 +26,8 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 - **OSM minimap** — real-time 2D map overlay with airplane marker and independent zoom
 - **Flight plan system** — record waypoints, save/load flight plans, and engage autopilot to follow a path automatically
 - **Local tile cache** — transparent caching proxy, pre-download tiles for offline flight
-- **Physical atmosphere** — precomputed atmospheric scattering ([takram](https://github.com/takram-design-engineering/three-geospatial)): sky, aerial perspective read from a frustum-aligned volume, sunlight and sky light evaluated at each surface point, all from the same scattering tables; the terrain follows the curvature of the Earth and meets the horizon of the sphere, with the distant ground beyond the tiles drawn by the sky; a Visibility setting sets the haze; animated cloud layer
+- **Physical atmosphere** — precomputed atmospheric scattering ([takram](https://github.com/takram-design-engineering/three-geospatial)): sky, aerial perspective read from a frustum-aligned volume, sunlight and sky light evaluated at each surface point, all from the same scattering tables; the terrain follows the curvature of the Earth and meets the horizon of the sphere, with the distant ground beyond the tiles drawn by the sky; a Visibility setting sets the haze
+- **Volumetric clouds** — cumulus, mid-level clouds and fibrous cirrus ray-marched in real time (after [takram's three-clouds](https://github.com/takram-design-engineering/three-geospatial)) that you can fly through, with their shadows on the ground and on the aircraft, light shafts in the haze, and settings for their cover and altitude (WebGPU)
 - **Time of day** — the sun follows the date and the local solar time (NOAA formulas), with time frozen, real time or accelerated up to ×600
 - **Night** — stars turning with the hour, the moon with its phases and moonlight, an exposure that follows the falling light, night vision that fades colors into a bluish grey, and city lights from NASA's Black Marble imagery, to which the exposure adapts when a town fills the view
 - **Aircraft lights** — position lights, flashing red beacons and white wingtip strobes (switched with `O`) with their glare, engine glow with thrust and an afterburner flame with shock diamonds
@@ -188,7 +189,8 @@ cache/
 ├── js/
 │   ├── app.js                 Orchestrator: init, input bindings, render loop
 │   ├── aircraft/              Rafale GLTF model loading & animation, control surfaces, aircraft lights & engine glow
-│   ├── atmosphere/            Atmospheric scattering, aerial perspective volume, sun & moon ephemerides, night exposure, cloud layer
+│   ├── atmosphere/            Atmospheric scattering, aerial perspective volume, sun & moon ephemerides, night exposure
+│   ├── clouds/                Volumetric clouds (noise textures, ray march, temporal upscaling), their shadows, light shafts and light on the aircraft
 │   ├── benchmark/             Automated perf testing & baseline comparison
 │   ├── camera/                Chase camera, springs
 │   ├── constants/             Shared constants (camera, HUD, physics, terrain…)

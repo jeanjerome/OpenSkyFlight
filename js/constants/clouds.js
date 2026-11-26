@@ -60,8 +60,22 @@ export const CLOUD_LAYERS = [
   { altitude: 7500, thickness: 175, density: 0.0011, shape: 0, detail: 0, weatherExponent: 2.5, bias: 0.35, edge: 0.3 },
 ];
 
-/** Sky fraction the clouds cover at the default weather (0 clear, 1 overcast) */
-export const CLOUD_DEFAULT_COVERAGE = 0.4;
+/**
+ * From the "Cloud cover" setting, the share of the sky the clouds seem to
+ * cover, to the coverage that thresholds the weather map: pairs [setting,
+ * coverage], interpolated linearly. The coverage acts steeply on the weather
+ * map: below 0.15 no cloud is left, above 0.6 the sky is overcast, and in
+ * between the share covered from above rises fastest around 0.4 (judged on
+ * view 5).
+ */
+export const CLOUD_COVER_TO_COVERAGE = [
+  [0, 0],
+  [0.1, 0.2],
+  [0.25, 0.3],
+  [0.5, 0.4],
+  [0.75, 0.47],
+  [1, 0.6],
+];
 
 /** Wind carrying the clouds (m/s, toward +x east and +z south) */
 export const CLOUD_WIND = [8, -3];

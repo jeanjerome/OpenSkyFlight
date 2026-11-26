@@ -42,9 +42,9 @@ import { SETTINGS_BY_KEY } from './settingsSchema.js';
  * @property {number}  dayOfYear              - Day of the year, range [1..365] (default: 62, 3 March)
  * @property {number}  timeSpeed              - Simulated seconds per real second, 0 freezes the sun (default: 1)
  * @property {number}  visibility             - Visibility at sea level in km, set by the aerosol density, range [10..280] (default: 220)
- * @property {boolean} showClouds             - Show cloud layer (default: false)
- * @property {number}  cloudAltitude          - Cloud layer altitude in meters, range [500..12000] (default: 3500)
- * @property {number}  cloudOpacity           - Cloud opacity (default: 0.7)
+ * @property {boolean} showClouds             - Volumetric clouds, WebGPU only (default: false)
+ * @property {number}  cloudAltitude          - Base of the lowest clouds in meters, range [500..12000] (default: 3500)
+ * @property {number}  cloudCover             - Share of the sky the clouds cover, range [0..1] (default: 0.5)
  * @property {boolean} aerialPerspectiveVolume - Aerial perspective read from a frustum-aligned volume instead of per pixel, WebGPU only (default: true)
  * @property {boolean} fogEnabled             - Aerial perspective: light scattered and absorbed by the air between the camera and the scenery (default: true)
  *
@@ -104,7 +104,7 @@ const CONFIG = {
   visibility: 220,
   showClouds: false,
   cloudAltitude: 3500,
-  cloudOpacity: 0.7,
+  cloudCover: 0.5,
   fogEnabled: true,
   aerialPerspectiveVolume: true,
   hiResMode: false,

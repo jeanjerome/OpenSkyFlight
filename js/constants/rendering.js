@@ -4,9 +4,6 @@ export const CLEAR_COLOR = 0x0a0a1a;
 /** Maximum concurrent fetch requests to avoid ERR_INSUFFICIENT_RESOURCES */
 export const MAX_CONCURRENT_FETCHES = 6;
 
-/** Render order for cloud layer (above water) */
-export const CLOUD_RENDER_ORDER = 100;
-
 // --- Dynamic resolution (see AdaptiveQualityManager) ---
 
 /** Frames per decision; the decision uses their median */

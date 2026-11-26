@@ -37,7 +37,7 @@ import {
   CLOUD_CIRRUS_FIBRES,
   CLOUD_CIRRUS_TILE,
   CLOUD_CLEARING,
-  CLOUD_DEFAULT_COVERAGE,
+  CLOUD_COVER_TO_COVERAGE,
   CLOUD_DETAIL_DISTANCE,
   CLOUD_DETAIL_TILE,
   CLOUD_DIFFUSION,
@@ -132,8 +132,8 @@ export default class VolumetricClouds {
     this.camera = camera;
     this.textures = new CloudTextures();
 
-    /** Sky fraction the clouds cover (0 clear, 1 overcast) */
-    this.coverage = frameUniform(CLOUD_DEFAULT_COVERAGE);
+    /** Threshold of the weather map (0 clear, 0.6 overcast; see setCover) */
+    this.coverage = frameUniform(0);
 
     this._cameraHeight = frameUniform(0);
     this._weatherOrigin = frameUniform(new THREE.Vector2());
@@ -181,6 +181,18 @@ export default class VolumetricClouds {
     /** Heights of each layer (m), for nearFog() */
     this._layers = bottoms.map((bottom, i) => [bottom, tops[i]]);
     this.shadow.setBase(altitude);
+  }
+
+  /**
+   * @param {number} cover - share of the sky the clouds seem to cover, from 0
+   *   (clear) to 1 (overcast): the "Cloud cover" setting
+   */
+  setCover(cover) {
+    const points = CLOUD_COVER_TO_COVERAGE;
+    const x = Math.min(Math.max(cover, 0), 1);
+    const i = Math.max(1, points.findIndex(([setting]) => setting >= x));
+    const [[s0, c0], [s1, c1]] = [points[i - 1], points[i]];
+    this.coverage.value = c0 + ((c1 - c0) * (x - s0)) / (s1 - s0);
   }
 
   /** Bring the clouds back to where they were before the wind carried them */
