@@ -16,9 +16,9 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
   volumétriques) est terminé et fusionné dans `main` le 2026-11-26 (voir `docs/rendering-roadmap.md`).
   Le lot de rendu 5 (terrain et ombres) est terminé et fusionné dans `main` le 2026-11-26 et
   poussé. **G3 (décollage et atterrissage) en cours sur `feat/takeoff-landing`** depuis le
-  2026-11-26 : G3.1 (train animé), G3.2 (physique au sol) et G3.3 (crash et écran de reprise)
-  faits ; suite G3.4 (données d'aéroports, départ d'une piste), voir le lot G3. Pour essayer au sol avant G3.4 :
-  `?lat=46.2381&lon=6.1090` (Genève) puis `window.osf.startOnGround(0, 0, 46)` dans la console. L'avion porte désormais
+  2026-11-26 : G3.1 (train animé), G3.2 (physique au sol), G3.3 (crash et écran de reprise) et
+  G3.4 (aéroports, départ d'une piste depuis le menu : onglet World, section Airports) faits ;
+  suite G3.5 (aplanir le terrain sous les pistes), voir le lot G3. L'avion porte désormais
   son ombre et reçoit celle du relief (`js/aircraft/AircraftShadow.js`, calque `SHADOW_CASTER_LAYER`
   pour ce qui doit la projeter : penser au train d'atterrissage de G3).
 - **Vue orbite** (demandée par l'utilisateur, hors lots) : `CONFIG.cameraMode = 'orbit'`, entre la
@@ -372,8 +372,22 @@ sol) ; les nuages volumétriques (lot 4) n'ont pas de dépendance avec ces lots.
       avait commencé (Espace, B ; seulement après un départ au sol). Commande du train verrouillée
       sortie tant que les roues portent l'avion. Tests `tests/crash.test.js` ; vérifié dans Chrome à
       Genève (atterrissage dur, piqué dans le sol, deux reprises).
-- [ ] **G3.4** Données d'aéroports : `runways.csv` d'OurAirports (domaine public) découpé par tuile par
+- [x] **G3.4** Données d'aéroports : `runways.csv` d'OurAirports (domaine public) découpé par tuile par
       le proxy, chargé autour de l'avion ; recherche d'aéroport dans le menu (décollage depuis une piste).
+      Fait : `scripts/airports.js` (le serveur télécharge une fois `airports.csv` et `runways.csv` dans
+      `cache/ourairports/`, les analyse et garde en mémoire les pistes ouvertes d'au moins 300 m dont
+      les deux seuils sont localisés, aux aéroports pour avions : ≈ 18 000 pistes, presque tous les
+      aéroports moyens et grands ; cap de chaque seuil recalculé vers l'autre, élévations et seuils
+      décalés en mètres), routes `/api/airports?q=` (code OACI, IATA ou local, mots du nom, de la ville
+      et des mots-clés, sans accents ; grands aéroports d'abord) et `/api/runways/{z}/{x}/{y}` (pistes
+      dont le milieu est dans la tuile). `js/airports/Airports.js` : `RunwayCatalog` charge les tuiles
+      z7 (≈ 310 km) sous l'avion et autour, vérifiées une fois par seconde (493 pistes autour de
+      Genève) ; `searchAirports`. Menu, onglet World, section Airports : recherche, puis un bouton par
+      seuil (« 04 · 3.9 km »). Départ : terrain rechargé autour d'un point 40 m après le début de la
+      piste, avion tenu immobile (`SimulatedFlight.hold`) jusqu'à ce que le sol y soit chargé, puis
+      posé sur ses roues dans l'axe (`placeOnGround`), point de reprise après un crash. Tests
+      `tests/airports.test.js`. Vérifié dans Chrome : LSGG piste 04, cap 45,6° (46° publié), posé en
+      3,9 s. Le serveur de l'utilisateur doit être relancé pour avoir les nouvelles routes.
 - [ ] **G3.5** Aplanir le terrain sous les pistes : distance signée au rectangle de piste dans le
       vertex shader du terrain, altitude interpolée entre les deux seuils, raccord smoothstep sur
       150–300 m ; **même fonction** pour l'altitude CPU (G0.4) et la physique au sol.
@@ -703,6 +717,7 @@ piqué dans le relief : crash et redémarrage ; aucune erreur console.
 
 | Date | Fait | Reste / prochaine étape |
 |---|---|---|
+| 2026-11-26 | G3.4 : données OurAirports servies par le proxy (recherche, pistes par tuile), catalogue des pistes autour de l'avion, recherche d'aéroport dans le menu et départ aligné sur un seuil ; tests ; vérifié dans Chrome (LSGG 04) | G3.5 (aplanir le terrain sous les pistes) |
 | 2026-11-26 | G3.3 : points de structure du modèle, crash au contact de la cellule ou au-delà de 3 m/s au toucher, écran de reprise (en vol ou au point de départ au sol), commande du train verrouillée au sol ; tests ; vérifié dans Chrome | G3.4 (aéroports d'OurAirports, départ d'une piste) |
 | 2026-11-26 | G3.2 : physique au sol (jambes ressort-amortisseur, pneus, freins, roue avant orientable, effet de sol), loi sol des commandes de vol, centre de gravité du modèle, visée souris au sol ; banc au sol (125 kt en 9,5 s, décollage 394 m, atterrissage 446 m) ; vérifié dans Chrome à Genève | G3.3 (contacts de structure et crash : queue au décollage, toucher trop dur, train rentré) ; ressenti au sol par l'utilisateur |
 | 2026-11-26 | G3 commencé sur `feat/takeoff-landing` ; G3.1 : séquence du train (trappes, jambes repliées vers l'avant, roue principale couchée à plat), traînée, touche `G` / bouton X, HUD et avertissement au-delà de 230 kt ; pilote automatique déplacé sur `U` | G3.2 (physique au sol : jambes ressort-amortisseur, freins, roue avant orientable) ; ressenti visuel du train par l'utilisateur |
