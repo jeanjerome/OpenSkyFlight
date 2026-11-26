@@ -81,6 +81,7 @@ Available scripts:
 | `npm run lint:fix` | Run ESLint with auto-fix |
 | `npm test` | Run the unit tests (Node test runner), including the flight model checks |
 | `npm run flight:bench` | Measure the flight model against the published figures of the Rafale |
+| `npm run flight:scenario -- --out <dir> [--airport LSGG] [--runway 0] [--end 0] [--time-scale 3]` | Fly a circuit from a real runway in Chrome with the scripted pilot (takeoff, circuit, guided final, landing) and save its report and a screenshot per phase (needs the dev server) |
 | `npm run format` | Format all files with Prettier |
 | `npm run format:check` | Check formatting without modifying files |
 | `npm run render:capture -- --out <dir>` | Screenshot every reference view in Chrome and measure frame pacing, draw calls and GPU cost (dev server must be running); `--views 1,6` selects views, `--set key=value` overrides a setting |

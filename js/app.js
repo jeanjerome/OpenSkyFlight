@@ -43,6 +43,7 @@ import RunwayMarkings from './terrain/RunwayMarkings.js';
 import RunwayLights from './airports/RunwayLights.js';
 import RunwaysInWorld from './airports/RunwaysInWorld.js';
 import { approachGuidance } from './flight/ApproachGuide.js';
+import PilotBot from './flight/PilotBot.js';
 import Stats from 'stats.js';
 
 async function initApp() {
@@ -486,6 +487,22 @@ async function initApp() {
   // terrain is loaded around its start, the aircraft holds there until the
   // ground under it has loaded, then stands on its wheels
   let runwayStart = null;
+  /** The runway and end of the last runway start, which the scripted pilot flies a circuit from */
+  let lastRunwayStart = null;
+
+  // Scripted pilot (see flight/PilotBot.js), for automated flight checks: it
+  // replaces the player's inputs while it flies; the simulation may run
+  // faster than real time meanwhile
+  let pilot = null;
+  let timeScale = 1;
+  function startCircuit() {
+    if (!lastRunwayStart || flight !== simulation || simulation.holding) return false;
+    guidedRunways.update(runwayCatalog.runways, geoTerrainManager);
+    const placed = guidedRunways.placed.find(({ runway }) => runway.id === lastRunwayStart.runway.id);
+    if (!placed) return false;
+    pilot = new PilotBot(placed, lastRunwayStart.endIndex);
+    return true;
+  }
   let catalogCountdown = 0;
 
   /** Line up this far past the start of the runway (m) */
@@ -498,6 +515,7 @@ async function initApp() {
     const start = offsetPosition(end.lat, end.lon, end.heading, LINE_UP_DISTANCE);
     const label = `${airport.ident} runway ${end.ident}`;
     showNotification(`${label}: loading the airport…`);
+    lastRunwayStart = { runway, endIndex };
     runwayCatalog.add(airport.runways);
     await loadRunways(start.lat, start.lon);
     update('flightMode', 'simulation');
@@ -512,14 +530,14 @@ async function initApp() {
   }
 
   // Approach guidance on the HUD, to the runway end the aircraft heads for,
-  // once the gear is commanded down or below APPROACH_HEIGHT above it
+  // in flight once the gear is commanded down or below APPROACH_HEIGHT above it
   const guidedRunways = new RunwaysInWorld();
   const APPROACH_HEIGHT = 600;
   function approachFor(model) {
     guidedRunways.update(runwayCatalog.runways, geoTerrainManager);
     const { x, z } = model.velocity;
     const speed = Math.hypot(x, z);
-    if (speed < 20) return null;
+    if (speed < 20 || model.onGround) return null;
     const approach = approachGuidance(guidedRunways.placed, model.position, x / speed, z / speed);
     return approach && (model.controls.gear || approach.height < APPROACH_HEIGHT) ? approach : null;
   }
@@ -656,6 +674,17 @@ async function initApp() {
     },
     // Ground as drawn at a world position (null while not loaded)
     groundHeight: (x, z) => geoTerrainManager.groundHeight(x, z),
+    // Scripted pilot: a circuit from the last runway start, and how it went
+    startCircuit: () => startCircuit(),
+    pilot: () => pilot && { phase: pilot.phase, done: pilot.done, time: pilot.time, report: pilot.report },
+    stopPilot: () => {
+      pilot = null;
+    },
+    // Simulated seconds per second of real time
+    setTimeScale: (scale) => {
+      timeScale = Math.max(0.1, Math.min(8, scale));
+      simulationClock.maxSteps = Math.ceil(MAX_DELTA_TIME * SIMULATION_RATE * timeScale);
+    },
     // Runways loaded around the aircraft, and a start lined up on a runway (airport and runway as searched)
     runways: () => runwayCatalog.runways,
     startOnRunway: (airport, runway, end) => startOnRunway(airport, runway, end),
@@ -705,11 +734,13 @@ async function initApp() {
     }
     // Leaving the crash by other means (another flight mode, a reference view, the autopilot) closes its screen
     if (crashScreen.isOpen && (flight !== simulation || !simulation.crash)) crashScreen.hide();
-    flight.applyControls(commands, dt);
+    const piloted = pilot && !pilot.done && flight === simulation;
+    if (!piloted) flight.applyControls(commands, dt);
     benchmarkRunner.tickPath(dt, flight, renderer);
 
     // --- Simulation phase ---
-    simulationClock.advance(dt, (step) => {
+    simulationClock.advance(dt * timeScale, (step) => {
+      if (piloted) pilot.tick(simulation, step);
       flight.step(step);
       entities.fixedUpdate(step);
     });
