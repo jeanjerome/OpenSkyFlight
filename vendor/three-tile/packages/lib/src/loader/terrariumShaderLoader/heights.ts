@@ -11,6 +11,14 @@ export const SOURCE_TILE_SIZE = 256;
 /** Width of the Web Mercator map in metres: the equator's length */
 const MAP_WIDTH = 2 * Math.PI * 6378137;
 
+/**
+ * Least distance (true metres) on either side of a texel that its normal's
+ * differences span: the source's elevations are whole metres, upsampled
+ * beyond the SRTM's 30 m, and differences over closer pixels draw their steps
+ * as stripes on gentle slopes
+ */
+const NORMAL_BASELINE = 25;
+
 /** Decoded Terrarium tile: elevations in metres, row 0 = north edge */
 export interface HeightGrid {
 	size: number;
@@ -111,7 +119,7 @@ function buildHeights(x: number, y: number, z: number, maxSource: number, sample
 /** Ranges of source tiles, one per zoom level, that the tile's elevations read */
 export function sourceRanges(x: number, y: number, z: number, maxSource: number): SourceRange[] {
 	const bounds = new Map<number, number[]>();
-	buildHeights(x, y, z, maxSource, (zs, px, py) => {
+	const collect: Sampler = (zs, px, py) => {
 		const b = bounds.get(zs);
 		if (b) {
 			b[0] = Math.min(b[0], px);
@@ -122,7 +130,9 @@ export function sourceRanges(x: number, y: number, z: number, maxSource: number)
 			bounds.set(zs, [px, py, px, py]);
 		}
 		return 0;
-	});
+	};
+	buildHeights(x, y, z, maxSource, collect);
+	normalHeights(x, y, z, maxSource, collect);
 	const ranges: SourceRange[] = [];
 	for (const [zs, [minX, minY, maxX, maxY]] of bounds) {
 		const last = 2 ** zs - 1;
@@ -202,41 +212,55 @@ function sampler(ranges: SourceRange[], grids: (HeightGrid | null)[][]): Sampler
 }
 
 /**
- * Normals of the tile at the resolution of its source, NORMAL_MAP_SIZE
- * texels across (row 0 along the south edge), and their mipmaps: unit
- * vectors with x eastward, y northward and z up, the horizontal axes in
- * Web Mercator metres as the tile's geometry, x and y stored as signed
- * bytes. Central differences over a grid of elevations one texel larger
- * than the map, read from the one function of the position on the globe:
- * the normals of neighbouring tiles meet without a seam.
+ * Elevations the normals of the tile are drawn from: at the texel centres
+ * and in a ring of k texels around them (row 0 along the north edge, w
+ * across), k texels being at least NORMAL_BASELINE; `scale` turns the
+ * difference across 2k texels into a slope per Mercator metre
  */
-function buildNormals(x: number, y: number, z: number, maxSource: number, sample: Sampler): Int8Array[] {
+function normalHeights(x: number, y: number, z: number, maxSource: number, sample: Sampler) {
 	const n = NORMAL_MAP_SIZE;
 	const zs = Math.min(z, maxSource);
 	// Source pixels across the tile and per texel, and Mercator metres per source pixel
 	const pixels = SOURCE_TILE_SIZE * 2 ** (zs - z);
 	const step = pixels / n;
 	const metres = MAP_WIDTH / (SOURCE_TILE_SIZE * 2 ** zs);
+	// True metres are Mercator metres times the cosine of the latitude
+	const latitude = Math.atan(Math.sinh(Math.PI * (1 - (2 * (y + 0.5)) / 2 ** z)));
+	const k = Math.max(1, Math.round(NORMAL_BASELINE / (step * metres * Math.cos(latitude))));
 
-	// Elevations at the texel centres and a ring of texels around them, row 0 along the north edge
-	const w = n + 2;
+	const w = n + 2 * k;
 	const heights = new Float32Array(w * w);
-	for (let r = -1; r <= n; r++) {
-		for (let c = -1; c <= n; c++) {
-			heights[(r + 1) * w + c + 1] = sample(zs, x * pixels + (c + 0.5) * step - 0.5, y * pixels + (r + 0.5) * step - 0.5);
+	for (let r = -k; r < n + k; r++) {
+		for (let c = -k; c < n + k; c++) {
+			heights[(r + k) * w + c + k] = sample(zs, x * pixels + (c + 0.5) * step - 0.5, y * pixels + (r + 0.5) * step - 0.5);
 		}
 	}
+	return { heights, w, k, scale: 1 / (2 * k * step * metres) };
+}
+
+/**
+ * Normals of the tile at the resolution of its source, NORMAL_MAP_SIZE
+ * texels across (row 0 along the south edge), and their mipmaps: unit
+ * vectors with x eastward, y northward and z up, the horizontal axes in
+ * Web Mercator metres as the tile's geometry, x and y stored as signed
+ * bytes. Central differences over a grid of elevations a few texels larger
+ * than the map (at least NORMAL_BASELINE on either side), read from the one
+ * function of the position on the globe: the normals of neighbouring tiles
+ * meet without a seam.
+ */
+function buildNormals(x: number, y: number, z: number, maxSource: number, sample: Sampler): Int8Array[] {
+	const n = NORMAL_MAP_SIZE;
+	const { heights, w, k, scale } = normalHeights(x, y, z, maxSource, sample);
 
 	// Unit normals, row 0 along the south edge
 	let size = n;
 	let level = new Float32Array(n * n * 3);
-	const scale = 1 / (2 * step * metres);
 	for (let j = 0; j < n; j++) {
 		const r = n - 1 - j;
 		for (let i = 0; i < n; i++) {
-			const k = (r + 1) * w + i + 1;
-			const east = (heights[k + 1] - heights[k - 1]) * scale;
-			const north = (heights[k - w] - heights[k + w]) * scale;
+			const t = (r + k) * w + i + k;
+			const east = (heights[t + k] - heights[t - k]) * scale;
+			const north = (heights[t - k * w] - heights[t + k * w]) * scale;
 			const length = Math.hypot(east, north, 1);
 			const o = (j * n + i) * 3;
 			level[o] = -east / length;
