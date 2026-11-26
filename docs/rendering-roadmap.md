@@ -10,23 +10,27 @@ en fin de session.
 
 - **Lot 4 terminé** le 2026-11-26 (toutes ses tâches faites, bilan dans **Mesures**, lignes
   « Clôture du lot 4 », captures `docs/screenshots/render/lot4/`), fusionné dans `main` le même jour
-  à la demande de l'utilisateur (avance rapide depuis `feat/render-clouds`), non poussé.
-- **Lots terminés** : 0 à 3, fusionnés dans `main` (lots 2 et 3 le 2026-11-24). Lot 3 : bilan dans
+  à la demande de l'utilisateur (avance rapide depuis `feat/render-clouds`) et poussé par lui.
+- **Lots terminés** : 0 à 4, fusionnés dans `main` (lots 2 et 3 le 2026-11-24, lot 4 le
+  2026-11-26). Lot 4 : bilan et constats visuels dans **Mesures** (« Clôture du lot 4 »). Lot 3 : bilan dans
   **Mesures** (lignes « Clôture du lot 3 ») et constats visuels sous les tableaux. Lot 2 : toutes les tâches faites sauf le reste optionnel de
   L2.6 (décodage d'altitude dans un worker, `compileAsync`), reporté : p5 et p1 ne le justifient
   plus. Bilan dans **Mesures** (lignes « Clôture du lot 2 ») et constats visuels sous les tableaux.
 - **three.js** : r187 (import map d'`index.html`), mis à jour depuis r183 pour le TRAA compatible avec
   la profondeur inversée.
-- **Git** : lots 0 à 3 dans `main`, poussée ; `main` est la seule branche, en local comme sur
-  `origin` (branche de lot et branches Dependabot supprimées, leurs PR fermées : `main` contenait déjà
-  ces mises à jour). Le lot 4 commence sur une nouvelle branche `feat/render-clouds` créée depuis `main`.
-  Plus de worktree de comparaison : en recréer un si besoin (voir Outillage).
+- **Git** : lots 0 à 4 et lots de jeu G0 à G2 dans `main`, poussée par l'utilisateur le 2026-11-26
+  (seul le dernier commit de documentation peut rester à pousser : voir `git status -sb`). `main` est la
+  seule branche (`feat/render-clouds` supprimée après la fusion, jamais poussée). Le prochain lot part d'une nouvelle branche depuis `main`. Plus de worktree de comparaison : en
+  recréer un si besoin (voir Outillage).
 - **Environnement local** : bundle three-tile construit, `npm install` fait (racine et
   `vendor/three-tile`), cache `cache/` chaud pour les vues de référence et les deux vols. Lancer
   `npm run dev` en tâche de fond avant toute mesure. Mesurer **sur l'écran intégré 120 Hz** : sur un
   écran 60 Hz, Chrome plafonne à 60 FPS (la résolution dynamique ne se déclenche plus à tort depuis
   L2.4, mais les FPS ne sont pas comparables).
-- **Référence de comparaison** : `benchmarks/render/lot3/` (état de clôture du lot 3 ; coût GPU des
+- **Référence de comparaison** : `benchmarks/render/lot4/` (état de clôture du lot 4, 6 vues ; la vue
+  5 seule a des nuages) et vols `lot4-flight`, `lot4-plan1` (nuages désactivés, le réglage par défaut)
+  et `lot4-flight-clouds`, `lot4-plan1-clouds` (nuages activés) ; captures versionnées dans
+  `docs/screenshots/render/lot4/`. Avant elle : `benchmarks/render/lot3/` (état de clôture du lot 3 ; coût GPU des
   vues : seconde capture `lot3-cap2/`, la première ayant un pic thermique sur la vue 6 ; second vol du
   plan 1 dans `lot3-flight2/`), captures versionnées dans `docs/screenshots/render/lot3/` (6 vues et
   deux vues de nuit). Ancienne référence : `benchmarks/render/lot2/` (état de clôture du lot 2, preset High :
@@ -1065,7 +1069,8 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 - Fait ensuite : L4.8 (couche plane retirée, réglage « Cloud cover »), clôture du lot 4 : vols de
   référence nuages désactivés et activés, capture `lot4`, modes SAR et élévation vérifiés, captures
   versionnées `docs/screenshots/render/lot4/`.
-- Décidé par l'utilisateur : nuages désactivés par défaut. Lot 4 fusionné dans `main` (non poussé).
+- Décidé par l'utilisateur : nuages désactivés par défaut. Lot 4 fusionné dans `main`, poussé par
+  l'utilisateur.
 - Prochaine étape : G3 ou lot 5 (voir État courant).
 
 ### 2026-11-26 (22)

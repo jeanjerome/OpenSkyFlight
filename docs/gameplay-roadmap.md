@@ -8,12 +8,14 @@ drones de combat.
 Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes conventions. Il est la
 **source de vérité de l'avancement** des lots G0 à G6.
 
-## État courant (mis à jour le 2026-11-25)
+## État courant (mis à jour le 2026-11-26)
 
 - **Statut** : plan validé le 2026-11-25 (voir **Décisions**). **G0, G1 et G2 (sauf l'option G2.7)
   faits et commités**, fusionnés dans `main` et poussés le 2026-11-25 (branche `feat/flight-model` supprimée), sauf le préchargement et les requêtes par lot de G0.4 (reportés à
-  G3 et G5) et la récupération automatique de G1.2 (reportée). Prochaine étape : alterner avec les
-  lots de rendu (lot 4, nuages volumétriques), puis G3 (décollage et atterrissage).
+  G3 et G5) et la récupération automatique de G1.2 (reportée). Le lot de rendu 4 (nuages
+  volumétriques) est terminé et fusionné dans `main` le 2026-11-26 (voir `docs/rendering-roadmap.md`).
+  Prochaine étape, au choix de l'utilisateur en début de session : G3 (décollage et atterrissage,
+  train et aéroports) sur une nouvelle branche depuis `main`, ou le lot de rendu 5.
 - **Vue orbite** (demandée par l'utilisateur, hors lots) : `CONFIG.cameraMode = 'orbit'`, entre la
   poursuite et le cockpit (`V`), `js/camera/OrbitCameraController.js`. La caméra tourne autour de
   l'avion dans son repère (roulis compris, rattrapé comme la poursuite liée), vise 3 m derrière son
@@ -118,7 +120,7 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
 ## Comment reprendre le travail (début de session)
 
 1. Lire **État courant**, puis le lot en cours et **Décisions**.
-2. `git status` et `git log --oneline -15` sur `feat/flight-model`.
+2. `git status` et `git log --oneline -15` (le lot en cours a sa branche, créée depuis `main`).
 3. `npm test` doit passer (banc du modèle de vol compris) avant toute modification.
 4. En fin de session : cocher les tâches, consigner mesures et banc, mettre à jour **État courant** et
    ajouter une entrée au **Journal des sessions**.
