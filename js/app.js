@@ -530,11 +530,20 @@ async function initApp() {
           thrust: simulation.model.engines.thrust,
           fuel: simulation.model.fuel,
           gear: simulation.model.gear.position,
+          onGround: simulation.model.onGround,
+          wheels: simulation.model.wheels.legs.map((leg) => leg.compression),
         }),
       };
     },
     // Ground as drawn at a world position (null while not loaded)
     groundHeight: (x, z) => geoTerrainManager.groundHeight(x, z),
+    // Simulation flight standing on the ground at a world position and heading (degrees, clockwise from north)
+    startOnGround: (x = aircraft.position.x, z = aircraft.position.z, heading = 0) => {
+      update('flightMode', 'simulation');
+      const placed = simulation.placeOnGround(x, z, -heading * DEG2RAD);
+      chaseCameraController.reset();
+      return placed;
+    },
     // Displayed terrain tiles in the view, by zoom level
     tileLevels: () => geoTerrainManager.tileLevels(),
     lastGpuTimeMs: () => gpuTimer.getLastGPUTimeMs(),

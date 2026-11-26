@@ -48,6 +48,9 @@ const ROLL_DAMPING = 0.15;
 const PITCH_GAIN = 6;
 const PITCH_DAMPING = 1.6;
 
+/** Heading gap to the aim giving full rudder on the ground (rad) */
+const GROUND_STEER_GAP = (15 * Math.PI) / 180;
+
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 /** Angle brought to [-π, π] */
 const wrap = (a) => a - 2 * Math.PI * Math.round(a / (2 * Math.PI));
@@ -167,6 +170,22 @@ export default class MouseAim {
     const pitchError = Math.atan2(up, Math.max(ahead, 0.05));
     const lowest = this._pushing || this._near ? -1 : 0;
     out.pitch = clamp(PITCH_GAIN * pitchError - PITCH_DAMPING * model.angularVelocity.x, lowest, 1);
+    return out;
+  }
+
+  /**
+   * On the ground: the wings stay level, the rudder (and so the nose wheel)
+   * turns towards the aim's heading, the stick raises the nose towards it
+   * @param {import('./FlightModel.js').default} model
+   * @param {{pitch: number, roll: number, yaw: number}} out
+   */
+  steerOnGround(model, out) {
+    this.steer(model, out);
+    const nose = this._nose.set(0, 0, -1).applyQuaternion(model.quaternion);
+    // Headings are positive to the left, the rudder to the right
+    const gap = wrap(this.yaw - Math.atan2(-nose.x, -nose.z));
+    out.roll = 0;
+    out.yaw = clamp(-gap / GROUND_STEER_GAP, -1, 1);
     return out;
   }
 

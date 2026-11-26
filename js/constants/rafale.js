@@ -125,3 +125,97 @@ export const ROLL_RESPONSE_TIME = 0.12;
 
 /** Largest angular accelerations the control surfaces produce (rad/s²): roll, pitch, yaw */
 export const ANGULAR_ACCELERATION_MAX = [14, 4, 2];
+
+// ── On the ground (estimates unless stated) ──
+
+/**
+ * Moments of inertia about the body axes (kg·m²): pitch (x), yaw (y), roll (z),
+ * scaled from published figures of fighters of similar size and mass
+ */
+export const INERTIA = { pitch: 110000, yaw: 125000, roll: 20000 };
+
+/** Mean aerodynamic chord of the delta wing (m): two thirds of its root chord */
+export const MEAN_CHORD = 5.4;
+
+/**
+ * Aerodynamic moment coefficients used while the wheels carry the aircraft:
+ * largest pitch moment of the elevons and canards (calibrated to lift the
+ * nose wheel from about 120 kt), largest roll moment, yaw moment of the full
+ * rudder, damping by the pitch, roll and yaw rates (per rad of rate × chord or
+ * span / 2V), and weathercock stability (per rad of sideslip)
+ */
+export const GROUND_PITCH_CONTROL = 0.15;
+export const GROUND_ROLL_CONTROL = 0.05;
+export const GROUND_YAW_CONTROL = 0.04;
+export const PITCH_DAMPING = -6;
+export const ROLL_DAMPING = -0.4;
+export const YAW_DAMPING = -0.3;
+export const WEATHERCOCK_STABILITY = 0.1;
+
+/**
+ * On the ground the control system commands pitch and roll rates (rad/s at
+ * full stick), within the moments above: at neutral it holds the attitude,
+ * so the nose comes down gently after touchdown as the speed falls
+ */
+export const GROUND_PITCH_RATE = (5 * Math.PI) / 180;
+export const GROUND_ROLL_RATE = (30 * Math.PI) / 180;
+
+/**
+ * Legs of the landing gear: where the wheel touches with the leg fully
+ * extended, from the centre of gravity (body frame, m: x right, y up, −z
+ * forward, from the 3D model), strut stiffness (N/m) and damping (N·s/m),
+ * travel (m), wheel radius (m), whether it steers or brakes
+ */
+export const GEAR_LEGS = [
+  {
+    name: 'nose',
+    position: [0, -1.92, -4.11],
+    stiffness: 220000,
+    damping: 20000,
+    travel: 0.3,
+    radius: 0.19,
+    steers: true,
+    brakes: false,
+  },
+  {
+    name: 'left',
+    position: [-1.45, -1.9, 0.56],
+    stiffness: 430000,
+    damping: 50000,
+    travel: 0.3,
+    radius: 0.39,
+    steers: false,
+    brakes: true,
+  },
+  {
+    name: 'right',
+    position: [1.45, -1.9, 0.56],
+    stiffness: 430000,
+    damping: 50000,
+    travel: 0.3,
+    radius: 0.39,
+    steers: false,
+    brakes: true,
+  },
+];
+
+/** Tyre friction on a dry runway, the limit of braking and cornering together */
+export const TYRE_FRICTION = 0.8;
+
+/**
+ * Braking friction of the carbon brakes on the main wheels, with anti-skid:
+ * calibrated on the 450 m landing roll without drag chute
+ */
+export const BRAKE_FRICTION = 0.7;
+
+/** Rolling resistance of the tyres */
+export const ROLLING_RESISTANCE = 0.02;
+
+/** Largest nose-wheel steering angle, while taxiing slowly (rad) */
+export const STEERING_MAX = (75 * Math.PI) / 180;
+
+/**
+ * Sideways acceleration the nose-wheel steering is limited to (m/s²): the
+ * angle narrows with speed, a few degrees at 30 kt, under one beyond 60 kt
+ */
+export const STEERING_SIDE_ACCELERATION = 3.5;

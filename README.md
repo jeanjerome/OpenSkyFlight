@@ -97,7 +97,7 @@ Available scripts:
 | `A` / `D` or `←` / `→` | Roll left / right (`Q` / `D` on AZERTY; Exploration: strafe) |
 | `Q` / `E` | Rudder left / right (`A` / `E` on AZERTY) |
 | `W` / `S` | Throttle up / down; release and press `W` again at full power for the afterburner (`Z` / `S` on AZERTY; Exploration: move forward / backward) |
-| `Space` | Airbrake (hold) |
+| `Space` | Airbrake (hold); on the ground, also the wheel brakes |
 | `G` | Landing gear down / up (Simulation flight) |
 | `F` | Simulation or Exploration (free flight) mode |
 | `T` | Cycle texture mode (Satellite / Road map / SAR / Elevation) |

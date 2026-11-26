@@ -1,6 +1,16 @@
 /** Target length (meters) for the loaded aircraft model */
 export const AIRCRAFT_TARGET_LENGTH = 15;
 
+/**
+ * Centre of gravity in the model's frame (model units: x left, y up, z
+ * forward), an estimate: on the fuselage's axis, ahead of the main wheels so
+ * that the nose wheel carries about 12 % of the weight. The model is drawn
+ * with this point on the aircraft's position, the point the flight model
+ * moves; the wheels' positions in GEAR_LEGS (constants/rafale.js) are measured
+ * from it.
+ */
+export const AIRCRAFT_CG = [0, 1.95, -1.5];
+
 /** Yaw-rate to visual roll multiplier */
 export const VISUAL_ROLL_FACTOR = 120;
 

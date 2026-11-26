@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import FlightModel from './FlightModel.js';
 import MouseAim from './MouseAim.js';
 import { DRY_DETENT } from './Engines.js';
-import { INTERNAL_FUEL } from '../constants/rafale.js';
+import { GEAR_LEGS, INTERNAL_FUEL } from '../constants/rafale.js';
 
 /** Speed given to the aircraft when the Simulation mode starts or restarts (m/s, ≈ 430 kt) */
 export const ENTRY_SPEED = 220;
@@ -19,8 +19,14 @@ const KEY_STICK_TIME = 0.3;
 /** Time for it to come back to neutral when the key is released (s) */
 const KEY_RELEASE_TIME = 0.08;
 
-/** Height above the ground below which the aircraft has crashed (m), until the landing gear exists */
+/**
+ * Height of the centre of gravity above the ground below which the aircraft
+ * has crashed (m): only reachable with the gear up or collapsed
+ */
 const CRASH_HEIGHT = 1;
+
+/** Height of the centre of gravity above the ground with the wheels just touching (m) */
+const WHEELS_HEIGHT = -Math.min(...GEAR_LEGS.map((leg) => leg.position[1]));
 
 /**
  * Simulation mode: the aircraft flies by its flight model (FlightModel).
@@ -29,11 +35,14 @@ const CRASH_HEIGHT = 1;
  * (MouseAim); the keys and the gamepad move the stick directly, and while
  * they do the aim follows the nose. The throttle lever moves while W/S or the
  * triggers are held; it stops at full dry power, and a new press goes on
- * into the afterburner. Space or the B button opens the airbrake; G or the
- * X button lowers or raises the landing gear.
+ * into the afterburner. Space or the B button opens the airbrake and, on the
+ * ground, brakes the wheels; G or the X button lowers or raises the landing
+ * gear. On the ground the mouse aim steers the nose wheel towards the aim and
+ * keeps the wings level.
  *
- * Until the landing gear and the ground physics exist, touching the ground is
- * a crash: `onCrash` is called and the flight restarts above that point.
+ * The wheels carry the aircraft (FlightModel, GearContact); touching the
+ * ground otherwise is a crash: `onCrash` is called and the flight restarts
+ * above that point.
  */
 export default class SimulatedFlight {
   /**
@@ -44,6 +53,7 @@ export default class SimulatedFlight {
     this.aircraft = aircraft;
     this.groundHeight = groundHeight;
     this.model = new FlightModel();
+    this.model.groundHeight = groundHeight;
     this.aim = new MouseAim();
     /** Off while the autopilot or the benchmark fly the aircraft */
     this.enabled = true;
@@ -56,6 +66,7 @@ export default class SimulatedFlight {
     this.onCrash = null;
 
     this._stick = { pitch: 0, roll: 0, yaw: 0 };
+    this._rudder = 0;
     this._keyStick = { pitch: 0, roll: 0 };
     this._detentFree = false;
     this._throttleHeld = false;
@@ -115,7 +126,7 @@ export default class SimulatedFlight {
       (target - current) * Math.min(1, dt / (Math.abs(target) < Math.abs(current) ? KEY_RELEASE_TIME : KEY_STICK_TIME));
     this._keyStick.pitch = ease(f.pitch, this._keyStick.pitch);
     this._keyStick.roll = ease(f.roll, this._keyStick.roll);
-    this._stick.yaw = f.yaw;
+    this._rudder = f.yaw;
 
     if (f.aimYaw || f.aimPitch) {
       this.aiming = true;
@@ -131,6 +142,28 @@ export default class SimulatedFlight {
     if (next < DRY_DETENT) this._detentFree = false;
     model.controls.lever = next;
     model.controls.airbrake = f.airbrake ? 1 : 0;
+    model.controls.brake = f.airbrake ? 1 : 0;
+  }
+
+  /**
+   * Stand still on the ground, gear down, engines at idle, wings level
+   * @param {number} x - world position (m)
+   * @param {number} z
+   * @param {number} yaw - heading (rad, 0 = north, positive to the west)
+   * @returns {boolean} false where the ground is not loaded yet
+   */
+  placeOnGround(x, z, yaw = this.aircraft.yaw) {
+    const ground = this.groundHeight(x, z);
+    if (ground === null) return false;
+    this._euler.set(0, yaw, 0, 'YXZ');
+    this._quaternion.setFromEuler(this._euler);
+    const model = this.model;
+    model.fuel = INTERNAL_FUEL;
+    model.reset(new THREE.Vector3(x, ground + WHEELS_HEIGHT, z), this._quaternion, 0, 0, true);
+    this._detentFree = false;
+    this.aim.syncTo(model.quaternion);
+    this._publish(true);
+    return true;
   }
 
   /**
@@ -152,8 +185,14 @@ export default class SimulatedFlight {
     // Direct stick where a key or the gamepad moves it, the instructor elsewhere
     const stick = this._stick;
     const keys = this._keyStick;
+    stick.yaw = this._rudder;
     if (this.aiming) {
-      this.aim.steer(model, stick);
+      if (model.onGround) {
+        this.aim.steerOnGround(model, stick);
+        if (Math.abs(this._rudder) > 0.02) stick.yaw = this._rudder;
+      } else {
+        this.aim.steer(model, stick);
+      }
       if (Math.abs(keys.pitch) > 0.02) stick.pitch = keys.pitch;
       if (Math.abs(keys.roll) > 0.02) stick.roll = keys.roll;
     } else {
@@ -168,10 +207,10 @@ export default class SimulatedFlight {
     model.step(dt);
     this._publish(false);
 
-    const ground = this.groundHeight(model.position.x, model.position.z);
-    if (ground !== null && model.position.y < ground + CRASH_HEIGHT) {
+    const height = model.wheels.height;
+    if (height < CRASH_HEIGHT) {
       const at = model.position.clone();
-      this.onCrash?.(at, ground);
+      this.onCrash?.(at, at.y - height);
     }
   }
 

@@ -78,3 +78,25 @@ test('the mouse aim does not rock the wings near a steep climbing aim', () => {
   assert.ok(r.reversals <= 4, `${r.reversals} roll reversals`);
   assert.ok(r.maxBank < 45, `bank up to ${r.maxBank.toFixed(0)}°`);
 });
+
+test('on the ground the mouse aim steers the nose wheel towards the aim, wings level', () => {
+  const flight = new SimulatedFlight(new AircraftState(), () => 0);
+  assert.ok(flight.placeOnGround(0, 0, 0));
+  const commands = {
+    flight: { pitch: 0, roll: 0, yaw: 0, direct: false, throttle: 0, airbrake: false, aimYaw: 0, aimPitch: 0 },
+  };
+  flight.model.controls.lever = 0.45;
+  let maxBank = 0;
+  for (let i = 0; i < 12 / STEP; i++) {
+    commands.flight.aimYaw = i === 0 ? -60 * DEG : 0;
+    if (i % 2 === 0) flight.applyControls(commands, 2 * STEP);
+    // Keep taxiing slowly whatever the lever does
+    flight.model.controls.lever = flight.model.velocity.length() < 5 ? 0.45 : 0;
+    flight.step(STEP);
+    maxBank = Math.max(maxBank, Math.abs(flight.model.bank));
+  }
+  const heading = flight.aircraft.yaw / DEG;
+  assert.ok(flight.model.onGround);
+  assert.ok(Math.abs(heading + 60) < 5, `heading ${heading}° towards the aim at −60°`);
+  assert.ok(maxBank < 5 * DEG, `bank ${maxBank / DEG}°`);
+});

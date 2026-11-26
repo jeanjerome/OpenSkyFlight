@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { isa, SEA_LEVEL_DENSITY } from '../sim/atmosphere.js';
-import { alphaForLift, dragCoefficient, liftCoefficient } from './aerodynamics.js';
+import { alphaForLift, dragCoefficient, inducedDragFactor, liftCoefficient } from './aerodynamics.js';
 import Engines from './Engines.js';
+import GearContact from './GearContact.js';
 import GearSequence from './GearSequence.js';
 import {
   AIRBRAKE_DRAG,
@@ -10,18 +11,30 @@ import {
   ANGULAR_ACCELERATION_MAX,
   BASIC_MASS,
   GEAR_DRAG,
+  GROUND_PITCH_CONTROL,
+  GROUND_PITCH_RATE,
+  GROUND_ROLL_CONTROL,
+  GROUND_ROLL_RATE,
+  GROUND_YAW_CONTROL,
+  INERTIA,
   INTERNAL_FUEL,
   LOAD_FACTOR_MAX,
   LOAD_FACTOR_MIN,
+  MEAN_CHORD,
+  PITCH_DAMPING,
   PITCH_RESPONSE_DAMPING,
   PITCH_RESPONSE_FREQUENCY,
+  ROLL_DAMPING,
   ROLL_RATE_FULL_PRESSURE,
   ROLL_RATE_MAX,
   ROLL_RESPONSE_TIME,
   SIDE_FORCE_SLOPE,
   SIDESLIP_MAX,
   STORES_MASS,
+  WEATHERCOCK_STABILITY,
   WING_AREA,
+  WING_SPAN,
+  YAW_DAMPING,
 } from '../constants/rafale.js';
 
 /** Standard gravity (m/s²) */
@@ -51,6 +64,12 @@ const PATH_HOLD_MAX = (60 * Math.PI) / 180;
 /** Bank angle up to which neutral stick keeps a level turn (rad) */
 const LEVEL_TURN_BANK = Math.PI / 3;
 
+/** Lowest airspeed in the aerodynamic damping of the rotation on the ground (m/s) */
+const DAMPING_SPEED = 10;
+
+/** Gain of the control system's rate commands on the ground (1/s) */
+const GROUND_RATE_GAIN = 25;
+
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
 /**
@@ -75,6 +94,14 @@ const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
  * angular accelerations the surfaces can produce, and loses authority at low
  * dynamic pressure.
  *
+ * On the ground, the wheels (GearContact) carry the aircraft and the airframe
+ * turns physically, within its moments of inertia, under the forces of the
+ * wheels and the aerodynamic moments: the control system commands pitch and
+ * roll rates with what moment the elevons and canards have at that speed
+ * (holding the attitude at neutral stick), the rudder acts directly, until the
+ * aircraft lifts off. Within about a wingspan of the
+ * ground the induced drag falls (ground effect).
+ *
  * Frames: world metres, y up; body x right, y up, −z forward.
  */
 export default class FlightModel {
@@ -90,9 +117,15 @@ export default class FlightModel {
     this.engines = new Engines();
     this.air = isa(0);
 
-    /** Pilot commands: stick pitch (pull +), roll (right +), yaw (right +), throttle lever, airbrake, gear down */
-    this.controls = { pitch: 0, roll: 0, yaw: 0, lever: 0.6, airbrake: 0, gear: false };
+    /**
+     * Pilot commands: stick pitch (pull +), roll (right +), yaw (right +),
+     * throttle lever, airbrake, wheel brakes, gear down
+     */
+    this.controls = { pitch: 0, roll: 0, yaw: 0, lever: 0.6, airbrake: 0, brake: 0, gear: false };
     this.gear = new GearSequence();
+    this.wheels = new GearContact();
+    /** Height of the ground at a world position (m), null where unknown; none: no ground */
+    this.groundHeight = null;
 
     // Flight data of the last step
     this.alpha = 0;
@@ -134,6 +167,13 @@ export default class FlightModel {
     this._pathRate = new THREE.Vector3();
     this._desired = new THREE.Vector3();
     this._axis = new THREE.Vector3();
+    this._omegaWorld = new THREE.Vector3();
+    this._wasOnGround = false;
+  }
+
+  /** Whether the wheels carry the aircraft (last step) */
+  get onGround() {
+    return this.wheels.onGround;
   }
 
   /** Mass with the fuel left (kg) */
@@ -197,6 +237,8 @@ export default class FlightModel {
     this.gear.command(c.gear);
     this.gear.update(dt);
     const gearDrag = GEAR_DRAG * this.gear.legs;
+    const wheels = this.wheels;
+    wheels.update(this, this.groundHeight, this.gear.downLocked, c, dt);
 
     // ── Forces ──
     const right = this._right.set(1, 0, 0).applyQuaternion(q);
@@ -209,16 +251,110 @@ export default class FlightModel {
       vHat.copy(this.velocity).divideScalar(speed);
       const liftDir = this._liftDir.crossVectors(right, vHat).normalize();
       const sideDir = this._sideDir.crossVectors(vHat, liftDir).normalize();
-      const cd = dragCoefficient(alpha, cl, mach, c.airbrake * AIRBRAKE_DRAG + gearDrag);
+      // Ground effect: the induced drag falls within a wingspan of the ground
+      const h = (16 * Math.max(0.1, wheels.height)) / WING_SPAN;
+      const groundEffect = 1 / (1 + h * h);
+      const cd =
+        dragCoefficient(alpha, cl, mach, c.airbrake * AIRBRAKE_DRAG + gearDrag) -
+        groundEffect * inducedDragFactor(mach) * cl * cl;
       force.addScaledVector(liftDir, qS * cl);
       force.addScaledVector(vHat, -qS * cd);
       force.addScaledVector(sideDir, qS * SIDE_FORCE_SLOPE * beta);
     } else {
       vHat.copy(nose);
     }
+    force.add(wheels.force);
     const loadFactor = force.dot(up) / weight;
     force.y -= weight;
     const accel = this._accel.copy(force).divideScalar(mass);
+
+    if (wheels.onGround) {
+      this._groundRotation(dt, qS, speed, beta);
+      this._wasOnGround = true;
+    } else {
+      if (this._wasOnGround) this._liftOff(alpha, vHat);
+      this._flyByWire(dt, { alpha, beta, mach, speed, qbar, qS, weight, right, up, vHat, accel, loadFactor });
+    }
+
+    // ── Integration (semi-implicit Euler) ──
+    const omega = this.angularVelocity;
+    const angle = omega.length() * dt;
+    if (angle > 1e-12) {
+      this._dq.setFromAxisAngle(this._axis.copy(omega).normalize(), angle);
+      q.multiply(this._dq).normalize();
+    }
+    this.velocity.addScaledVector(accel, dt);
+    this.position.addScaledVector(this.velocity, dt);
+
+    // ── Flight data ──
+    this.alpha = alpha;
+    this.beta = beta;
+    this.mach = mach;
+    this.airspeed = speed;
+    this.indicatedAirspeed = speed * Math.sqrt(air.density / SEA_LEVEL_DENSITY);
+    this.dynamicPressure = qbar;
+    this.loadFactor = loadFactor;
+    this.peakLoadFactor = Math.max(this.peakLoadFactor, loadFactor);
+    this.pathAngle = Math.asin(clamp(vHat.y, -1, 1));
+    this.bank = Math.atan2(-right.y, up.y);
+  }
+
+  /**
+   * Rotation while the wheels carry the aircraft: the moments of the wheels,
+   * of the controls (pitch and roll rate commands within the surfaces'
+   * authority, direct rudder) and the aerodynamic damping of the rates
+   */
+  _groundRotation(dt, qS, speed, beta) {
+    const c = this.controls;
+    const omega = this.angularVelocity;
+    const v = 2 * Math.max(speed, DAMPING_SPEED);
+    const wheels = this.wheels.moment;
+    // Roll rate is about the aft axis (roll left positive): roll right commands a negative rate
+    const pitchAuthority = qS * MEAN_CHORD * GROUND_PITCH_CONTROL;
+    const rollAuthority = qS * WING_SPAN * GROUND_ROLL_CONTROL;
+    const pitchControl = clamp(
+      GROUND_RATE_GAIN * INERTIA.pitch * (c.pitch * GROUND_PITCH_RATE - omega.x),
+      -pitchAuthority,
+      pitchAuthority,
+    );
+    const rollControl = clamp(
+      GROUND_RATE_GAIN * INERTIA.roll * (-c.roll * GROUND_ROLL_RATE - omega.z),
+      -rollAuthority,
+      rollAuthority,
+    );
+    const pitch = wheels.x + pitchControl + (qS * MEAN_CHORD * MEAN_CHORD * PITCH_DAMPING * omega.x) / v;
+    const roll = wheels.z + rollControl + (qS * WING_SPAN * WING_SPAN * ROLL_DAMPING * omega.z) / v;
+    // Rudder right turns the nose right (yaw left positive); the sideslip turns it into the airflow
+    const yaw =
+      wheels.y +
+      qS * WING_SPAN * (-GROUND_YAW_CONTROL * c.yaw - WEATHERCOCK_STABILITY * beta) +
+      (qS * WING_SPAN * WING_SPAN * YAW_DAMPING * omega.y) / v;
+    omega.x += (pitch / INERTIA.pitch) * dt;
+    omega.y += (yaw / INERTIA.yaw) * dt;
+    omega.z += (roll / INERTIA.roll) * dt;
+
+    this.commandedLoadFactor = 1;
+    const s = this.surfaces;
+    s.pitch = pitchAuthority > 0 ? pitchControl / pitchAuthority : 0;
+    s.roll = rollAuthority > 0 ? -rollControl / rollAuthority : 0;
+    s.yaw = c.yaw;
+    s.canard = 0.4 * s.pitch;
+    s.slat = 0;
+    s.airbrake = c.airbrake;
+  }
+
+  /** The control system takes over from where the airframe stands as the wheels leave the ground */
+  _liftOff(alpha, vHat) {
+    this._wasOnGround = false;
+    this._alphaRef = alpha;
+    this._alphaRefRate = 0;
+    this._rollRate = this._omegaWorld.copy(this.angularVelocity).applyQuaternion(this.quaternion).dot(vHat);
+    this._pathHold = null;
+  }
+
+  /** Rotation set by the fly-by-wire control system in flight */
+  _flyByWire(dt, { alpha, beta, mach, speed, qbar, qS, weight, right, up, vHat, accel, loadFactor }) {
+    const c = this.controls;
 
     // ── Flight control system ──
     const pathAngle = Math.asin(clamp(vHat.y, -1, 1));
@@ -276,27 +412,7 @@ export default class FlightModel {
     omega.y += clamp(desired.y - omega.y, -ANGULAR_ACCELERATION_MAX[2] * reach, ANGULAR_ACCELERATION_MAX[2] * reach);
     omega.z += clamp(desired.z - omega.z, -ANGULAR_ACCELERATION_MAX[0] * reach, ANGULAR_ACCELERATION_MAX[0] * reach);
 
-    // ── Integration (semi-implicit Euler) ──
-    const angle = omega.length() * dt;
-    if (angle > 1e-12) {
-      this._dq.setFromAxisAngle(this._axis.copy(omega).normalize(), angle);
-      q.multiply(this._dq).normalize();
-    }
-    this.velocity.addScaledVector(accel, dt);
-    this.position.addScaledVector(this.velocity, dt);
-
-    // ── Flight data ──
-    this.alpha = alpha;
-    this.beta = beta;
-    this.mach = mach;
-    this.airspeed = speed;
-    this.indicatedAirspeed = speed * Math.sqrt(air.density / SEA_LEVEL_DENSITY);
-    this.dynamicPressure = qbar;
-    this.loadFactor = loadFactor;
-    this.peakLoadFactor = Math.max(this.peakLoadFactor, loadFactor);
     this.commandedLoadFactor = commanded;
-    this.pathAngle = pathAngle;
-    this.bank = bank;
 
     const s = this.surfaces;
     s.pitch = clamp(0.6 * ((commanded - 1) / (LOAD_FACTOR_MAX - 1)) + 0.3 * (commanded - loadFactor), -1, 1);

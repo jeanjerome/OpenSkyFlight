@@ -32,6 +32,16 @@ function trimmed(altitude, speed, lever, bank = 0) {
   return model;
 }
 
+/** Flight model standing on flat ground at sea level, gear down, settled on its wheels, brakes on */
+function onRunway(mass) {
+  const model = new FlightModel();
+  model.reset(new THREE.Vector3(0, 1.8, 0), new THREE.Quaternion(), 0, 0, true);
+  model.groundHeight = () => 0;
+  model.fuel = mass - BASIC_MASS - STORES_MASS;
+  model.controls.brake = 1;
+  return fly(model, 2);
+}
+
 /** Run a model for some seconds, calling `each` before every step */
 function fly(model, seconds, each) {
   const steps = Math.round(seconds / STEP);
@@ -128,6 +138,44 @@ export function runFlightBench() {
   add('Neutral stick 30 s: altitude change', level.position.y - 5000, 'm', 0, 30, 'flight path hold');
   const turn = fly(trimmed(3000, 200, 0.75, 45), 20);
   add('Neutral stick, 45° bank 20 s: altitude change', turn.position.y - 3000, 'm', 0, 40, 'level turn hold');
+
+  // On the ground: takeoff at full afterburner, pulled at 125 kt; landing
+  // from a 2.5° approach at 125 kt, then wheel brakes and airbrake
+  const takeoff = onRunway(16100);
+  const start = takeoff.position.z;
+  let rotation = null;
+  let liftOff = null;
+  takeoff.controls.brake = 0;
+  takeoff.controls.lever = 1;
+  fly(takeoff, 30, (m, t) => {
+    if (rotation === null && m.indicatedAirspeed >= 125 * KNOT) rotation = t;
+    m.controls.pitch = rotation === null ? 0 : 1;
+    if (liftOff === null && rotation !== null && !m.onGround) liftOff = start - m.position.z;
+  });
+  add('Brake release to 125 kt, afterburner, 16.1 t', rotation ?? Infinity, 's', 9, 1.5, 'flight test');
+  add('Takeoff run, afterburner, pulled at 125 kt', liftOff ?? Infinity, 'm', 400, 100, 'official');
+
+  const landing = new FlightModel();
+  landing.reset(
+    new THREE.Vector3(0, 40, 0),
+    new THREE.Quaternion().setFromEuler(new THREE.Euler(-2.5 * DEG, 0, 0, 'YXZ')),
+    125 * KNOT,
+    0.2,
+    true,
+  );
+  landing.groundHeight = () => 0;
+  let touchdown = null;
+  let roll = null;
+  fly(landing, 90, (m) => {
+    if (touchdown === null && m.onGround) touchdown = m.position.z;
+    if (touchdown !== null) {
+      m.controls.lever = 0;
+      m.controls.brake = 1;
+      m.controls.airbrake = 1;
+      if (roll === null && m.velocity.length() < 0.5) roll = touchdown - m.position.z;
+    }
+  });
+  add('Landing roll, wheel brakes and airbrake', roll ?? Infinity, 'm', 450, 80, 'official, without drag chute');
 
   return results;
 }

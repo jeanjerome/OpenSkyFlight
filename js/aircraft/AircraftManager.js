@@ -10,6 +10,7 @@ import LandingGear from './LandingGear.js';
 import GearSequence from '../flight/GearSequence.js';
 import { SHADOW_CASTER_LAYER } from '../constants/rendering.js';
 import {
+  AIRCRAFT_CG,
   AIRCRAFT_TARGET_LENGTH,
   VISUAL_ROLL_FACTOR,
   VISUAL_ROLL_MAX,
@@ -66,15 +67,13 @@ export default class AircraftManager {
     const scaleFactor = AIRCRAFT_TARGET_LENGTH / maxDim;
     this.mesh.scale.setScalar(scaleFactor);
 
-    const center = new THREE.Vector3();
-    box.getCenter(center);
-    center.multiplyScalar(scaleFactor);
-    this.mesh.position.sub(center);
+    // Centre of gravity on the group's origin, the model turned to fly along −z
+    this.mesh.rotation.y = Math.PI;
+    const [cx, cy, cz] = AIRCRAFT_CG;
+    this.mesh.position.set(cx, -cy, cz).multiplyScalar(scaleFactor);
 
     this.group = new THREE.Group();
     this.group.add(this.mesh);
-
-    this.mesh.rotation.y = Math.PI;
 
     const texture = await new THREE.TextureLoader().loadAsync('assets/models/rafale/Rafale_texture.png');
     texture.flipY = false;
@@ -96,7 +95,7 @@ export default class AircraftManager {
     this.lights = new AircraftLights(this.mesh, this.rendering);
     this.exhaust = new EngineExhaust(this.mesh, this.rendering);
     this.surfaces = new ControlSurfaces(this.mesh);
-    this.gear = new LandingGear(this.mesh);
+    this.gear = new LandingGear(this.mesh, scaleFactor);
     // Outside the Simulation mode the gear stays up
     this._gearUp = new GearSequence();
 
@@ -138,7 +137,7 @@ export default class AircraftManager {
 
     // Control surfaces as the flight control system moves them, neutral in free flight
     this.surfaces.update(dt, state.model ? state.model.surfaces : null);
-    this.gear.update(state.model ? state.model.gear : this._gearUp);
+    this.gear.update(state.model ? state.model.gear : this._gearUp, state.model ? state.model.wheels : null, dt);
 
     this._updateEngines(state, dt);
     exhaustJet(this.engines.core, this.engines.reheat, this.engines.mach, this.jet);

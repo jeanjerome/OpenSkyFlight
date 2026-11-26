@@ -7,16 +7,18 @@ const DEG = Math.PI / 180;
  * identity transforms, their vertices in the aircraft's frame: x left, y up,
  * z forward; the gear is modelled down, its doors closed).
  */
-const MAIN_LEG = ['UpperStrut', 'MainStrut', 'Strut1', 'Strut2', 'Strut3', 'Wheel'];
-const NOSE_LEG = [
-  'FrontMainStrut',
-  'FrontLowerStrut',
-  'FrontStrut1',
-  'FrontStrut2',
-  'FrontLights',
-  'NoseWheelL',
-  'NoseWheelR',
-];
+const MAIN_LEG = {
+  // Upper strut and actuator, fixed on the leg; the oleo's sliding tube and
+  // the torque links move up as the strut compresses
+  fixed: ['UpperStrut', 'Strut3'],
+  sliding: ['MainStrut', 'Strut1', 'Strut2'],
+  wheels: ['Wheel'],
+};
+const NOSE_LEG = {
+  fixed: ['FrontMainStrut', 'FrontLights'],
+  sliding: ['FrontLowerStrut', 'FrontStrut1', 'FrontStrut2'],
+  wheels: ['NoseWheelL', 'NoseWheelR'],
+};
 const WELLS = ['GearBoxRear', 'GearBoxFront'];
 
 /**
@@ -41,11 +43,17 @@ const END_SHARE = 0.15;
  * retraction sequence (see flight/GearSequence.js): doors on hinges found
  * from their geometry, legs swinging forward into their wells, the main
  * gear's side stays following their legs. The gear and its wells are hidden
- * while the gear is up and its doors closed.
+ * while the gear is up and its doors closed. On the ground the struts
+ * compress, the wheels roll and the nose wheel steers as the wheels' physics
+ * (flight/GearContact.js) have them.
  */
 export default class LandingGear {
-  /** @param {THREE.Object3D} model - the loaded aircraft model */
-  constructor(model) {
+  /**
+   * @param {THREE.Object3D} model - the loaded aircraft model
+   * @param {number} scale - metres per unit of the model
+   */
+  constructor(model, scale) {
+    this.scale = scale;
     this.hidden = [];
     this.legs = [];
     this.braces = [];
@@ -55,26 +63,30 @@ export default class LandingGear {
       ['L', 1],
       ['R', -1],
     ]) {
-      const parts = MAIN_LEG.map((name) => model.getObjectByName(name + suffix)).filter(Boolean);
+      const parts = partsOf(model, MAIN_LEG, suffix);
       const upper = model.getObjectByName('UpperStrut' + suffix);
-      const wheel = model.getObjectByName('Wheel' + suffix);
-      if (!upper || !wheel) continue;
+      if (!upper || !parts.wheels.length) continue;
       const pivot = topOf(upper.geometry);
-      const axle = centreOf(wheel.geometry);
+      const axle = centreOf(parts.wheels);
       const stowed = MAIN_WHEEL_STOWED.clone();
       stowed.x *= side;
-      const leg = this._leg(parts, pivot, mainFold(pivot, axle, stowed));
+      const name = side > 0 ? 'left' : 'right';
+      const leg = this._leg(name, parts, pivot, axle, false, mainFold(pivot, axle, stowed));
       const brace = model.getObjectByName('SideStrut' + suffix);
       if (brace) this._brace(brace, leg);
       this._door(model.getObjectByName('DoorsRear1' + suffix), side, 'inner', 'main');
       this._door(model.getObjectByName('DoorsRear2' + suffix), side, 'inner', 'leg');
     }
 
-    const noseParts = NOSE_LEG.map((name) => model.getObjectByName(name)).filter(Boolean);
+    const noseParts = partsOf(model, NOSE_LEG, '');
     const noseStrut = model.getObjectByName('FrontMainStrut');
-    if (noseStrut) {
+    if (noseStrut && noseParts.wheels.length) {
       const swing = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -NOSE_LEG_SWING);
-      this._leg(noseParts, topOf(noseStrut.geometry), { swing, twist: new THREE.Quaternion() });
+      const pivot = topOf(noseStrut.geometry);
+      this._leg('nose', noseParts, pivot, centreOf(noseParts.wheels), true, {
+        swing,
+        twist: new THREE.Quaternion(),
+      });
     }
     const noseDoor = model.getObjectByName('DoorsFront1');
     if (noseDoor) {
@@ -93,13 +105,23 @@ export default class LandingGear {
     this._v = new THREE.Vector3();
   }
 
-  /** @param {import('../flight/GearSequence.js').default} sequence */
-  update(sequence) {
+  /**
+   * @param {import('../flight/GearSequence.js').default} sequence
+   * @param {import('../flight/GearContact.js').default|null} wheels - none outside the Simulation mode
+   * @param {number} dt - s
+   */
+  update(sequence, wheels, dt) {
     // The model has its gear down: the legs turn from there by their fold
     const fold = 1 - sequence.legs;
     for (const leg of this.legs) {
       leg.group.quaternion.identity().slerp(leg.swing, fold);
       leg.inner.quaternion.identity().slerp(leg.twist, fold);
+      const physics = wheels?.legs.find((l) => l.spec.name === leg.name);
+      const compression = physics ? physics.compression / this.scale : 0;
+      leg.slider.position.copy(leg.axis).multiplyScalar(-compression);
+      if (physics) leg.spin.rotation.x += (physics.wheelSpeed / physics.spec.radius) * dt;
+      // The axis points down the leg: a positive turn about it steers right
+      if (leg.steers) leg.steer.quaternion.setFromAxisAngle(leg.axis, wheels ? wheels.steering : 0);
     }
     for (const brace of this.braces) {
       // The stay keeps its upper end and turns to keep its lower end on the leg
@@ -116,19 +138,34 @@ export default class LandingGear {
     for (const mesh of this.hidden) mesh.visible = visible;
   }
 
-  /** Puts parts in a group turning about a pivot: the swing of the leg, applied after its twist */
-  _leg(parts, pivot, { swing, twist }) {
+  /**
+   * Puts a leg's parts in groups turning about its pivot: the swing of the
+   * leg, applied after its twist; inside, the steering about the leg's axis,
+   * the strut sliding along it and the wheels spinning on their axle
+   */
+  _leg(name, parts, pivot, axle, steers, { swing, twist }) {
     const group = new THREE.Group();
     const inner = new THREE.Group();
+    const steer = new THREE.Group();
+    const slider = new THREE.Group();
+    const spin = new THREE.Group();
     group.position.copy(pivot);
+    spin.position.copy(axle).sub(pivot);
     group.add(inner);
-    parts[0].parent.add(group);
-    for (const part of parts) {
-      part.geometry.translate(-pivot.x, -pivot.y, -pivot.z);
-      inner.add(part);
+    inner.add(steer);
+    steer.add(slider);
+    slider.add(spin);
+    parts.wheels[0].parent.add(group);
+    const place = (part, parent, origin) => {
+      part.geometry.translate(-origin.x, -origin.y, -origin.z);
+      parent.add(part);
       this.hidden.push(part);
-    }
-    const leg = { group, inner, swing, twist };
+    };
+    for (const part of parts.fixed) place(part, inner, pivot);
+    for (const part of parts.sliding) place(part, slider, pivot);
+    for (const part of parts.wheels) place(part, spin, axle);
+    const axis = axle.clone().sub(pivot).normalize();
+    const leg = { name, group, inner, steer, slider, spin, axis, steers, swing, twist };
     this.legs.push(leg);
     return leg;
   }
@@ -183,9 +220,20 @@ function mainFold(pivot, axle, stowed) {
   return { swing, twist };
 }
 
-function centreOf(geometry) {
-  geometry.computeBoundingBox();
-  return geometry.boundingBox.getCenter(new THREE.Vector3());
+/** Centre of the bounding box of meshes */
+function centreOf(meshes) {
+  const box = new THREE.Box3();
+  for (const mesh of meshes) {
+    mesh.geometry.computeBoundingBox();
+    box.union(mesh.geometry.boundingBox);
+  }
+  return box.getCenter(new THREE.Vector3());
+}
+
+/** Meshes of a leg's groups of parts, by name with a side suffix */
+function partsOf(model, groups, suffix) {
+  const find = (names) => names.map((name) => model.getObjectByName(name + suffix)).filter((part) => part?.geometry);
+  return { fixed: find(groups.fixed), sliding: find(groups.sliding), wheels: find(groups.wheels) };
 }
 
 /** Centre of the vertices within 5 cm of the top of a part */

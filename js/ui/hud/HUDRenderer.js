@@ -92,7 +92,7 @@ export default class HUDRenderer {
     ctx.fillStyle = m.fuel < 600 ? WARN_COLOR : HUD_COLOR;
     ctx.fillText(`FUEL ${Math.round(m.fuel)} kg`, right, below + 56);
     ctx.fillStyle = HUD_COLOR;
-    if (m.controls.airbrake) ctx.fillText('AIRBRAKE', right, below + 74);
+    if (m.controls.airbrake) ctx.fillText(m.onGround ? 'AIRBRAKE  BRAKES' : 'AIRBRAKE', right, below + 74);
 
     ctx.lineWidth = 1.5;
     // Flight path marker: circle with wings and fin
