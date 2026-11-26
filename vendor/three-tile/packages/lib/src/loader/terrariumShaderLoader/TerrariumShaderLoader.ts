@@ -5,11 +5,24 @@
  * that texture in userData. The displacement happens on the GPU (TerrariumTSL).
  */
 
-import { Box3, DataTexture, FloatType, NearestFilter, RedFormat, Sphere } from "three";
-import { TileGeometryLoader, TileLoadClipParamsType } from "..";
+import {
+	Box3,
+	BufferGeometry,
+	ByteType,
+	DataTexture,
+	FloatType,
+	LinearFilter,
+	LinearMipmapLinearFilter,
+	NearestFilter,
+	RedFormat,
+	RGFormat,
+	Sphere,
+	Texture,
+} from "three";
+import { LoaderFactory, TileGeometryLoader, TileLoadClipParamsType } from "..";
 import { version } from "../..";
 import { TileGeometry } from "../../geometry/TileGeometry";
-import { gridCells } from "./grid";
+import { gridCells, NORMAL_MAP_SIZE } from "./grid";
 import HeightsWorker from "./heights.worker?worker&inline";
 
 /**
@@ -34,8 +47,12 @@ import HeightsWorker from "./heights.worker?worker&inline";
  *   draws it on its triangles, which the tile morphs from as it replaces its
  *   parent and back to before it gives way to it (see Tile.morph).
  *
+ * The normals come from the source itself, NORMAL_MAP_SIZE texels across
+ * with their mipmaps (`userData.normalTexture`, see heights.buildNormals):
+ * the grid of vertices is several times coarser.
+ *
  * The source tiles are downloaded, decoded and kept by a worker, which
- * computes the elevations off the main thread (see heights.worker).
+ * computes the elevations and normals off the main thread (see heights.worker).
  */
 export class TerrariumShaderLoader extends TileGeometryLoader {
 	public readonly info = {
@@ -51,7 +68,7 @@ export class TerrariumShaderLoader extends TileGeometryLoader {
 
 	protected async doLoad(_url: string, params: TileLoadClipParamsType): Promise<TileGeometry> {
 		const { source, x, y, z } = params;
-		const { heights, width, rows } = await this.computeHeights({
+		const { heights, width, rows, normals } = await this.computeHeights({
 			x,
 			y,
 			z,
@@ -68,7 +85,14 @@ export class TerrariumShaderLoader extends TileGeometryLoader {
 		// Flat grid displaced on the GPU, with bounds that enclose the elevations
 		const geometry = createFlatGrid(gridCells(z) + 1, elevationRange(heights));
 		geometry.userData.heightTexture = texture;
+		geometry.userData.normalTexture = normalTexture(normals);
 		return geometry;
+	}
+
+	/** Free the textures of a tile geometry as it is disposed */
+	public unload(geometry: BufferGeometry): void {
+		(geometry.userData.heightTexture as Texture | undefined)?.dispose();
+		(geometry.userData.normalTexture as Texture | undefined)?.dispose();
 	}
 
 	private computeHeights(request: Omit<HeightsRequest, "id">): Promise<HeightsResult> {
@@ -101,6 +125,25 @@ interface HeightsResult {
 	heights: Float32Array;
 	width: number;
 	rows: number;
+	/** Normal map and its mipmaps, finest first */
+	normals: Int8Array[];
+}
+
+/** Normal map of a tile: x and y of unit normals as signed bytes, with the mipmaps computed by the worker */
+function normalTexture(levels: Int8Array[]): DataTexture {
+	const texture = new DataTexture(levels[0], NORMAL_MAP_SIZE, NORMAL_MAP_SIZE, RGFormat, ByteType);
+	texture.mipmaps = levels.map((data, i) => ({
+		data,
+		width: NORMAL_MAP_SIZE >> i,
+		height: NORMAL_MAP_SIZE >> i,
+	})) as unknown as typeof texture.mipmaps;
+	texture.generateMipmaps = false;
+	texture.magFilter = LinearFilter;
+	texture.minFilter = LinearMipmapLinearFilter;
+	// Seen at grazing angles, like the imagery
+	texture.anisotropy = LoaderFactory.textureAnisotropy;
+	texture.needsUpdate = true;
+	return texture;
 }
 
 /** The source URL template made absolute: the worker has no base URL of its own */

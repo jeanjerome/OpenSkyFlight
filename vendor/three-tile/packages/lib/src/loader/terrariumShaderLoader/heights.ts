@@ -3,10 +3,13 @@
  * position on the globe (see TerrariumShaderLoader). Runs in the elevation worker.
  */
 
-import { gridCells, MAX_STITCH_LEVELS, parentRow } from "./grid";
+import { gridCells, MAX_STITCH_LEVELS, NORMAL_MAP_SIZE, parentRow } from "./grid";
 
 /** Pixels across a Terrarium tile */
 export const SOURCE_TILE_SIZE = 256;
+
+/** Width of the Web Mercator map in metres: the equator's length */
+const MAP_WIDTH = 2 * Math.PI * 6378137;
 
 /** Decoded Terrarium tile: elevations in metres, row 0 = north edge */
 export interface HeightGrid {
@@ -130,11 +133,11 @@ export function sourceRanges(x: number, y: number, z: number, maxSource: number)
 }
 
 /**
- * Elevations of the tile from the decoded source tiles of its ranges
- * (`grids[k]` holds range k, row by row; null where a tile failed to load:
- * its pixels take the mean of the available corners of a sample).
+ * Elevations and normals of the tile from the decoded source tiles of its
+ * ranges (`grids[k]` holds range k, row by row; null where a tile failed to
+ * load: its pixels take the mean of the available corners of a sample).
  */
-export function tileHeights(
+export function tileData(
 	x: number,
 	y: number,
 	z: number,
@@ -142,6 +145,12 @@ export function tileHeights(
 	ranges: SourceRange[],
 	grids: (HeightGrid | null)[][],
 ) {
+	const sample = sampler(ranges, grids);
+	return { ...buildHeights(x, y, z, maxSource, sample), normals: buildNormals(x, y, z, maxSource, sample) };
+}
+
+/** Bilinear sampler of the source tiles of the ranges, at pixel positions of their zoom levels */
+function sampler(ranges: SourceRange[], grids: (HeightGrid | null)[][]): Sampler {
 	const byLevel = new Map<number, { range: SourceRange; grids: (HeightGrid | null)[] }>();
 	ranges.forEach((range, k) => byLevel.set(range.zs, { range, grids: grids[k] }));
 	const size = SOURCE_TILE_SIZE;
@@ -161,7 +170,7 @@ export function tileHeights(
 		return grid.data[iy * grid.size + ix];
 	};
 
-	return buildHeights(x, y, z, maxSource, (zs, px, py) => {
+	return (zs, px, py) => {
 		const level = byLevel.get(zs)!;
 		const x0 = Math.floor(px);
 		const y0 = Math.floor(py);
@@ -189,7 +198,91 @@ export function tileHeights(
 		const top = a + fx * (b - a);
 		const bottom = c + fx * (d - c);
 		return top + fy * (bottom - top);
-	});
+	};
+}
+
+/**
+ * Normals of the tile at the resolution of its source, NORMAL_MAP_SIZE
+ * texels across (row 0 along the south edge), and their mipmaps: unit
+ * vectors with x eastward, y northward and z up, the horizontal axes in
+ * Web Mercator metres as the tile's geometry, x and y stored as signed
+ * bytes. Central differences over a grid of elevations one texel larger
+ * than the map, read from the one function of the position on the globe:
+ * the normals of neighbouring tiles meet without a seam.
+ */
+function buildNormals(x: number, y: number, z: number, maxSource: number, sample: Sampler): Int8Array[] {
+	const n = NORMAL_MAP_SIZE;
+	const zs = Math.min(z, maxSource);
+	// Source pixels across the tile and per texel, and Mercator metres per source pixel
+	const pixels = SOURCE_TILE_SIZE * 2 ** (zs - z);
+	const step = pixels / n;
+	const metres = MAP_WIDTH / (SOURCE_TILE_SIZE * 2 ** zs);
+
+	// Elevations at the texel centres and a ring of texels around them, row 0 along the north edge
+	const w = n + 2;
+	const heights = new Float32Array(w * w);
+	for (let r = -1; r <= n; r++) {
+		for (let c = -1; c <= n; c++) {
+			heights[(r + 1) * w + c + 1] = sample(zs, x * pixels + (c + 0.5) * step - 0.5, y * pixels + (r + 0.5) * step - 0.5);
+		}
+	}
+
+	// Unit normals, row 0 along the south edge
+	let size = n;
+	let level = new Float32Array(n * n * 3);
+	const scale = 1 / (2 * step * metres);
+	for (let j = 0; j < n; j++) {
+		const r = n - 1 - j;
+		for (let i = 0; i < n; i++) {
+			const k = (r + 1) * w + i + 1;
+			const east = (heights[k + 1] - heights[k - 1]) * scale;
+			const north = (heights[k - w] - heights[k + w]) * scale;
+			const length = Math.hypot(east, north, 1);
+			const o = (j * n + i) * 3;
+			level[o] = -east / length;
+			level[o + 1] = -north / length;
+			level[o + 2] = 1 / length;
+		}
+	}
+
+	// Mipmaps: the mean of each 2 x 2 normals, made unit again
+	const levels = [encodeNormals(level, size)];
+	while (size > 1) {
+		const half = size >> 1;
+		const next = new Float32Array(half * half * 3);
+		for (let j = 0; j < half; j++) {
+			for (let i = 0; i < half; i++) {
+				let nx = 0;
+				let ny = 0;
+				let nz = 0;
+				for (const [di, dj] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+					const o = ((2 * j + dj) * size + 2 * i + di) * 3;
+					nx += level[o];
+					ny += level[o + 1];
+					nz += level[o + 2];
+				}
+				const length = Math.hypot(nx, ny, nz) || 1;
+				const o = (j * half + i) * 3;
+				next[o] = nx / length;
+				next[o + 1] = ny / length;
+				next[o + 2] = nz / length;
+			}
+		}
+		level = next;
+		size = half;
+		levels.push(encodeNormals(level, size));
+	}
+	return levels;
+}
+
+/** x and y of unit normals as signed bytes */
+function encodeNormals(normals: Float32Array, size: number): Int8Array {
+	const bytes = new Int8Array(size * size * 2);
+	for (let k = 0; k < size * size; k++) {
+		bytes[2 * k] = Math.round(normals[3 * k] * 127);
+		bytes[2 * k + 1] = Math.round(normals[3 * k + 1] * 127);
+	}
+	return bytes;
 }
 
 /** Decode a Terrarium image (h = R*256 + G + B/256 - 32768) into metres */

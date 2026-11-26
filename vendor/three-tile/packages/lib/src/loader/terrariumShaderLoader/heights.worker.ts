@@ -4,7 +4,7 @@
  * the tiles asked for, off the main thread.
  */
 
-import { decodeTerrarium, HeightGrid, sourceRanges, tileHeights } from "./heights";
+import { decodeTerrarium, HeightGrid, sourceRanges, tileData } from "./heights";
 
 /** Decoded source tiles kept for the edges of the tiles loaded next */
 const CACHE_SIZE = 400;
@@ -54,6 +54,9 @@ self.onmessage = async (message: MessageEvent<Request>) => {
 			return Promise.all(tiles);
 		}),
 	);
-	const { heights, width, rows } = tileHeights(x, y, z, maxSource, ranges, grids);
-	self.postMessage({ id, heights, width, rows }, { transfer: [heights.buffer] });
+	const { heights, width, rows, normals } = tileData(x, y, z, maxSource, ranges, grids);
+	self.postMessage(
+		{ id, heights, width, rows, normals },
+		{ transfer: [heights.buffer, ...normals.map(level => level.buffer)] },
+	);
 };

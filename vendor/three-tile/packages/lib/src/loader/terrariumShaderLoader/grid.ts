@@ -2,6 +2,9 @@
  * @description: Layout of the elevation grids, shared by the loader and the shader.
  */
 
+/** Texels across the normal map of a tile: a Terrarium tile's pixels */
+export const NORMAL_MAP_SIZE = 256;
+
 /**
  * Levels coarser than a tile whose edges it can be stitched to: each tile
  * carries, for each of its edges, the profile a neighbour 1 to

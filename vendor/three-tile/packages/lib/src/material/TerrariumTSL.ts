@@ -15,10 +15,11 @@ import {
 	vec3,
 	int,
 	ivec2,
-	cross,
-	transformNormalToView,
-	varying,
 	positionLocal,
+	sqrt,
+	max,
+	cameraViewMatrix,
+	renderGroup,
 	uv,
 	texture,
 	mix,
@@ -36,12 +37,14 @@ import {
 import { EARTH_RADIUS } from "../tile/curvature";
 import { MAX_STITCH_LEVELS, parentRow } from "../loader/terrariumShaderLoader/grid";
 import {
+	ByteType,
 	DataTexture,
 	FloatType,
 	LinearFilter,
 	LinearMipmapLinearFilter,
 	RedFormat,
 	RGBAFormat,
+	RGFormat,
 	SRGBColorSpace,
 	Vector2,
 	Vector4,
@@ -56,6 +59,8 @@ interface ElevationNodes {
 	normal: any;
 	/** How far the tile's surface is blended towards its parent's */
 	coarseness: any;
+	/** Quarter of the parent the tile covers, in the parent's UVs */
+	parentOffset: any;
 }
 
 let sharedNodes: ElevationNodes | null = null;
@@ -95,7 +100,6 @@ function getElevationNodes(): ElevationNodes {
 		({ object }: { object: Mesh }) => (object.userData.edgeLevels as Vector4) ?? noStitch,
 	);
 
-	const vNormal = varying(vec3(0.0, 0.0, 1.0)); // Z-up in tile local space
 
 	const position = Fn(() => {
 		const pos = positionLocal.toVar();
@@ -111,8 +115,6 @@ function getElevationNodes(): ElevationNodes {
 		// The parent's surface under the vertex, from row parentRow(W) + j + 1
 		const parentStart = width.add(int(parentRow(0) + 1));
 		const parentAt = (i: any, j: any) => heightMap.load(ivec2(i.add(int(1)), j.add(parentStart))).r;
-		// The surface drawn at the vertex, the tile's own blended towards its parent's
-		const surfaceAt = (i: any, j: any) => mix(heightAt(i, j), parentAt(i, j), coarseness);
 
 		// Grid indices of this vertex (skirt vertices share the UVs of the edge)
 		const cell = round(uv().mul(lastF)).toVar();
@@ -146,13 +148,6 @@ function getElevationNodes(): ElevationNodes {
 		stitch(j.equal(int(0)), edgeLevels.z, 2, i);
 		stitch(j.equal(last), edgeLevels.w, 3, i);
 
-		// Normal from central differences over the neighbouring vertices, the
-		// ring included, in tile local space (X=east, Y=north, Z=up)
-		const step = float(2).div(lastF);
-		const tangent = vec3(step, float(0.0), surfaceAt(i.add(int(1)), j).sub(surfaceAt(i.sub(int(1)), j)));
-		const bitangent = vec3(float(0.0), step, surfaceAt(i, j.add(int(1))).sub(surfaceAt(i, j.sub(int(1)))));
-		vNormal.assign(cross(tangent, bitangent).normalize());
-
 		// Displace along Z (tile local elevation axis), less the curvature of
 		// the Earth around the camera (see tile/curvature.ts). Local Z is world
 		// Y in metres: the map is rotated and scaled horizontally only.
@@ -162,8 +157,55 @@ function getElevationNodes(): ElevationNodes {
 		return pos;
 	})();
 
-	sharedNodes = { position, normal: transformNormalToView(vNormal), coarseness };
+	// Quarter of the parent the tile covers, in the parent's UVs
+	const noOffset = new Vector2();
+	const parentOffset: any = (uniform(new Vector2()) as any).onObjectUpdate(
+		({ object }: { object: Mesh }) => (object.userData.parentOffset as Vector2) ?? noOffset,
+	);
+
+	sharedNodes = { position, normal: normalNode(coarseness, parentOffset), coarseness, parentOffset };
 	return sharedNodes;
+}
+
+/** Web Mercator metres to world metres horizontally (see setTerrainHorizontalScale) */
+const horizontalScale: any = (uniform(1) as any).setGroup(renderGroup);
+
+/**
+ * Scale of the map horizontally, from Web Mercator metres to world metres,
+ * which the normals of the terrain follow
+ */
+export function setTerrainHorizontalScale(scale: number): void {
+	horizontalScale.value = scale;
+}
+
+/**
+ * Normal of the terrain per pixel, in view space, from the normal map of the
+ * tile (and of its parent as it morphs, sampled on the quarter the tile covers):
+ * the source's resolution, several times finer than the grid of vertices.
+ * The maps hold unit normals with the horizontal axes in Web Mercator metres:
+ * they blend across tiles and levels, then go to world space, where the
+ * map is scaled horizontally (and rotated: north is -Z, up is Y).
+ */
+function normalNode(coarseness: any, parentOffset: any): any {
+	const placeholder = new DataTexture(new Int8Array([0, 0]), 1, 1, RGFormat, ByteType);
+	placeholder.magFilter = LinearFilter;
+	placeholder.minFilter = LinearFilter;
+	placeholder.needsUpdate = true;
+	const own: any = (texture(placeholder, uv()) as any).onObjectUpdate(
+		({ object }: { object: Mesh }) => (object.geometry.userData.normalTexture as Texture) ?? placeholder,
+	);
+	const parent: any = (texture(placeholder, uv().mul(0.5).add(parentOffset)) as any).onObjectUpdate(
+		({ object }: { object: Mesh }) =>
+			(object.userData.parentNormalMap as Texture) ??
+			(object.geometry.userData.normalTexture as Texture) ??
+			placeholder,
+	);
+	return Fn(() => {
+		const unit = (xy: any) => vec3(xy, sqrt(max(float(0), float(1).sub(xy.dot(xy)))));
+		const n = (mix(unit(own.xy), unit(parent.xy), coarseness) as any).toConst();
+		const world = vec3(n.x.div(horizontalScale), n.z, n.y.div(horizontalScale).negate()).normalize();
+		return cameraViewMatrix.mul(vec4(world, 0)).xyz.normalize();
+	})();
 }
 
 let sharedImagery: any = null;
@@ -176,7 +218,7 @@ let sharedImagery: any = null;
  */
 function getImageryNode(): any {
 	if (sharedImagery) return sharedImagery;
-	const { coarseness } = getElevationNodes();
+	const { coarseness, parentOffset } = getElevationNodes();
 
 	// Shaped like the imagery: the colour space conversion and the sampler are built from it
 	const placeholder = new DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, RGBAFormat);
@@ -186,12 +228,7 @@ function getImageryNode(): any {
 	placeholder.generateMipmaps = true;
 	placeholder.needsUpdate = true;
 
-	// Quarter of the parent the tile covers, in the parent's UVs
-	const noOffset = new Vector2();
-	const offset: any = (uniform(new Vector2()) as any).onObjectUpdate(
-		({ object }: { object: Mesh }) => (object.userData.parentOffset as Vector2) ?? noOffset,
-	);
-	const parentImagery: any = (texture(placeholder, uv().mul(0.5).add(offset)) as any).onObjectUpdate(
+	const parentImagery: any = (texture(placeholder, uv().mul(0.5).add(parentOffset)) as any).onObjectUpdate(
 		({ object, material }: { object: Mesh; material: { map?: Texture | null } }) =>
 			(object.userData.parentMap as Texture) ?? material.map ?? placeholder,
 	);

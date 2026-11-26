@@ -8,6 +8,7 @@ import {
   applyTerrariumImagery,
   gridCells,
   parentRow,
+  setTerrainHorizontalScale,
   MAX_STITCH_LEVELS,
 } from 'three-tile';
 import { CONFIG, onChange, update } from '../utils/config.js';
@@ -154,6 +155,7 @@ export default class GeoTerrainManager {
     // their true steepness.
     this.horizontalScale = Math.cos((lat * Math.PI) / 180);
     this.tileMap.scale.set(this.horizontalScale, this.horizontalScale, 1);
+    setTerrainHorizontalScale(this.horizontalScale);
 
     // Higher keeps finer tiles further away
     this.tileMap.LODThreshold = CONFIG.terrainLodThreshold;
@@ -298,8 +300,10 @@ export default class GeoTerrainManager {
       const step = 0.25 / n / gridCells(tile.z);
       const { userData } = tile.model;
       userData.coarseness = 1 - tile.morph;
-      // The parent's imagery fades out as the tile morphs (its own once done)
-      userData.parentMap = tile.morph < 1 && tile.parent?.isTile ? imageryOf(tile.parent.model) : null;
+      // The parent's imagery and normals fade out as the tile morphs (its own once done)
+      const parentModel = tile.morph < 1 && tile.parent?.isTile ? tile.parent.model : null;
+      userData.parentMap = imageryOf(parentModel);
+      userData.parentNormalMap = parentModel?.geometry.userData.normalTexture ?? null;
       (userData.parentOffset ??= new THREE.Vector2()).set((tile.x & 1) * 0.5, (1 - (tile.y & 1)) * 0.5);
       const levels = (userData.edgeLevels ??= new THREE.Vector4());
       levels.set(
