@@ -11,10 +11,10 @@ en fin de session.
 - **Lot 5 en cours** sur `feat/render-terrain` (depuis `main`, non poussée). Faits : L5.1 (raccord exact
   des bords entre tuiles, altitudes dans un worker), L5.2 (geomorphing du relief et fondu de
   l'imagerie), L5.3 (ombres du relief et de l'avion), L5.8 (mode courbes de niveau tactique
-  phosphore) ; L5.5 abandonnée. Suite : L5.9, puis L5.4 (l'utilisateur a demandé d'enchaîner
-  seul). Référence des vues : `benchmarks/render/terrain-shadow-2` ; vols : `shadows-flight-2`,
-  `shadows-plan1-2` (p1 80,0 et 79,4 ; la colonne GPU des vols est faussée par la passe d'ombre de
-  l'avion, voir Mesures). L'arbre des tuiles est mis à jour par `GeoTerrainManager.update`, plus par
+  phosphore), L5.9 (normales par pixel) ; L5.5 abandonnée. Suite : L5.4, puis L5.6 et L5.7
+  (l'utilisateur a demandé d'enchaîner seul). Référence des vues : `benchmarks/render/pixel-normals-1` ;
+  vols : `pixel-normals-flight`, `pixel-normals-plan1` (p1 86,2 et 87,0 ; la colonne GPU des vols est
+  faussée par la passe d'ombre de l'avion, voir Mesures). L'arbre des tuiles est mis à jour par `GeoTerrainManager.update`, plus par
   le rendu. Bundle three-tile à reconstruire après chaque
   `git pull` ou changement de branche (`cd vendor/three-tile && npm run build:lib`) : le worker
   d'altitude y est intégré.
@@ -874,10 +874,25 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       et les coloris se confondent), multipliée par la pré-exposition de nuit comme les villes : la
       nuit, seules les courbes restent visibles. Mode radar vérifié. Reste possible : atténuer la brume
       sur le sol sombre (sol gris-bleu de jour).
-- [ ] **L5.9** Normales par pixel depuis la carte d'altitude 256 px complète (reste de L5.1) : texture
+- [x] **L5.9** Normales par pixel depuis la carte d'altitude 256 px complète (reste de L5.1) : texture
       de normales RG8 avec mipmaps calculée au chargement (dans le worker), normales en mètres Mercator
       ramenées dans l'espace local de la tuile dans le shader (taille Mercator de la tuile en uniforme
       par objet) ; gain attendu surtout sur les reliefs lointains (maille de sommets ≈ 4 px de la source).
+      Fait : carte de normales 256² par tuile (`NORMAL_MAP_SIZE`), calculée dans le worker
+      (`heights.buildNormals`) par différences centrées sur une grille d'altitudes aux centres des
+      texels (un texel de marge), lue dans la même fonction d'altitude que la géométrie : les normales
+      de tuiles voisines se raccordent sans couture. Vecteurs unitaires x est, y nord, z haut, axes
+      horizontaux en mètres Mercator, stockés en `rg8snorm` avec leurs mipmaps (moyenne 2 × 2
+      renormalisée, calculées dans le worker : un format snorm n'est pas rendu par WebGPU, three ne
+      peut pas générer ses mipmaps), filtrage anisotrope comme l'imagerie. Dans le shader de
+      fragments, la normale est mélangée avec celle du parent pendant le morph (même quart que
+      l'imagerie) puis passée en monde sans uniforme par tuile : l'espace « mètres Mercator » est
+      commun à toutes les tuiles, seule l'échelle horizontale de la carte (`setTerrainHorizontalScale`)
+      et sa rotation interviennent. Normales par sommet supprimées (quatre lectures de moins par
+      sommet). Corrigé en passant : les textures d'altitude des tuiles n'étaient jamais libérées
+      (`TerrariumShaderLoader.unload`) ; nombre de textures borné après deux tours des vues. Coût GPU
+      des vues inchangé, p1 en vol en hausse (`pixel-normals-*`). Rendu : ravines et arêtes des
+      versants visibles là où la grille les lissait.
 
 ## Lot 6 — Contenu et effets
 
@@ -987,6 +1002,8 @@ Notes de lecture :
 | 2026-11-26 | L5.3 réglage « Shadows » coupé (comparaison) | Plan 1 (basse alt.) | 94 s | 119,8 | 103,1 | 82,6 | 4,9 (6,2) | 0 / 0 | 1,65 M | 387 |
 | 2026-11-26 | **L5.3 relief + avion** (`shadows-flight-2`) | Vol par défaut | 128 s | 119,3 | 103,1 | 80,0 | 8,4 (9,5) | 0 / 0 | 1,41 M | 375 |
 | 2026-11-26 | **L5.3 relief + avion** (`shadows-plan1-2`) | Plan 1 (basse alt.) | 94 s | 119,7 | 100,0 | 79,4 | 7,9 (9,4) | 0 / 0 | 1,70 M | 440 |
+| 2026-11-26 | L5.9 normales par pixel (`pixel-normals-flight`) | Vol par défaut | 128 s | 119,2 | 101,0 | 86,2 | 8,6 (9,6) | 0 / 0 | 1,41 M | 375 |
+| 2026-11-26 | L5.9 normales par pixel (`pixel-normals-plan1`) | Plan 1 (basse alt.) | 94 s | 119,4 | 99,0 | 87,0 | 8,4 (9,8) | 0 / 0 | 1,70 M | 440 |
 | 2026-11-24 | L2.7 preset Ultra, LODThreshold 1,4 | Vol par défaut | 128 s | 115,6 | 85,5 | 53,5 | 5,0 (6,5) | 1 / 0 | 2,84 M | 714 |
 
 Pour mémoire, la configuration n°4 de `BENCHMARKS.md` (même machine, Chrome 146, ancien moteur
@@ -1054,6 +1071,7 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 | 2026-11-26 | **Pleine résolution** — L5.2 relief + fondu de l'imagerie (`morph-fade-1`) | 3,70 | 3,79 | 3,88 | 3,87 | 7,97 | 4,27 |
 | 2026-11-26 | **Pleine résolution** — L5.3 ombres du relief (`terrain-shadow-1`) | 3,75 | 3,85 | 3,96 | 3,90 | 7,82 | 4,32 |
 | 2026-11-26 | **Pleine résolution** — L5.3 relief + avion (`terrain-shadow-2`) | 3,86 | 4,01 | 4,10 | 4,01 | 8,06 | 4,11 |
+| 2026-11-26 | **Pleine résolution** — L5.9 normales par pixel (`pixel-normals-1`) | 3,82 | 3,93 | 4,02 | 4,25 | 8,06 | 4,38 |
 
 Raccord des bords (L5.1) : captures alternées contre `main` (worktree, port 3001), vues 1 et 6, deux
 séries : `main` 3,62 / 3,98 ms (vue 1) et 4,15 / 3,66 ms (vue 6), raccord 3,64 / 3,64 et 4,16 / 4,17 ms :
@@ -1215,6 +1233,8 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 - Fait (seul, à la demande de l'utilisateur) : L5.3, ombres du relief (cartes d'altitude marchées
   vers la lumière) et de l'avion (carte d'ombre ajustée sur lui), réglage « Shadows ». Pas encore vu
   par l'utilisateur.
+- Fait (seul) : L5.9, normales par pixel calculées dans le worker ; corrigé la fuite des textures
+  d'altitude des tuiles déchargées.
 - Outils (scratchpad, non versionnés) : saut du sol d'une frame à l'autre sur 2 500 points par
   `groundHeight` pendant des changements forcés du seuil de LOD, écart entre bords voisins
   reconstruits sur le CPU à chaque frame, morph figé à 0 pour comparer l'imagerie des parents ; accès
