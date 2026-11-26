@@ -6,7 +6,15 @@ contrainte : l'application doit continuer à fonctionner dans un navigateur (Web
 Ce document est la **source de vérité de l'avancement**. Il est lu en début de session et mis à jour
 en fin de session.
 
-## État courant (mis à jour le 2026-11-26, session 23)
+## État courant (mis à jour le 2026-11-26, session 24)
+
+- **Lot 5 en cours** sur `feat/render-terrain` (depuis `main`, non poussée). Faits : L5.1 (raccord exact
+  des bords entre tuiles, altitudes dans un worker), L5.8 (mode courbes de niveau tactique
+  phosphore) ; L5.5 abandonnée. Prochaine tâche au choix de l'utilisateur : L5.2, L5.3 ou L5.9.
+  Référence des vues : `benchmarks/render/terrain-stitch-2` ; vols : `terrain-stitch-flight`,
+  `terrain-stitch-plan1` (p1 80,6 et 77,5). Bundle three-tile à reconstruire après chaque
+  `git pull` ou changement de branche (`cd vendor/three-tile && npm run build:lib`) : le worker
+  d'altitude y est intégré.
 
 - **Lot 4 terminé** le 2026-11-26 (toutes ses tâches faites, bilan dans **Mesures**, lignes
   « Clôture du lot 4 », captures `docs/screenshots/render/lot4/`), fusionné dans `main` le même jour
@@ -18,9 +26,8 @@ en fin de session.
   plus. Bilan dans **Mesures** (lignes « Clôture du lot 2 ») et constats visuels sous les tableaux.
 - **three.js** : r187 (import map d'`index.html`), mis à jour depuis r183 pour le TRAA compatible avec
   la profondeur inversée.
-- **Git** : lots 0 à 4 et lots de jeu G0 à G2 dans `main`, poussée par l'utilisateur le 2026-11-26
-  (seul le dernier commit de documentation peut rester à pousser : voir `git status -sb`). `main` est la
-  seule branche (`feat/render-clouds` supprimée après la fusion, jamais poussée). Le prochain lot part d'une nouvelle branche depuis `main`. Plus de worktree de comparaison : en
+- **Git** : lots 0 à 4 et lots de jeu G0 à G2 dans `main` ; `main` a deux commits de documentation non
+  poussés (voir `git status -sb`). Lot 5 sur `feat/render-terrain`. Plus de worktree de comparaison : en
   recréer un si besoin (voir Outillage).
 - **Environnement local** : bundle three-tile construit, `npm install` fait (racine et
   `vendor/three-tile`), cache `cache/` chaud pour les vues de référence et les deux vols. Lancer
@@ -106,9 +113,7 @@ en fin de session.
   instance de l'app ouverte ailleurs (navigateur de l'utilisateur) double tous les coûts GPU d'une
   capture : vérifier qu'aucune ne tourne avant de mesurer. Tout est commité (dernier commit de code :
   traversée des nuages), branche non poussée ni fusionnée.
-- **Prochaine étape** : selon le choix de l'utilisateur, le lot G3 du jeu (train et aéroports, voir
-  `docs/gameplay-roadmap.md`, prévu après le lot 4) ou le lot 5 (terrain, ombres, eau), sur une
-  nouvelle branche depuis `main`.
+- **Prochaine étape** : lot 5 en cours (voir le premier point) ; le lot G3 du jeu suivra.
   Outils pour les défauts en mouvement : variantes passées dans l'URL que l'utilisateur essaie en
   vol, vol rejoué à pas de temps fixe (crochets temporaires `window.__advance(n)` et
   `window.__move(m)` dans la boucle de rendu de `js/app.js`, à recréer : les patchs du scratchpad ne
@@ -353,7 +358,9 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       de grille lue par `textureSize`. Toute la scène tient en 11 graphes compilés. Frames > 33 ms
       46 → 3 et p1 33 → 62 (vol par défaut). PMREM ensuite passée en `scene.environment`, sans effet sur
       les saccades. Reste, optionnel : décodage d'altitude dans un worker (≈ 1,1 ms par tuile sur le
-      thread principal), `compileAsync`.
+      thread principal), `compileAsync`. Décodage dans un worker fait avec le raccord des bords (voir
+      L5.1, session 24) : p1 59,2 → 77,5 (plan 1) et 62,9 → 80,6 (vol par défaut). Reste
+      `compileAsync`.
 - [x] **L2.7** Presets de qualité (Low / Medium / High / Ultra) dans `config.js` et le panneau MFD.
       Réglages disponibles dans `config.js` : `maxPixelRatio` (résolution de sortie), `renderScale` et
       `dynamicResolution` (`AdaptiveQualityManager`), `bloomEnabled`, `autoExposure`, `maxTotalTiles`,
@@ -761,13 +768,31 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
 
 ## Lot 5 — Terrain, ombres et eau
 
-- [~] **L5.1** Carte d'altitude : réduction bilinéaire au lieu du plus proche voisin
+- [x] **L5.1** Carte d'altitude : réduction bilinéaire au lieu du plus proche voisin
       (`TerrariumShaderLoader.ts:40`), pas de texel cohérent avec la grille (`TerrariumTSL.ts:70`),
       normales par pixel depuis la carte d'altitude 256 px complète.
       Fait : décodage Terrarium sur le CPU en texture float (une altitude par sommet, lue par
       `textureLoad`), réduction bilinéaire aux positions exactes des sommets, normales sur les sommets
-      voisins. Reste : normales par pixel depuis la carte 256 px complète, raccord exact des bords entre
-      tuiles voisines (l'échantillonnage est borné au pixel de bord, les jupes masquent l'écart).
+      voisins. Puis (session 24) **raccord exact des bords** : mesuré avant (script Playwright, surface
+      de chaque tuile affichée échantillonnée le long des arêtes partagées), écart au p90 de 5–9 m en
+      z13–z14, 19–21 m en z12, 33–36 m en z11, jusqu'à 77 m (même niveau aussi bien qu'entre niveaux :
+      chaque tuile bornait l'échantillonnage à son dernier pixel), d'où des courbes de niveau coupées.
+      Code (`vendor/three-tile/.../terrariumShaderLoader/`) : une seule fonction d'altitude pour le
+      globe (`heights.ts` : tuiles sources échantillonnées par-delà leurs bords, positions de sommets en
+      entiers sur puissances de 2, donc exactes en flottant : deux voisines de même niveau ont des
+      arêtes identiques au bit près) ; grilles emboîtées (`grid.ts` : 16 cellules sous z4, 32 de z4 à
+      z9, 64 dès z10, au lieu de 15 à 67 sans rapport entre niveaux) ; chaque tuile porte, pour chaque
+      arête, le profil qu'y trace une voisine 1 à 4 niveaux plus grossière (lignes supplémentaires de
+      la texture d'altitude) ; `GeoTerrainManager._updateEdgeLevels` trouve à chaque frame le niveau des
+      voisines affichées (tuile affichée contenant le milieu de l'arête, juste dehors, à son niveau ou
+      au-dessus) dans `mesh.userData.edgeLevels`, que le shader de sommets lit pour caler l'arête sur
+      le profil (un coin suit la plus grossière de ses deux voisines) ; couronne d'un sommet autour de
+      la grille : normales centrées jusqu'aux bords (plus de marche d'éclairage entre tuiles). Le
+      calcul (téléchargement, décodage, cache LRU de 400 tuiles sources, altitudes) tourne dans un
+      worker (`heights.worker.ts`), ce qui solde le reste de L2.6. Après : p90 de 0 m à tous les
+      niveaux, moyenne de quelques cm, pics isolés aux coins de tuiles lointaines (une diagonale plus
+      grossière que les deux voisines directes, non vue). Mesures dans **Mesures** (`terrain-stitch-*`).
+      Normales par pixel : sorties en L5.9.
 - [ ] **L5.2** Geomorphing entre niveaux de LOD (suppression du « pop »).
 - [ ] **L5.3** Ombres du relief (cartes d'horizon ou ray marching sur la carte d'altitude) +
       `CSMShadowNode` pour l'avion et le terrain proche.
@@ -778,6 +803,24 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       pentes, neige selon altitude/pente, textures de détail selon la distance.
 - [ ] **L5.7** Eau : masque (OSM/JRC), matériau Fresnel + reflet du ciel + scintillement solaire,
       vagues FFT en compute, `SSRNode` sur les lacs.
+- [x] **L5.8** (ajoutée à la demande de l'utilisateur) Refonte du mode « Contour lines »
+      (`textureMode=elevation`), jugé peu moderne. Quatre styles proposés sur planches (carte topo,
+      tactique, maquette, isobandes), puis six coloris du style tactique, puis l'affinage avec la
+      distance ; choix de l'utilisateur : **tactique, coloris « phosphore »**, utile plus tard aux
+      missions. `js/terrain/ContourMap.js`, réglages `CONTOUR_*` dans `js/constants/terrain.js` : sol
+      vert très sombre éclairé comme la scène, courbes émissives `#9dff3a` tous les 50 / 250 / 1 000 m
+      (épaisseur et intensité croissantes), à l'altitude vraie (le terrain est abaissé de la courbure
+      autour de la caméra : l'ancien mode décalait les courbes de ≈ 30 m à 20 km), trait d'épaisseur
+      constante à l'écran jusqu'à 4 km puis inversement proportionnelle à la distance, plancher 40 %
+      (un trait sous le pixel garde un pixel et s'atténue d'autant), courbes fines effacées quand elles
+      se serrent à moins de 10 px. Luminance des traits 0,08 unité de scène (au-delà, AgX les blanchit
+      et les coloris se confondent), multipliée par la pré-exposition de nuit comme les villes : la
+      nuit, seules les courbes restent visibles. Mode radar vérifié. Reste possible : atténuer la brume
+      sur le sol sombre (sol gris-bleu de jour).
+- [ ] **L5.9** Normales par pixel depuis la carte d'altitude 256 px complète (reste de L5.1) : texture
+      de normales RG8 avec mipmaps calculée au chargement (dans le worker), normales en mètres Mercator
+      ramenées dans l'espace local de la tuile dans le shader (taille Mercator de la tuile en uniforme
+      par objet) ; gain attendu surtout sur les reliefs lointains (maille de sommets ≈ 4 px de la source).
 
 ## Lot 6 — Contenu et effets
 
@@ -871,6 +914,10 @@ Notes de lecture :
 | 2026-11-26 | **Clôture du lot 4** (preset High, nuages désactivés par défaut) | Plan 1 (basse alt.) | 94 s | 119,3 | 105,3 | 59,2 | 4,7 (6,4) | 0 / 0 | 1,38 M | 372 |
 | 2026-11-26 | **Clôture du lot 4**, nuages activés (`showClouds=true`) | Vol par défaut | 129 s | 115,4 | 82,6 | 57,1 | 8,1 (9,8) | 3 / 1 | 1,10 M | 320 |
 | 2026-11-26 | **Clôture du lot 4**, nuages activés (`showClouds=true`) | Plan 1 (basse alt.) | 94 s | 117,5 | 86,2 | 56,5 | 8,0 (9,6) | 0 / 0 | 1,38 M | 377 |
+| 2026-11-26 | Raccord des bords, altitudes calculées sur le thread principal (abandonné) | Vol par défaut | 128 s | 112,1 | 97,1 | 26,3 | 4,6 (6,3) | 186 / 69 | 1,30 M | 316 |
+| 2026-11-26 | Raccord des bords, altitudes calculées sur le thread principal (abandonné) | Plan 1 (basse alt.) | 94 s | 108,8 | 79,4 | 24,9 | 4,8 (6,4) | 194 / 50 | 1,57 M | 372 |
+| 2026-11-26 | L5.1 raccord des bords, altitudes dans un worker (`terrain-stitch-flight`) | Vol par défaut | 128 s | 119,8 | 107,5 | 80,6 | 4,7 (6,3) | 0 / 0 | 1,30 M | 316 |
+| 2026-11-26 | L5.1 raccord des bords, altitudes dans un worker (`terrain-stitch-plan1`) | Plan 1 (basse alt.) | 94 s | 119,8 | 103,1 | 77,5 | 4,8 (6,3) | 0 / 0 | 1,57 M | 372 |
 | 2026-11-24 | L2.7 preset Ultra, LODThreshold 1,4 | Vol par défaut | 128 s | 115,6 | 85,5 | 53,5 | 5,0 (6,5) | 1 / 0 | 2,84 M | 714 |
 
 Pour mémoire, la configuration n°4 de `BENCHMARKS.md` (même machine, Chrome 146, ancien moteur
@@ -931,6 +978,15 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 | 2026-11-26 | **Pleine résolution** — L4 cirrus fibreux (`clouds-4`) | 3,54 | 3,97 | 3,83 | 3,75 | 6,99 | 3,69 |
 | 2026-11-26 | **Pleine résolution** — L4 marche stratifiée (`clouds-5`) | 3,55 | 3,55 | 4,06 | 3,50 | 7,13 | 4,08 |
 | 2026-11-26 | **Pleine résolution** — L4 ombres des nuages (`clouds-6`) | 3,60 | 3,60 | 3,71 | 3,74 | 7,51 | 3,82 |
+| 2026-11-26 | **Pleine résolution** — L5.1 raccord, grilles 64 cellules dès z8 (`terrain-stitch`, écarté) | 4,16 | 3,80 | 4,36 | 3,86 | 7,79 | 4,20 |
+| 2026-11-26 | **Pleine résolution** — L5.1 raccord, grilles 64 cellules dès z10 (`terrain-stitch-2`) | 4,12 | 3,72 | 3,82 | 3,81 | 7,63 | 3,85 |
+| 2026-11-26 | L5.1 raccord — triangles (contre 1,01 / 1,34 / 1,35 / 1,06 / 1,14 / 1,07 M au lot 4) | 1,17 M | 1,51 M | 1,54 M | 1,24 M | 1,36 M | 1,27 M |
+
+Raccord des bords (L5.1) : captures alternées contre `main` (worktree, port 3001), vues 1 et 6, deux
+séries : `main` 3,62 / 3,98 ms (vue 1) et 4,15 / 3,66 ms (vue 6), raccord 3,64 / 3,64 et 4,16 / 4,17 ms :
+aucune différence mesurable malgré +16 à +18 % de triangles ; l'écart de la vue 1 contre la clôture
+du lot 4 (+0,5 ms) est celui d'une série à l'autre. Grilles de 64 cellules dès z8 : +30 à +45 % de
+triangles, écartées.
 
 Les lignes « GPU ms méd. » antérieures à L2.9 ne sont pas exploitables (somme des passes, fréquence
 du GPU fixée par le régulateur). Les lignes « coût GPU » de L2.9 à L2.3 ont été mesurées à 1028×645
@@ -1050,6 +1106,8 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 | 2026-11-25 | Suréchantillonnage temporel des nuages | Un pixel sur 16 marché par frame (Bayer 4×4), reprojection par pixel à la distance de sa scène ou du front des nuages, rejet de l'historique sur la distance de scène, repli pondéré par la ressemblance de profondeur | Comme takram pour le coût (marche à 1/16 des pixels) ; leur vitesse prise au fragment le plus proche d'un voisinage basse résolution laisse des halos aux silhouettes en mouvement, la reprojection à la profondeur pleine résolution de chaque pixel les évite |
 | 2026-11-25 | Reconstruction de l'atmosphère en cours de vol | Le TAAU marque ses matériaux internes à recompiler quand la passe d'atmosphère change | `TAAUNode.setup()` leur donne de nouveaux nœuds sans les marquer : couper la brume de distance, la brume de chaleur ou le volume de perspective aérienne depuis le menu ne s'appliquait qu'au rechargement (défaut antérieur, trouvé avec les nuages) |
 | 2026-11-26 | Éclairage incrusté dans l'imagerie (L5.5) | Abandonné, aucune correction (choix de l'utilisateur) | Les zones noires des vues 4 et 6 ne viennent pas de tuiles invalides : le cache est sain et les tuiles ESRI retéléchargées sont identiques octet pour octet. Elles viennent des ombres des photos (soleil à ≈ 155°, 50° d'élévation : faces nord-ouest 10 fois plus sombres et bleues, en partie écrasées au noir), de l'absence d'ombres du relief et de lumière renvoyée, et des comblements de lacunes du SRTM dans le MNT Terrarium. Le rééclairage essayé dans le shader (gain par canal tiré de la normale et de la teinte de l'ombre, masque élargi par un mip plus grossier, albédo de repli pour le noir écrasé) laissait des liserés sombres au bord des ombres et des taches dans les forêts : rendu jugé moins bon que l'original |
+| 2026-11-26 | Style du mode courbes de niveau (L5.8) | Tactique, coloris phosphore, traits affinés au-delà de 4 km avec plancher à 40 % (choix de l'utilisateur sur planches) | Lisible à l'ombre et la nuit, utile aux missions ; carte topo, maquette et isobandes écartées ; épaisseur constante : plus de notion de profondeur ; affinage dès 2 km : vue haute trop pâle |
+| 2026-11-26 | Raccord des bords entre tuiles (L5.1) | Altitude unique échantillonnée par-delà les tuiles, grilles emboîtées, profils d'arête des voisines plus grossières choisis à chaque frame, calcul dans un worker | Exact (au bit près entre voisines de même niveau, sans jonction en T entre niveaux) sans coût GPU mesurable ; calculé sur le thread principal, il faisait tomber le p1 à 25 (3,5 décodages par tuile, 2,2 ms de calcul) ; dans le worker, le p1 monte au-dessus du lot 4 |
 | 2026-11-23 | Vitesse par défaut | 560 m/s | Vitesse réelle de l'ancien défaut (800 unités Mercator/s) : benchmarks comparables à la baseline |
 
 ## Journal des sessions
@@ -1060,8 +1118,18 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 - Analysé : zones noires dans les massifs (vues 4 et 6). Cache de tuiles sain, causes dans l'imagerie,
   l'éclairage et le MNT (voir Décisions, ligne L5.5).
 - Essayé puis annulé : rééclairage de l'imagerie dans le shader ; L5.5 abandonnée par l'utilisateur.
-  Aucun code modifié.
-- Prochaine étape : inchangée (G3 ou lot 5, voir État courant).
+- Lot 5 commencé sur `feat/render-terrain` (depuis `main`), au choix de l'utilisateur.
+- Fait : L5.8, refonte du mode courbes de niveau (style tactique phosphore, choisi sur planches).
+- Fait : L5.1, raccord exact des bords entre tuiles, altitudes calculées dans un worker (solde aussi
+  le reste de L2.6 hors `compileAsync`). Normales par pixel sorties en L5.9.
+- Commits : `afcc932` (courbes de niveau), `e5791ce` (raccord des bords), documentation ; branche non
+  poussée ni fusionnée.
+- Outils (scratchpad, non versionnés) : mesure des écarts le long des arêtes (Playwright, accès
+  temporaire au gestionnaire de terrain par `window.__terrain`), vol de 20 s touche W avec compteurs
+  de frames lentes, capture de nuit (heure changée après la vue de référence : `--set timeOfDay` est
+  écrasé par la vue), planches légendées ouvertes dans Aperçu (`magick -annotate`, police
+  `/System/Library/Fonts/Supplemental/Arial.ttf`).
+- Prochaine étape : L5.2 (geomorphing), L5.3 (ombres du relief) ou L5.9, au choix de l'utilisateur.
 
 ### 2026-11-26 (23)
 - Fait : L4.6, traversée des nuages (voir la tâche) : lumière dans un nuage choisie par
