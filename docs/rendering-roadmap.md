@@ -10,10 +10,12 @@ en fin de session.
 
 - **Lot 5 en cours** sur `feat/render-terrain` (depuis `main`, non poussée). Faits : L5.1 (raccord exact
   des bords entre tuiles, altitudes dans un worker), L5.2 (geomorphing du relief et fondu de
-  l'imagerie), L5.8 (mode courbes de niveau tactique phosphore) ; L5.5 abandonnée. Suite : L5.3,
-  puis L5.9, L5.4 (l'utilisateur a demandé d'enchaîner seul). Référence des vues :
-  `benchmarks/render/morph-fade-1` ; vols : `morph-fade-flight`, `morph-fade-plan1` (p1 83,3 et
-  82,0). L'arbre des tuiles est mis à jour par `GeoTerrainManager.update`, plus par le rendu. Bundle three-tile à reconstruire après chaque
+  l'imagerie), L5.3 (ombres du relief et de l'avion), L5.8 (mode courbes de niveau tactique
+  phosphore) ; L5.5 abandonnée. Suite : L5.9, puis L5.4 (l'utilisateur a demandé d'enchaîner
+  seul). Référence des vues : `benchmarks/render/terrain-shadow-2` ; vols : `shadows-flight-2`,
+  `shadows-plan1-2` (p1 80,0 et 79,4 ; la colonne GPU des vols est faussée par la passe d'ombre de
+  l'avion, voir Mesures). L'arbre des tuiles est mis à jour par `GeoTerrainManager.update`, plus par
+  le rendu. Bundle three-tile à reconstruire après chaque
   `git pull` ou changement de branche (`cd vendor/three-tile && npm run build:lib`) : le worker
   d'altitude y est intégré.
 
@@ -824,8 +826,33 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       voisines reconstruits sur le CPU pendant les transitions ≤ 0,24 mm sur 46 M sommets (hors
       dernière cellule grossière avant un coin, défaut connu de L5.1) ; imagerie des parents figée
       à morph 0 : alignée, sans décalage. Mesures dans **Mesures** (`morph-*`).
-- [ ] **L5.3** Ombres du relief (cartes d'horizon ou ray marching sur la carte d'altitude) +
+- [x] **L5.3** Ombres du relief (cartes d'horizon ou ray marching sur la carte d'altitude) +
       `CSMShadowNode` pour l'avion et le terrain proche.
+      Fait : **ray marching sur une carte d'altitude** (`js/terrain/TerrainShadow.js`), sans
+      `CSMShadowNode` (voir Décisions). Deux cartes centrées sous la caméra (30 km en 2048², 240 km en
+      1024², `TERRAIN_SHADOW_CASCADES`) : le terrain affiché est dessiné vu de dessus (caméra
+      orthographique, matériau de remplacement qui reprend le `positionNode` des tuiles, donc le
+      relief déplacé et en cours de morph) en altitude vraie (courbure retirée), puis chaque texel
+      marche vers la lumière (128 pas géométriques jusqu'à 100 km, la carte fine lit la grossière
+      au-delà de ses bords) et garde la hauteur sous laquelle un point est à l'ombre (le plus haut
+      relief rencontré, abaissé de la montée du rayon et de la courbure d²/2R) et la distance de ce
+      relief. Un récepteur (terrain, avion) compare son altitude vraie à cette hauteur, bord adouci
+      sur le disque solaire vu depuis le relief (0,27°, un texel au moins) : une lecture de texture
+      par carte. Redessin quand la caméra a parcouru 15 % de la carte, quand la lumière a tourné de
+      0,1°, ou quand les tuiles affichées ont changé (1 s / 4 s d'écart au moins, jusqu'à la fin de
+      leur morph) ; étalé sur plusieurs frames (carte d'altitude dans une frame, puis la marche par
+      tranches de lignes dans une seconde carte d'ombre, lue une fois complète). Ombre de la lune la
+      nuit, élévation bornée à 0,6°. **Ombre de l'avion** (`js/aircraft/AircraftShadow.js`) : un
+      `ShadowNode` de three sur une lumière fictive dont la caméra d'ombre 2048² est ajustée autour
+      de l'avion le long de la lumière ; seul l'avion y est dessiné (calque `SHADOW_CASTER_LAYER`) ;
+      l'ombre s'efface vers le bout de l'ombre pure (≈ 1,6 km : au-delà l'avion cache trop peu du
+      disque solaire). Les trois facteurs (nuages, relief, avion) multiplient la lumière directe
+      (`AtmosphericSky._updateShadowNode`). Réglage « Shadows » (onglet Graphics, section Light),
+      coupé dans le preset Low. Vérifié : carte d'altitude contre `groundHeight` (écart médian 0,2 m,
+      deux cartes) ; vues 4 et 6 (soleil bas) nettement plus lisibles, sans acné ; ombre de l'avion
+      nette à 15 m du sol, auto-ombrage aile/fuselage propre. Trouvé : un redessin attendant une
+      durée fixe laissait la carte large vide (dessinée avant l'arrivée des tuiles) ; une seule
+      frame pour la carte fine coûtait ≈ 9 ms (mesure GPU au repos, surestimée).
 - [ ] **L5.4** Occlusion ambiante (`GTAONode`).
 - [-] **L5.5** Neutralisation de l'éclairage incrusté dans l'imagerie satellite (abandonnée, voir
       Décisions).
@@ -952,6 +979,14 @@ Notes de lecture :
 | 2026-11-26 | L5.2 geomorphing du relief (`morph-plan1`) | Plan 1 (basse alt.) | 94 s | 119,9 | 104,2 | 84,0 | 4,9 (6,3) | 0 / 0 | 1,65 M | 387 |
 | 2026-11-26 | L5.2 relief + fondu de l'imagerie (`morph-fade-flight`) | Vol par défaut | 128 s | 119,6 | 105,3 | 83,3 | 5,0 (6,5) | 0 / 0 | 1,37 M | 322 |
 | 2026-11-26 | L5.2 relief + fondu de l'imagerie (`morph-fade-plan1`) | Plan 1 (basse alt.) | 94 s | 119,9 | 103,1 | 82,0 | 4,8 (6,1) | 0 / 0 | 1,65 M | 387 |
+| 2026-11-26 | L5.3 ombres du relief, redessin en une frame (`terrain-shadow-flight`) | Vol par défaut | 128 s | 119,4 | 104,2 | 80,6 | 4,9 (6,4) | 0 / 0 | 1,37 M | 322 |
+| 2026-11-26 | L5.3 ombres du relief, redessin en une frame (`terrain-shadow-plan1`) | Plan 1 (basse alt.) | 94 s | 119,7 | 101,0 | 80,0 | 4,9 (6,1) | 0 / 0 | 1,65 M | 387 |
+| 2026-11-26 | L5.3 ombres du relief, marche étalée (`terrain-shadow-flight-2`) | Vol par défaut | 128 s | 119,4 | 104,2 | 81,3 | 5,1 (7,0) | 1 / 0 | 1,37 M | 322 |
+| 2026-11-26 | L5.3 ombres du relief, marche étalée (`terrain-shadow-plan1-2`) | Plan 1 (basse alt.) | 94 s | 119,8 | 101,0 | 81,3 | 4,9 (6,7) | 0 / 0 | 1,65 M | 387 |
+| 2026-11-26 | L5.3 + ombre de l'avion, scène entière dans la passe d'ombre (`shadows-plan1`) | Plan 1 (basse alt.) | 94 s | 119,4 | 99,0 | 76,9 | 7,9 (9,5) | 0 / 0 | 1,70 M | 440 |
+| 2026-11-26 | L5.3 réglage « Shadows » coupé (comparaison) | Plan 1 (basse alt.) | 94 s | 119,8 | 103,1 | 82,6 | 4,9 (6,2) | 0 / 0 | 1,65 M | 387 |
+| 2026-11-26 | **L5.3 relief + avion** (`shadows-flight-2`) | Vol par défaut | 128 s | 119,3 | 103,1 | 80,0 | 8,4 (9,5) | 0 / 0 | 1,41 M | 375 |
+| 2026-11-26 | **L5.3 relief + avion** (`shadows-plan1-2`) | Plan 1 (basse alt.) | 94 s | 119,7 | 100,0 | 79,4 | 7,9 (9,4) | 0 / 0 | 1,70 M | 440 |
 | 2026-11-24 | L2.7 preset Ultra, LODThreshold 1,4 | Vol par défaut | 128 s | 115,6 | 85,5 | 53,5 | 5,0 (6,5) | 1 / 0 | 2,84 M | 714 |
 
 Pour mémoire, la configuration n°4 de `BENCHMARKS.md` (même machine, Chrome 146, ancien moteur
@@ -1017,6 +1052,8 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 | 2026-11-26 | L5.1 raccord — triangles (contre 1,01 / 1,34 / 1,35 / 1,06 / 1,14 / 1,07 M au lot 4) | 1,17 M | 1,51 M | 1,54 M | 1,24 M | 1,36 M | 1,27 M |
 | 2026-11-26 | **Pleine résolution** — L5.2 geomorphing du relief (`morph-3`) | 3,69 | 4,22 | 3,86 | 3,68 | 7,12 | 3,78 |
 | 2026-11-26 | **Pleine résolution** — L5.2 relief + fondu de l'imagerie (`morph-fade-1`) | 3,70 | 3,79 | 3,88 | 3,87 | 7,97 | 4,27 |
+| 2026-11-26 | **Pleine résolution** — L5.3 ombres du relief (`terrain-shadow-1`) | 3,75 | 3,85 | 3,96 | 3,90 | 7,82 | 4,32 |
+| 2026-11-26 | **Pleine résolution** — L5.3 relief + avion (`terrain-shadow-2`) | 3,86 | 4,01 | 4,10 | 4,01 | 8,06 | 4,11 |
 
 Raccord des bords (L5.1) : captures alternées contre `main` (worktree, port 3001), vues 1 et 6, deux
 séries : `main` 3,62 / 3,98 ms (vue 1) et 4,15 / 3,66 ms (vue 6), raccord 3,64 / 3,64 et 4,16 / 4,17 ms :
@@ -1032,6 +1069,16 @@ fondu (bascule temporaire par l'URL), quatre séries : avec 3,83 / 3,89, 4,67 / 
 différence mesurable. Une seconde capture complète (`morph-fade-2`, 4,19 ms en vue 1) a été prise
 machine chaude, à ignorer. En vol, +5 % de triangles : les tuiles fines restent affichées 0,75 s le
 temps de leur fusion.
+
+Ombres (L5.3) : coût permanent des récepteurs (deux lectures de texture par pixel éclairé) dans le
+bruit ; l'ombre de l'avion ajoute ≈ 0,1 à 0,2 ms (passe d'ombre 2048², 53 draw calls). Redessin d'une
+carte (mesuré GPU au repos, donc surestimé) : carte fine ≈ 2–4 ms d'altitude + 4–6 ms de marche,
+carte large ≈ 4 + 0,7 ms ; la marche de la carte fine est étalée sur 4 frames. En vol, la colonne GPU
+passe de 4,9 à 7,9–8,4 ms avec l'ombre de l'avion : artefact de mesure (le minuteur prend l'écart
+entre le début de la première passe et la fin de la dernière ; la passe d'ombre est soumise avant
+l'encodage de la passe de scène, l'écart inclut ce temps CPU). Coût réel en vol : CPU de la passe
+d'ombre, qui parcourait toute la scène (p1 76,9) ; avec le calque des projeteurs, p1 79,4 contre 82,6
+ombres coupées.
 
 Les lignes « GPU ms méd. » antérieures à L2.9 ne sont pas exploitables (somme des passes, fréquence
 du GPU fixée par le régulateur). Les lignes « coût GPU » de L2.9 à L2.3 ont été mesurées à 1028×645
@@ -1153,6 +1200,7 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 | 2026-11-26 | Éclairage incrusté dans l'imagerie (L5.5) | Abandonné, aucune correction (choix de l'utilisateur) | Les zones noires des vues 4 et 6 ne viennent pas de tuiles invalides : le cache est sain et les tuiles ESRI retéléchargées sont identiques octet pour octet. Elles viennent des ombres des photos (soleil à ≈ 155°, 50° d'élévation : faces nord-ouest 10 fois plus sombres et bleues, en partie écrasées au noir), de l'absence d'ombres du relief et de lumière renvoyée, et des comblements de lacunes du SRTM dans le MNT Terrarium. Le rééclairage essayé dans le shader (gain par canal tiré de la normale et de la teinte de l'ombre, masque élargi par un mip plus grossier, albédo de repli pour le noir écrasé) laissait des liserés sombres au bord des ombres et des taches dans les forêts : rendu jugé moins bon que l'original |
 | 2026-11-26 | Style du mode courbes de niveau (L5.8) | Tactique, coloris phosphore, traits affinés au-delà de 4 km avec plancher à 40 % (choix de l'utilisateur sur planches) | Lisible à l'ombre et la nuit, utile aux missions ; carte topo, maquette et isobandes écartées ; épaisseur constante : plus de notion de profondeur ; affinage dès 2 km : vue haute trop pâle |
 | 2026-11-26 | Raccord des bords entre tuiles (L5.1) | Altitude unique échantillonnée par-delà les tuiles, grilles emboîtées, profils d'arête des voisines plus grossières choisis à chaque frame, calcul dans un worker | Exact (au bit près entre voisines de même niveau, sans jonction en T entre niveaux) sans coût GPU mesurable ; calculé sur le thread principal, il faisait tomber le p1 à 25 (3,5 décodages par tuile, 2,2 ms de calcul) ; dans le worker, le p1 monte au-dessus du lot 4 |
+| 2026-11-26 | Ombres du relief et de l'avion (L5.3) | Hauteur d'ombre par ray marching sur une carte d'altitude dessinée vue de dessus (deux cartes), ombre de l'avion par une carte d'ombre ajustée sur lui seul ; pas de `CSMShadowNode` | Des cascades dessinant le terrain depuis le soleil couvriraient mal 100 km de relief au soleil rasant et redessineraient toutes les tuiles à chaque frame ; la hauteur d'ombre est indépendante de l'objet qui la reçoit (terrain et avion lisent la même carte), se redessine rarement et s'étale sur plusieurs frames, et la carte d'altitude réutilise la géométrie affichée (morph et raccords compris). Les cartes d'horizon par texel des tuiles auraient demandé un calcul par tuile et par direction du soleil. L'avion seul justifie une carte d'ombre classique, petite et nette |
 | 2026-11-26 | Geomorphing (L5.2) | Dans le temps (0,75 s), fusions différées jusqu'au retour des enfants sur la surface du parent, bords sur le côté le plus grossier, imagerie en fondu | La sélection des niveaux de three-tile dépend de la tuile entière et de l'orientation de la caméra : un morph fonction de la distance (CDLOD) n'aurait pas été terminé au moment du changement ; le temps couvre aussi les changements dus à une rotation. Coût nul sur le GPU, p1 en vol en hausse |
 | 2026-11-23 | Vitesse par défaut | 560 m/s | Vitesse réelle de l'ancien défaut (800 unités Mercator/s) : benchmarks comparables à la baseline |
 
@@ -1164,6 +1212,9 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 - Fait : L5.2, geomorphing dans le temps (subdivisions et fusions, bords sur le côté le plus
   grossier) et fondu de l'imagerie (validé sur le principe par l'utilisateur, pas encore jugé en
   vol). Corrigé : l'arbre des tuiles mis à jour pendant le rendu (bords périmés une frame).
+- Fait (seul, à la demande de l'utilisateur) : L5.3, ombres du relief (cartes d'altitude marchées
+  vers la lumière) et de l'avion (carte d'ombre ajustée sur lui), réglage « Shadows ». Pas encore vu
+  par l'utilisateur.
 - Outils (scratchpad, non versionnés) : saut du sol d'une frame à l'autre sur 2 500 points par
   `groundHeight` pendant des changements forcés du seuil de LOD, écart entre bords voisins
   reconstruits sur le CPU à chaque frame, morph figé à 0 pour comparer l'imagerie des parents ; accès
