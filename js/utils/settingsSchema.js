@@ -135,6 +135,16 @@ export const SETTINGS = [
     persist: true,
   },
   {
+    key: 'shadows',
+    tab: 'graphics',
+    section: 'Light',
+    label: 'Shadows',
+    help: 'Mountains cast their shadows across the valleys and onto the aircraft, and the aircraft casts its own.',
+    type: 'toggle',
+    impact: { cost: 1, gain: 4, note: 'About 0.2 ms of GPU time per frame, and a little more when the camera travels far.' },
+    persist: true,
+  },
+  {
     key: 'lensFlare',
     tab: 'graphics',
     section: 'Light',

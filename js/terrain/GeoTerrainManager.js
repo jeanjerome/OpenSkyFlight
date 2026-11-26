@@ -61,6 +61,8 @@ export default class GeoTerrainManager {
     this._exposureNode = null;
     /** Tiles drawn this frame by "z/x/y" */
     this._drawnTiles = new Map();
+    /** Count of tiles shown or hidden so far: the terrain on display changed when it changes */
+    this.tileChanges = 0;
 
     onChange((key, value) => {
       if (key === 'terrainLodThreshold' && this.tileMap) this.tileMap.LODThreshold = value;
@@ -173,6 +175,7 @@ export default class GeoTerrainManager {
     this.tileMap.addEventListener('tile-loaded', (event) => {
       this._onTileLoaded(event.tile);
     });
+    this.tileMap.addEventListener('tile-visible-changed', () => this.tileChanges++);
 
     this.scene.add(this.tileMap);
 

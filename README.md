@@ -16,7 +16,7 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 - **Real-world elevation** — [AWS Terrarium](https://registry.opendata.aws/terrain-tiles/) PNG tiles decoded into float height textures and displaced on the GPU via TSL `positionNode`, in a metric world (1 unit = 1 m) that keeps slopes at their true steepness
 - **4 texture modes** — Satellite imagery, Road map, SAR radar, and Elevation contour lines — cycle with `T` or pick from the settings menu
 - **Hi-Res mode (zoom 18)** — press `R` to toggle upsampled elevation with zoom-18 satellite textures for sharper close-up detail. Hi-res tiles are concentrated at the view center and fade concentrically toward the periphery. Best suited for static or slow-moving views; fast flight may cause temporary pixelation while high-zoom tiles load
-- **Adaptive LOD** — quadtree subdivision based on camera distance, with concentric view-center weighting for hi-res zoom levels
+- **Adaptive LOD** — quadtree subdivision based on camera distance, with concentric view-center weighting for hi-res zoom levels; tiles join seamlessly and morph between levels of detail, relief and imagery, instead of popping
 - **Rafale aircraft** — 3D GLTF model with retracted landing gear, canards, elevons, rudder and slats moved by the flight control system, chase camera (30 m behind)
 - **Flight model** — the Rafale flies by its weight, wings and engines: six degrees of freedom, lift and drag with angle of attack and Mach, two M88-2 engines (2 × 50 kN dry, 2 × 75 kN with afterburner) whose thrust follows altitude and speed, fuel burn, standard atmosphere; a fly-by-wire control system holds the flight path at neutral stick and limits the aircraft to +9 / −3.2 g and 29° of angle of attack, rolling at up to 270°/s. Its performance is checked against the published figures by `npm run flight:bench` (turn rates, top speed at sea level and at 11 000 m, ceiling, approach speed). The previous free flight remains as the Exploration mode (`F`)
 - **Cockpit / chase toggle** — press `V` to switch between first-person cockpit (roll applied to horizon) and third-person chase view
@@ -28,6 +28,7 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 - **Local tile cache** — transparent caching proxy, pre-download tiles for offline flight
 - **Physical atmosphere** — precomputed atmospheric scattering ([takram](https://github.com/takram-design-engineering/three-geospatial)): sky, aerial perspective read from a frustum-aligned volume, sunlight and sky light evaluated at each surface point, all from the same scattering tables; the terrain follows the curvature of the Earth and meets the horizon of the sphere, with the distant ground beyond the tiles drawn by the sky; a Visibility setting sets the haze
 - **Volumetric clouds** — cumulus, mid-level clouds and fibrous cirrus ray-marched in real time (after [takram's three-clouds](https://github.com/takram-design-engineering/three-geospatial)) that you can fly through, with their shadows on the ground and on the aircraft, light shafts in the haze, and settings for their cover and altitude (WebGPU)
+- **Shadows** — the relief casts its shadows across the valleys and onto the aircraft, from maps of the terrain marched toward the sun or the moon (edges softened by the size of the sun's disc), and the aircraft casts its own on itself and on the ground (WebGPU; a Shadows setting)
 - **Time of day** — the sun follows the date and the local solar time (NOAA formulas), with time frozen, real time or accelerated up to ×600
 - **Night** — stars turning with the hour, the moon with its phases and moonlight, an exposure that follows the falling light, night vision that fades colors into a bluish grey, and city lights from NASA's Black Marble imagery, to which the exposure adapts when a town fills the view
 - **Aircraft lights** — position lights, flashing red beacons and white wingtip strobes (switched with `O`) with their glare, engine glow with thrust and an afterburner flame with shock diamonds
@@ -188,7 +189,7 @@ cache/
 ├── css/main.css               Stylesheet (CSS custom properties)
 ├── js/
 │   ├── app.js                 Orchestrator: init, input bindings, render loop
-│   ├── aircraft/              Rafale GLTF model loading & animation, control surfaces, aircraft lights & engine glow
+│   ├── aircraft/              Rafale GLTF model loading & animation, control surfaces, aircraft lights & engine glow, its shadow
 │   ├── atmosphere/            Atmospheric scattering, aerial perspective volume, sun & moon ephemerides, night exposure
 │   ├── clouds/                Volumetric clouds (noise textures, ray march, temporal upscaling), their shadows, light shafts and light on the aircraft
 │   ├── benchmark/             Automated perf testing & baseline comparison
@@ -201,7 +202,7 @@ cache/
 │   ├── rendering/             Render pipeline (HDR scene pass, TAAU, glow pass, bloom, night vision, tone mapping), dynamic resolution
 │   ├── sim/                   Fixed-step simulation clock, standard atmosphere, entity registry
 │   ├── scene/                 Renderer, scene, camera & lights factory
-│   ├── terrain/               Real-world terrain manager (three-tile integration), city lights
+│   ├── terrain/               Real-world terrain manager (three-tile integration), shadows of the relief, contour map, city lights
 │   ├── ui/                    HUD instruments, flight plan menu, minimap, settings menu
 │   └── utils/                 Reactive config, settings schema, quality presets, stored settings, logger
 ├── assets/

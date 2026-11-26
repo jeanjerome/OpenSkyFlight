@@ -158,6 +158,8 @@ MeshStandardNodeMaterial.prototype.setupEnvironment = function (builder) {
   return envNode ? new ReflectionEnvironmentNode(envNode) : null;
 };
 
+const _worldFromECEF = /* @__PURE__ */ new THREE.Matrix4();
+
 /**
  * Physically based atmosphere (Bruneton's precomputed scattering with Hillaire's
  * multiple-scattering LUT, see vendor/takram): the sky behind the scene, the
@@ -327,14 +329,42 @@ export default class AtmosphericSky {
   setClouds(clouds) {
     this.clouds = clouds;
     cloudAmbient = clouds?.ambient ?? null;
-    if (clouds) {
-      // The clouds' shadows scale the direct light where objects receive
-      // shadows, without a shadow map of their own (no depth pass)
-      this.renderer.shadowMap.enabled = true;
-      this.sunLight.castShadow = true;
-      this.sunLight.shadow.shadowNode = clouds.shadow.node;
-    }
+    this._updateShadowNode();
     this._applyMode();
+  }
+
+  /**
+   * Direction toward the light of the sun or the moon, in world space
+   * @param {THREE.Vector3} target
+   * @returns {THREE.Vector3} target
+   */
+  lightDirectionWorld(target) {
+    _worldFromECEF.copy(this.atmosphere.matrixWorldToECEF.value).invert();
+    return target.copy(this.lightDirectionECEF.value).transformDirection(_worldFromECEF);
+  }
+
+  /**
+   * Shadows of the relief on the ground and the aircraft, and of the aircraft
+   * @param {?import('../terrain/TerrainShadow.js').default} terrainShadow
+   * @param {?import('../aircraft/AircraftShadow.js').default} aircraftShadow
+   */
+  setShadows(terrainShadow, aircraftShadow) {
+    this.terrainShadow = terrainShadow;
+    this.aircraftShadow = aircraftShadow;
+    this._updateShadowNode();
+  }
+
+  /**
+   * The shadows of the clouds, of the relief and of the aircraft scale the
+   * direct light where objects receive shadows; only the aircraft's has a
+   * shadow map (see AircraftShadow)
+   */
+  _updateShadowNode() {
+    const factors = [this.clouds?.shadow.node, this.terrainShadow?.node, this.aircraftShadow?.node].filter(Boolean);
+    if (factors.length === 0) return;
+    this.renderer.shadowMap.enabled = true;
+    this.sunLight.castShadow = true;
+    this.sunLight.shadow.shadowNode = factors.reduce((product, factor) => product.mul(factor));
   }
 
   _isSarMode() {

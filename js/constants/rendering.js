@@ -238,3 +238,13 @@ export const CITY_LIGHTS_ADAPTATION_ALBEDO = 0.2;
 /** Rates (per second, in stops) at which that adaptation follows a brighter or a darker view */
 export const CITY_LIGHTS_ADAPTATION_SPEED_TO_BRIGHT = 2;
 export const CITY_LIGHTS_ADAPTATION_SPEED_TO_DARK = 0.7;
+
+/** Texels across the shadow map fitted around the aircraft (see AircraftShadow) */
+export const AIRCRAFT_SHADOW_MAP_SIZE = 2048;
+
+/**
+ * Layer of the objects drawn into the aircraft's shadow map (the airframe),
+ * besides layer 0: the shadow pass then skips the rest of the scene, the
+ * terrain tiles above all, instead of sorting them out after culling
+ */
+export const SHADOW_CASTER_LAYER = 4;

@@ -27,6 +27,8 @@ import AtmosphericSky from './atmosphere/AtmosphericSky.js';
 import CityLights from './terrain/CityLights.js';
 import { REFERENCE_VIEWS } from './constants/referenceViews.js';
 import VolumetricClouds from './clouds/VolumetricClouds.js';
+import TerrainShadow from './terrain/TerrainShadow.js';
+import AircraftShadow from './aircraft/AircraftShadow.js';
 import BenchmarkRunner from './benchmark/BenchmarkRunner.js';
 import BenchmarkComparator from './benchmark/BenchmarkComparator.js';
 import GPUTimer from './benchmark/GPUTimer.js';
@@ -151,6 +153,19 @@ async function initApp() {
     .catch((err) => {
       Logger.warn('App', 'Failed to load Rafale model: ' + err.message);
     });
+
+  // Shadows of the relief (render targets read with linear filtering: float32-filterable) and of the aircraft
+  const terrainShadow = renderer.backend.isWebGPUBackend ? new TerrainShadow(geoTerrainManager, atmosphericSky) : null;
+  const aircraftShadow = new AircraftShadow(atmosphericSky, aircraftManager);
+  atmosphericSky.setShadows(terrainShadow, aircraftShadow);
+  const applyShadows = () => {
+    terrainShadow?.setEnabled(CONFIG.shadows);
+    aircraftShadow.setEnabled(CONFIG.shadows);
+  };
+  applyShadows();
+  onChange((key) => {
+    if (key === 'shadows') applyShadows();
+  });
 
   // --- Systems ---
   const benchmarkRunner = new BenchmarkRunner();
@@ -697,6 +712,8 @@ async function initApp() {
     atmosphericSky.groundLightsLuminance = cityLights.viewLuminance;
     atmosphericSky.update(dt);
     cityLights.update(camera, groundElevation, atmosphericSky.sunElevation, dt);
+    terrainShadow?.update(renderer, camera, Math.min(frameTimeMs / 1000, MAX_DELTA_TIME));
+    aircraftShadow.update();
     if (timer) timer.begin('render');
     gpuTimer.beginFrame();
     renderer.info.reset();

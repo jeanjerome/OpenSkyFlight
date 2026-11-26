@@ -58,3 +58,31 @@ export const CONTOUR_MIN_SPACING = 10;
  */
 export const CONTOUR_THINNING_DISTANCE = 4000;
 export const CONTOUR_MIN_THICKNESS = 0.4;
+
+/**
+ * Maps of the terrain's shadows, centred below the camera, finest first:
+ * width (m), texels across, least seconds between two redraws as the tiles on
+ * display change, and frames the march toward the light is spread over.
+ */
+export const TERRAIN_SHADOW_CASCADES = [
+  { span: 30e3, size: 2048, refresh: 1, slices: 4 },
+  { span: 240e3, size: 1024, refresh: 4, slices: 1 },
+];
+
+/** Samples of the march toward the light, spaced geometrically up to the farthest blocker sought */
+export const TERRAIN_SHADOW_STEPS = 128;
+
+/** Farthest relief that can shade a point (m): a 4 000 m drop seen 2.3° above the horizon */
+export const TERRAIN_SHADOW_MAX_DISTANCE = 100e3;
+
+/** A map is redrawn when the camera has moved this fraction of its width from the map's centre */
+export const TERRAIN_SHADOW_RECENTRE = 0.15;
+
+/** A map is redrawn when the light has turned by this much (radians) */
+export const TERRAIN_SHADOW_LIGHT_CHANGE = 0.002;
+
+/** Tangent of the angular radius of the sun's disc, which spreads the edges of the shadows */
+export const SUN_ANGULAR_RADIUS = 0.00465;
+
+/** Lowest light elevation the shadows are cast at (tangent): below, the direct light has faded out */
+export const TERRAIN_SHADOW_MIN_ELEVATION = 0.01;

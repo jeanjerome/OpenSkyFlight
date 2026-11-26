@@ -6,6 +6,7 @@ import AircraftLights from './AircraftLights.js';
 import EngineExhaust from './EngineExhaust.js';
 import { exhaustJet } from '../flight/exhaust.js';
 import ControlSurfaces from './ControlSurfaces.js';
+import { SHADOW_CASTER_LAYER } from '../constants/rendering.js';
 import {
   AIRCRAFT_TARGET_LENGTH,
   VISUAL_ROLL_FACTOR,
@@ -81,9 +82,13 @@ export default class AircraftManager {
         child.material.map = texture;
         child.material.needsUpdate = true;
       }
-      // The airframe darkens under and inside the clouds (their shadows scale
-      // the direct light); the lights and the exhaust, added below, glow on
-      if (child.isMesh) child.receiveShadow = true;
+      // The airframe darkens under and inside the clouds and in the shade of
+      // the relief (their shadows scale the direct light) and casts its own
+      // shadow; the lights and the exhaust, added below, glow on
+      if (child.isMesh) {
+        child.receiveShadow = child.castShadow = true;
+        child.layers.enable(SHADOW_CASTER_LAYER);
+      }
     });
 
     const hiddenGearParts = new Set([
