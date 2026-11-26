@@ -792,10 +792,42 @@ plein sec (cran), un nouvel appui allume la PC (105 kN à 6 000 m) ; traction cl
 7,5 g ; caméra liée à la cellule en vol dos ; canards braqués en aérofrein ; `F` aller-retour ;
 piqué dans le relief : crash et redémarrage ; aucune erreur console.
 
+## Banc de pilotage
+
+Demandé par l'utilisateur le 2026-11-27 : un banc que l'agent exerce lui-même dans l'application.
+
+- `js/flight/PilotBot.js` : pilote scripté qui vole comme un joueur à la manette, par les entrées du
+  mode Simulation (`applyControls` : manche, palonnier, manette des gaz, aérofrein et freins ; poignée
+  du train par `toggleGear`), donc à travers les commandes de vol électriques, la physique au sol et
+  les crashs. Tour de piste à gauche depuis une piste : alignement freins serrés, roulage plein sec sur
+  l'axe (roue avant), rotation à 130 kt vers 12°, montée à 8° et train rentré à 60 m, branche vent
+  traversier à 450 m et 220 kt, vent arrière à 3 km de l'axe (train sorti par le travers du seuil,
+  180 kt), étape de base à 5 km, finale sur l'axe et le plan de 3° à 140 kt, arrondi sous 15 m,
+  réduction sous 6 m, roulage freiné jusqu'à l'arrêt. Virages à 45° (25° en finale) commencés à leur
+  rayon de leur ligne ; lois : pente par le manche (gain réglé sur la vitesse), inclinaison pour le
+  cap, vitesse par la manette des gaz (avec amortissement), cap et écart latéral sur une ligne
+  parallèle à la piste. Commandes à 60 Hz de temps simulé, appelé à chaque pas de simulation.
+- Rapport : phases et instants, course au décollage, vitesse de décollage, facteurs de charge, écart
+  quadratique d'altitude en vent arrière, écarts quadratiques d'axe et de plan en finale stabilisée
+  (3 km à 500 m), toucher (vitesse verticale de la première roue, distance après le seuil, écart
+  latéral, vitesse, assiette), distance de freinage, crash.
+- Sous Node : `tests/pilotBot.test.js` vole le tour sur une piste plate synthétique (≈ 0,1 s).
+- Dans l'application : `npm run flight:scenario -- --out <dossier> [--airport LSGG] [--runway 0]
+  [--end 0] [--time-scale 3] [--set clé=valeur]` (`scripts/flight-scenario.js`, Chrome) : départ
+  d'une vraie piste, tour de piste accéléré (`window.osf.setTimeScale`, le terrain se charge en temps
+  réel), une capture par phase et `scenario.json` (rapport, erreurs de la page). `window.osf` :
+  `startCircuit()`, `pilot()`, `stopPilot()`, `setTimeScale(n)`.
+- Premier passage, LSGG 04 (3 900 × 50 m), ×3, ≈ 2 min réelles : décollage en 638 m à 162 kt (plein
+  sec, sans PC), vent arrière à 11,8 m d'altitude près, finale à 0,4 m de l'axe et 7,6 m du plan,
+  toucher à 1,69 m/s à 233 m du seuil, 135 kt, 12,2° d'assiette, arrêt en 716 m, aucun crash ni
+  erreur. Sur piste plate sous Node : 599 m, 1,82 m/s à 191 m, 695 m. Corrigé au passage : le guidage
+  d'approche s'affichait au roulage (train sorti sur la piste).
+
 ## Journal des sessions
 
 | Date | Fait | Reste / prochaine étape |
 |---|---|---|
+| 2026-11-27 | Banc de pilotage : pilote scripté (tour de piste complet par les entrées du joueur), test Node sur piste plate, `npm run flight:scenario` dans Chrome sur une vraie piste avec rapport et captures ; premier passage à LSGG 04 réussi | Scénarios supplémentaires (nuit, autres pistes, vent quand il existera) ; ressenti en vol par l'utilisateur ; fusion de la branche |
 | 2026-11-27 | G3.8 : guidage d'approche sur le HUD (seuil visé, écarts d'alignement et de pente, PAPI virtuel), pilote automatique de cap et d'altitude (`C`) ; tests ; vérifié dans Chrome (LSGG 04). Lot G3 terminé | Ressenti en vol par l'utilisateur (décollage, approche, atterrissage) ; fusion de `feat/takeoff-landing` à sa demande ; lot de rendu 6 ou G4 ensuite |
 | 2026-11-27 | G3.7 : balisage lumineux des pistes éclairées (bords, axe codé, seuils verts, fins rouges, rampe d'approche, PAPI selon l'angle de l'œil), allumé au crépuscule ou par mauvaise visibilité ; occultation tolérante au jitter du TAA ; coût dans le bruit ; vérifié dans Chrome (LSGG, CDG) | G3.8 (guidage d'approche sur le HUD, pilote automatique de cap et d'altitude) |
 | 2026-11-26 | G3.6 : pistes revêtues et marquages OACI peints dans la couleur du terrain (seuils, numéros, point de visée, zone de toucher, axe, bandes latérales), antialiasés sur l'empreinte en travers ; coût non mesurable ; vérifié dans Chrome (LSGG), et par l'utilisateur à CDG ; à sa demande, tuiles jusqu'au zoom 18 autour des pistes (+0,45 ms près du sol sur un aéroport) | G3.7 (balisage lumineux, PAPI) |
