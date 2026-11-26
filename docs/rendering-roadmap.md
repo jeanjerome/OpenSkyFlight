@@ -1135,7 +1135,7 @@ altitudes calculées dans un worker, transitions de niveau de détail en fondu (
 ombres du relief (vallées à l'ombre au soleil bas, avion compris) et de l'avion, normales à la
 résolution de la source, mode courbes de niveau refait. Vues : 3,8 à 4,4 ms (lot 4 : 3,6 à 4,1 ;
 écarts de série ±0,4 ms ; les ombres ajoutent ≈ 0,1 à 0,2 ms, l'avion dessiné dans sa carte d'ombre
-53 draw calls), triangles +16 à +22 % (grilles emboîtées de L5.1). Vols : p1 62,9 → 87,7 (vol par
+53 draw calls), triangles +16 à +24 % (grilles emboîtées de L5.1). Vols : p1 62,9 → 87,7 (vol par
 défaut) et 59,2 → 87,7 (plan 1), sans frame lente : le calcul des altitudes sorti du thread
 principal (L5.1) compte pour l'essentiel. Critère de sortie respecté (p1 en hausse).
 
