@@ -27,6 +27,7 @@ import {
   vec3,
   vec4,
 } from 'three/tsl';
+import RunwaysInWorld from '../airports/RunwaysInWorld.js';
 
 /** Runways drawn at once: the nearest to the camera */
 const MAX_RUNWAYS = 8;
@@ -36,9 +37,6 @@ const DRAW_DISTANCE = 30000;
 
 /** Camera move after which the runways drawn are chosen again (m) */
 const RESELECT_DISTANCE = 1000;
-
-/** Width given to runways whose width is not published (m) */
-const DEFAULT_WIDTH = 30;
 
 /**
  * Albedo of the pavements and of the paint; the imagery keeps a share of the
@@ -158,9 +156,7 @@ export default class RunwayMarkings {
       'float',
     ).setGroup(renderGroup);
     this._nodes = new Map();
-    this._runways = null;
-    this._origin = null;
-    this._world = [];
+    this._world = new RunwaysInWorld();
     this._from = new THREE.Vector3(Infinity, 0, 0);
   }
 
@@ -185,58 +181,20 @@ export default class RunwayMarkings {
    * @param {THREE.Vector3} camera - camera position
    */
   update(runways, terrain, camera) {
-    const origin = terrain.tileMap;
-    if (!origin) return;
-    if (runways !== this._runways || origin !== this._origin) {
-      this._runways = runways;
-      this._origin = origin;
-      this._world = runways.flatMap((runway) => this._place(runway, terrain) ?? []);
-      this._from.set(Infinity, 0, 0);
-    }
+    if (this._world.update(runways, terrain)) this._from.set(Infinity, 0, 0);
     if (this._from.distanceToSquared(camera) < RESELECT_DISTANCE ** 2) return;
     this._from.copy(camera);
 
-    const near = this._world
-      .map((runway) => ({ runway, distance: runway.distanceTo(camera.x, camera.z) }))
-      .filter(({ distance }) => distance < DRAW_DISTANCE)
-      .sort((a, b) => a.distance - b.distance)
-      .slice(0, MAX_RUNWAYS);
-    near.forEach(({ runway }, i) => {
-      this._slots[i * 3].copy(runway.data[0]);
-      this._slots[i * 3 + 1].copy(runway.data[1]);
-      this._slots[i * 3 + 2].copy(runway.data[2]);
+    const paved = ({ runway }) => pavementOf(runway.surface) !== null;
+    const near = this._world.nearest(camera.x, camera.z, MAX_RUNWAYS, DRAW_DISTANCE, paved);
+    near.forEach((placed, i) => {
+      const { runway, x0, z0, ux, uz, length, width, k } = placed;
+      const [a, b] = runway.ends;
+      this._slots[i * 3].set(x0, z0, ux, uz);
+      this._slots[i * 3 + 1].set(length, width / 2, k, pavementOf(runway.surface));
+      this._slots[i * 3 + 2].set(designationCode(a.ident), designationCode(b.ident), a.displaced, b.displaced);
     });
     this._count.value = near.length;
-  }
-
-  /** A runway in world metres, null when unpaved or outside the map */
-  _place(runway, terrain) {
-    const pavement = pavementOf(runway.surface);
-    if (pavement === null) return null;
-    const [a, b] = runway.ends;
-    const p0 = terrain.geoToWorld(a.lat, a.lon, 0);
-    const p1 = terrain.geoToWorld(b.lat, b.lon, 0);
-    if (!p0 || !p1) return null;
-    const dx = p1.x - p0.x;
-    const dz = p1.z - p0.z;
-    const worldLength = Math.hypot(dx, dz);
-    if (!(worldLength > 1)) return null;
-    // World metres per true metre: the map is exact at its centre's latitude only
-    const k = worldLength / Math.max(1, runway.length || worldLength);
-    const width = runway.width > 0 ? runway.width : DEFAULT_WIDTH;
-    const data = [
-      new THREE.Vector4(p0.x, p0.z, dx / worldLength, dz / worldLength),
-      new THREE.Vector4(worldLength / k, width / 2, k, pavement),
-      new THREE.Vector4(designationCode(a.ident), designationCode(b.ident), a.displaced, b.displaced),
-    ];
-    return {
-      data,
-      /** Distance from a world position to the runway's segment (world metres) */
-      distanceTo(x, z) {
-        const t = Math.max(0, Math.min(1, ((x - p0.x) * dx + (z - p0.z) * dz) / (worldLength * worldLength)));
-        return Math.hypot(x - p0.x - t * dx, z - p0.z - t * dz);
-      },
-    };
   }
 
   _build(imagery) {
