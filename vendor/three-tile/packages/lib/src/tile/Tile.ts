@@ -93,6 +93,17 @@ export class Tile extends Object3D<TTileEventMap> {
 	/** 瓦片包围盒（世界坐标） */
 	private _bbox: Box3 | null = null;
 
+	/**
+	 * Blend of the drawn surface from the parent's (0) to the tile's own (1).
+	 * Tiles replacing their parent start on its surface and morph to their own;
+	 * tiles giving way to their parent morph back to its surface first: the
+	 * relief does not pop as the level of detail changes (see TerrariumTSL).
+	 */
+	public morph = 1;
+
+	/** Whether this tile, or one of its ancestors, merges its children back into itself */
+	private _merging = false;
+
 	/** 瓦片模型 */
 	private _model: Mesh | undefined;
 	public get model() {
@@ -308,7 +319,11 @@ export class Tile extends Object3D<TTileEventMap> {
 	 */
 	protected LOD(params: TileUpdateParames) {
 		const { loader, minLevel, maxLevel, LODThreshold } = params;
-		const action = LODEvaluate(this, minLevel, maxLevel, LODThreshold);
+		const parentMerging = this.parent instanceof Tile && this.parent._merging;
+		let action = LODEvaluate(this, minLevel, maxLevel, LODThreshold);
+		// No new detail under a tile merging its children
+		if (action === LODAction.create && parentMerging) action = LODAction.none;
+		this._merging = parentMerging || action === LODAction.remove;
 		if (action === LODAction.create) {
 			// console.log("create", this.name);
 			const newTiles = createChildren(this, loader);
@@ -318,14 +333,63 @@ export class Tile extends Object3D<TTileEventMap> {
 				child.updateMatrixWorld();
 				this._root.dispatchEvent({ type: "tile-created", tile: child });
 			});
-		} else if (action === LODAction.remove) {
-			// console.log("remove", this.name);
-			if (this.model) {
-				this.showing = true;
-				this.unLoad(loader, false);
-			}
+		} else if (this._merging && !this.isLeaf) {
+			this._merge(loader);
 		}
 		return action;
+	}
+
+	/**
+	 * Merges the children back into the tile once they have morphed back to
+	 * its surface, the finest levels first. Children not shown yet go at once.
+	 */
+	private _merge(loader: ITileLoader) {
+		if (!this.model) return;
+		const children = this.subTiles!;
+		const shown = children.some(child => child.showing || !child.isLeaf);
+		if (shown && children.some(child => !child.isLeaf || child.morph > 0)) return;
+		this.morph = 1;
+		this.showing = true;
+		this.unLoad(loader, false);
+	}
+
+	/**
+	 * Advances the morph of a drawn tile: towards its parent's surface while
+	 * the parent merges its children, towards its own otherwise. A tile about
+	 * to give way to its children finishes four times faster.
+	 * @param step - morph covered in this frame at the normal pace
+	 */
+	public advanceMorph(step: number) {
+		if (!this.showing) return;
+		if (this.parent instanceof Tile && this.parent._merging) {
+			this.morph = Math.max(0, this.morph - step);
+		} else {
+			this.morph = Math.min(1, this.morph + (this.isLeaf ? step : 4 * step));
+			if (!this.isLeaf) this._split();
+		}
+	}
+
+	/**
+	 * Shows the children in place of the tile once all four have loaded and
+	 * the tile has finished its own morph; they start on its surface. Until
+	 * then, the loaded children stay hidden (a model is visible when created).
+	 */
+	private _split() {
+		const children = this.subTiles;
+		if (!children) return;
+		const loaded = children.every(child => child.model);
+		if (!this.showing) {
+			children.forEach(child => child.model && (child.showing = loaded));
+			this.showing = !loaded;
+		} else if (loaded && !this._merging && this.morph >= 1) {
+			children.forEach(child => {
+				child.morph = 0;
+				child.showing = true;
+			});
+			this.showing = false;
+		} else {
+			children.forEach(child => child.model && (child.showing = false));
+		}
 	}
 
 	/**
@@ -335,12 +399,7 @@ export class Tile extends Object3D<TTileEventMap> {
 		const parent = this.parent;
 		if (parent instanceof Tile) {
 			if (parent.model) {
-				const subTiles = parent.subTiles;
-				if (subTiles) {
-					const allLoaded = !subTiles.some(child => !child.model);
-					subTiles.forEach(child => (child.showing = allLoaded));
-					parent.showing = !allLoaded;
-				}
+				parent._split();
 			} else {
 				this.showing = true;
 			}

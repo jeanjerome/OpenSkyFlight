@@ -21,18 +21,31 @@ import {
 	positionLocal,
 	uv,
 	texture,
-	min,
-	max,
+	mix,
+	floor,
+	fract,
+	select,
 	round,
 	modelWorldMatrix,
 	cameraPosition,
 	vec4,
 	uniform,
+	materialReference,
 	If,
 } from "three/tsl";
 import { EARTH_RADIUS } from "../tile/curvature";
-import { MAX_STITCH_LEVELS } from "../loader/terrariumShaderLoader/grid";
-import { DataTexture, FloatType, RedFormat, Vector4 } from "three";
+import { MAX_STITCH_LEVELS, parentRow } from "../loader/terrariumShaderLoader/grid";
+import {
+	DataTexture,
+	FloatType,
+	LinearFilter,
+	LinearMipmapLinearFilter,
+	RedFormat,
+	RGBAFormat,
+	SRGBColorSpace,
+	Vector2,
+	Vector4,
+} from "three";
 import type { Mesh, Texture } from "three";
 
 // Use any for MeshStandardNodeMaterial since it's in three/webgpu, not in three types
@@ -41,6 +54,8 @@ type NodeMaterial = any;
 interface ElevationNodes {
 	position: any;
 	normal: any;
+	/** How far the tile's surface is blended towards its parent's */
+	coarseness: any;
 }
 
 let sharedNodes: ElevationNodes | null = null;
@@ -65,9 +80,16 @@ function getElevationNodes(): ElevationNodes {
 	const heightMap: any = (texture(placeholder) as any).onObjectUpdate(
 		({ object }: { object: Mesh }) => object.geometry.userData.heightTexture as Texture,
 	);
-	// Levels by which the neighbours drawn along the west, east, south and
-	// north edges are coarser than the tile (0: same level or finer), set on
-	// `object.userData.edgeLevels` by the application as the tiles change
+	// How far the tile's surface is blended towards its parent's (0: its own,
+	// 1: its parent's), set on `object.userData.coarseness` as the tile morphs
+	const coarseness: any = (uniform(0) as any).onObjectUpdate(
+		({ object }: { object: Mesh }) => (object.userData.coarseness as number) ?? 0,
+	);
+	// Coarseness of the surfaces drawn along the west, east, south and north
+	// edges, in levels above the tile's: d + f blends by f the surfaces drawn
+	// d and d + 1 levels coarser (0: the tile's own, 1: its parent's). Set on
+	// `object.userData.edgeLevels` by the application from the coarser side
+	// of each edge, as the tiles change and morph.
 	const noStitch = new Vector4();
 	const edgeLevels: any = (uniform(new Vector4()) as any).onObjectUpdate(
 		({ object }: { object: Mesh }) => (object.userData.edgeLevels as Vector4) ?? noStitch,
@@ -86,24 +108,37 @@ function getElevationNodes(): ElevationNodes {
 
 		// Exact texel of a vertex (i, j in [-1, n]): no filtering, the value is the elevation at the vertex
 		const heightAt = (i: any, j: any) => heightMap.load(ivec2(i.add(int(1)), j.add(int(1)))).r;
-		// Elevation along an edge as a neighbour d levels coarser draws it
-		const profileAt = (edge: number, d: any, k: any) =>
-			heightMap.load(ivec2(k, width.add(int(edge * MAX_STITCH_LEVELS - 1)).add(d))).r;
+		// The parent's surface under the vertex, from row parentRow(W) + j + 1
+		const parentStart = width.add(int(parentRow(0) + 1));
+		const parentAt = (i: any, j: any) => heightMap.load(ivec2(i.add(int(1)), j.add(parentStart))).r;
+		// The surface drawn at the vertex, the tile's own blended towards its parent's
+		const surfaceAt = (i: any, j: any) => mix(heightAt(i, j), parentAt(i, j), coarseness);
 
 		// Grid indices of this vertex (skirt vertices share the UVs of the edge)
 		const cell = round(uv().mul(lastF)).toVar();
 		const i = cell.x.toInt().toVar();
 		const j = cell.y.toInt().toVar();
-		const elevation = heightAt(i, j).toVar();
+		const own = heightAt(i, j).toVar();
+		const elevation = mix(own, parentAt(i, j), coarseness).toVar();
 
-		// On an edge along a coarser neighbour, the edge follows the neighbour's
-		// edge: no step between them. A corner follows the coarsest of its two neighbours.
-		const stitched = int(0).toVar();
+		// Elevation along an edge as the surface d levels coarser draws it (0: the tile's own)
+		const profileAt = (edge: number, d: any, k: any) =>
+			select(
+				d.equal(int(0)),
+				own,
+				heightMap.load(ivec2(k, width.add(int(edge * MAX_STITCH_LEVELS - 1)).add(d))).r,
+			);
+
+		// An edge follows the coarser surface of its two sides: no step between
+		// tiles of different levels, nor between tiles morphing apart. A corner
+		// follows the coarser of its two edges.
+		const drawn = coarseness.toVar();
 		const stitch = (onEdge: any, level: any, edge: number, k: any) => {
-			const d = level.toInt();
-			If(onEdge.and(d.greaterThan(stitched)), () => {
-				elevation.assign(profileAt(edge, d, k));
-				stitched.assign(d);
+			If(onEdge.and(level.greaterThan(drawn)), () => {
+				const d = floor(level).toInt();
+				const next = d.add(int(1)).min(int(MAX_STITCH_LEVELS));
+				elevation.assign(mix(profileAt(edge, d, k), profileAt(edge, next, k), fract(level)));
+				drawn.assign(level);
 			});
 		};
 		stitch(i.equal(int(0)), edgeLevels.x, 0, j);
@@ -114,8 +149,8 @@ function getElevationNodes(): ElevationNodes {
 		// Normal from central differences over the neighbouring vertices, the
 		// ring included, in tile local space (X=east, Y=north, Z=up)
 		const step = float(2).div(lastF);
-		const tangent = vec3(step, float(0.0), heightAt(i.add(int(1)), j).sub(heightAt(i.sub(int(1)), j)));
-		const bitangent = vec3(float(0.0), step, heightAt(i, j.add(int(1))).sub(heightAt(i, j.sub(int(1)))));
+		const tangent = vec3(step, float(0.0), surfaceAt(i.add(int(1)), j).sub(surfaceAt(i.sub(int(1)), j)));
+		const bitangent = vec3(float(0.0), step, surfaceAt(i, j.add(int(1))).sub(surfaceAt(i, j.sub(int(1)))));
 		vNormal.assign(cross(tangent, bitangent).normalize());
 
 		// Displace along Z (tile local elevation axis), less the curvature of
@@ -127,8 +162,41 @@ function getElevationNodes(): ElevationNodes {
 		return pos;
 	})();
 
-	sharedNodes = { position, normal: transformNormalToView(vNormal) };
+	sharedNodes = { position, normal: transformNormalToView(vNormal), coarseness };
 	return sharedNodes;
+}
+
+let sharedImagery: any = null;
+
+/**
+ * Builds the imagery node once for all tiles: the tile's own imagery
+ * cross-faded with its parent's as the tile morphs, so that the finer imagery
+ * fades in with the relief. The parent's texture is bound per object, like
+ * the height map, so that every tile keeps the same compiled graph.
+ */
+function getImageryNode(): any {
+	if (sharedImagery) return sharedImagery;
+	const { coarseness } = getElevationNodes();
+
+	// Shaped like the imagery: the colour space conversion and the sampler are built from it
+	const placeholder = new DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, RGBAFormat);
+	placeholder.colorSpace = SRGBColorSpace;
+	placeholder.magFilter = LinearFilter;
+	placeholder.minFilter = LinearMipmapLinearFilter;
+	placeholder.generateMipmaps = true;
+	placeholder.needsUpdate = true;
+
+	// Quarter of the parent the tile covers, in the parent's UVs
+	const noOffset = new Vector2();
+	const offset: any = (uniform(new Vector2()) as any).onObjectUpdate(
+		({ object }: { object: Mesh }) => (object.userData.parentOffset as Vector2) ?? noOffset,
+	);
+	const parentImagery: any = (texture(placeholder, uv().mul(0.5).add(offset)) as any).onObjectUpdate(
+		({ object, material }: { object: Mesh; material: { map?: Texture | null } }) =>
+			(object.userData.parentMap as Texture) ?? material.map ?? placeholder,
+	);
+	sharedImagery = mix(materialReference("map", "texture"), parentImagery, coarseness);
+	return sharedImagery;
 }
 
 /**
@@ -141,10 +209,12 @@ function getElevationNodes(): ElevationNodes {
  *
  * The elevations come from `geometry.userData.heightTexture` of the mesh being
  * drawn: a float texture with one elevation per grid vertex (row 0 = south),
- * a ring of vertices around the grid and the edge profiles drawn by coarser
- * neighbours (see TerrariumShaderLoader). `object.userData.edgeLevels` (a
- * Vector4: west, east, south, north) says how much coarser the neighbours
- * drawn along each edge are; the edges follow them.
+ * a ring of vertices around the grid, the edge profiles drawn by coarser
+ * neighbours and the parent's surface (see TerrariumShaderLoader).
+ * `object.userData.coarseness` blends the tile's surface towards its parent's
+ * as it morphs; `object.userData.edgeLevels` (a Vector4: west, east, south,
+ * north) gives the coarseness of the surface drawn along each edge, which the
+ * edges follow.
  *
  * @param material  The tile material to augment (MeshStandardNodeMaterial)
  */
@@ -152,4 +222,16 @@ export function applyTerrariumElevation(material: NodeMaterial): void {
 	const { position, normal } = getElevationNodes();
 	material.positionNode = position;
 	material.normalNode = normal;
+}
+
+/**
+ * Cross-fades the imagery of a tile material with the parent's as the tile
+ * morphs. `object.userData.parentMap` is the parent's imagery (the tile's own
+ * is used when unset) and `object.userData.parentOffset` (a Vector2) the
+ * offset of the quarter the tile covers in the parent's UVs.
+ *
+ * @param material  The tile material, with its imagery in `map`
+ */
+export function applyTerrariumImagery(material: NodeMaterial): void {
+	material.colorNode = getImageryNode();
 }

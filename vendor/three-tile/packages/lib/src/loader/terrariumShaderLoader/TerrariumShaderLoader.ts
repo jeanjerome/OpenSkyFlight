@@ -29,7 +29,10 @@ import HeightsWorker from "./heights.worker?worker&inline";
  *   south and north edges (from the south-west corner) as a neighbour d
  *   levels coarser draws it, linear between its own vertices, for d = 1 to
  *   MAX_STITCH_LEVELS. The vertex shader moves the edge onto the profile of
- *   the coarsest neighbour actually drawn there (see TerrariumTSL).
+ *   the coarsest neighbour actually drawn there (see TerrariumTSL);
+ * - then W rows: the parent's surface under the grid and ring, as the parent
+ *   draws it on its triangles, which the tile morphs from as it replaces its
+ *   parent and back to before it gives way to it (see Tile.morph).
  *
  * The source tiles are downloaded, decoded and kept by a worker, which
  * computes the elevations off the main thread (see heights.worker).

@@ -59,6 +59,9 @@ export class TileMap extends Object3D<TileMapEventMap> {
 	/** 瓦片树更新间隔，单位毫秒（默认100ms） */
 	public updateInterval = 100;
 
+	/** Seconds a tile takes to morph between its parent's surface and its own (0: no morph) */
+	public morphDuration = 0.75;
+
 	/** 根瓦片 */
 	public readonly rootTile: Tile;
 
@@ -275,6 +278,18 @@ export class TileMap extends Object3D<TileMapEventMap> {
 			this.dispatchEvent({ type: "update", delta: elapseTime });
 			this._mapClock.start();
 		}
+	}
+
+	/**
+	 * Advances the morph of the drawn tiles between their parent's surface and
+	 * their own (see Tile.morph). Call every frame.
+	 * @param delta - seconds since the previous frame
+	 */
+	public updateMorph(delta: number) {
+		const step = this.morphDuration > 0 ? delta / this.morphDuration : 1;
+		this.rootTile.traverse(child => {
+			if (child instanceof Tile) child.advanceMorph(step);
+		});
 	}
 
 	/**

@@ -3,7 +3,7 @@
  * position on the globe (see TerrariumShaderLoader). Runs in the elevation worker.
  */
 
-import { gridCells, MAX_STITCH_LEVELS } from "./grid";
+import { gridCells, MAX_STITCH_LEVELS, parentRow } from "./grid";
 
 /** Pixels across a Terrarium tile */
 export const SOURCE_TILE_SIZE = 256;
@@ -31,7 +31,7 @@ function buildHeights(x: number, y: number, z: number, maxSource: number, sample
 	const cells = gridCells(z);
 	const n = cells + 1;
 	const width = n + 2;
-	const rows = width + 4 * MAX_STITCH_LEVELS;
+	const rows = parentRow(width) + width;
 	const heights = new Float32Array(width * rows);
 
 	// Elevation at the position (X, Y) = (column, row) / cells of zoom level
@@ -68,6 +68,38 @@ function buildHeights(x: number, y: number, z: number, maxSource: number, sample
 				const h1 = f > 0 ? (alongX ? at(zc, m + 1, fixed, coarse) : at(zc, fixed, m + 1, coarse)) : h0;
 				heights[row * width + k] = h0 + f * (h1 - h0);
 			}
+		}
+	}
+
+	// The parent's surface under every vertex of the grid and ring, as the
+	// parent draws it: on its triangles, split along the diagonal from the
+	// south-east to the north-west vertex of each cell (three-tile's grid
+	// indices). The tile morphs from it as it replaces its parent.
+	const zp = Math.max(z - 1, 0);
+	const parentCells = gridCells(zp);
+	const toParent = (index: number) => (index * parentCells) / (cells * 2 ** (z - zp));
+	// Position (X, Y) in parent cells, X eastward and Y southward
+	const parentAt = (X: number, Y: number) => {
+		const m = Math.floor(X);
+		const r = Math.floor(Y);
+		const fx = X - m;
+		const fs = Y - r;
+		const v = (column: number, row: number) => at(zp, column, row, parentCells);
+		// Only the vertices with a weight are read: the others may lie in source tiles not fetched
+		if (fs === 0) return fx === 0 ? v(m, r) : v(m, r) + fx * (v(m + 1, r) - v(m, r));
+		if (fx === 0) return v(m, r) + fs * (v(m, r + 1) - v(m, r));
+		const fn = 1 - fs;
+		if (fx + fn <= 1) {
+			const sw = v(m, r + 1);
+			return sw + fx * (v(m + 1, r + 1) - sw) + fn * (v(m, r) - sw);
+		}
+		const ne = v(m + 1, r);
+		return ne + (1 - fx) * (v(m, r) - ne) + (1 - fn) * (v(m + 1, r + 1) - ne);
+	};
+	const base = parentRow(width);
+	for (let j = -1; j <= n; j++) {
+		for (let i = -1; i <= n; i++) {
+			heights[(base + j + 1) * width + i + 1] = parentAt(toParent(x * cells + i), toParent((y + 1) * cells - j));
 		}
 	}
 	return { heights, width, rows };

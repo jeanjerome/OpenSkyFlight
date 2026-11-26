@@ -676,7 +676,8 @@ async function initApp() {
 
     // --- Terrain phase ---
     if (timer) timer.begin('terrain');
-    geoTerrainManager.update(camera.position);
+    // Wall-clock time: the tiles keep morphing as the camera moves in the paused menu
+    geoTerrainManager.update(camera, Math.min(frameTimeMs / 1000, MAX_DELTA_TIME));
     if (timer) timer.end('terrain');
 
     const farNeeded = REALWORLD_FAR_PLANE;

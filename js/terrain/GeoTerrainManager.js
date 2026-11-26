@@ -1,6 +1,15 @@
 import { Fn, float, vec2, vec3, uv, fract, mix, sin } from 'three/tsl';
 import * as THREE from 'three';
-import { LoaderFactory, TileMap, TileSource, applyTerrariumElevation, gridCells, MAX_STITCH_LEVELS } from 'three-tile';
+import {
+  LoaderFactory,
+  TileMap,
+  TileSource,
+  applyTerrariumElevation,
+  applyTerrariumImagery,
+  gridCells,
+  parentRow,
+  MAX_STITCH_LEVELS,
+} from 'three-tile';
 import { CONFIG, onChange, update } from '../utils/config.js';
 import ElevationProvider from '../geo/ElevationProvider.js';
 import { createContourMapNodes } from './ContourMap.js';
@@ -19,6 +28,13 @@ function latLonToMercator(lat, lon) {
   return { x, y };
 }
 
+
+/** Imagery texture of a tile mesh, null when it has none */
+function imageryOf(mesh) {
+  if (!mesh) return null;
+  const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  return materials.find((material) => material.map)?.map ?? null;
+}
 
 export default class GeoTerrainManager {
   static _isSynthetic(mode) {
@@ -139,6 +155,11 @@ export default class GeoTerrainManager {
 
     // Higher keeps finer tiles further away
     this.tileMap.LODThreshold = CONFIG.terrainLodThreshold;
+    // The tile tree is updated by update(), not by the renderer: tiles shown
+    // or hidden while rendering would be drawn with the morph and edges of the
+    // previous frame, and every render of the scene (shadow maps included)
+    // would update it from its own camera
+    this.tileMap.autoUpdate = false;
 
     // Center the map so that (lat, lon) is at world origin
     this._centerMercator = latLonToMercator(lat, lon);
@@ -184,6 +205,7 @@ export default class GeoTerrainManager {
       // Only apply to MeshStandardNodeMaterial (TileMaterial clones), not MeshBasicNodeMaterial
       if (!mat.isMeshStandardNodeMaterial) continue;
       applyTerrariumElevation(mat);
+      applyTerrariumImagery(mat);
       mat.emissiveNode = this._emissiveNode;
       mat._terrariumApplied = true;
       mat.needsUpdate = true;
@@ -223,7 +245,13 @@ export default class GeoTerrainManager {
     this._exposureNode = node;
   }
 
-  update(_cameraPosition) {
+  /**
+   * Updates the tile tree from the camera, then the morph and the edges of
+   * the drawn tiles, before the frame is rendered.
+   * @param {THREE.Camera} camera
+   * @param {number} delta - seconds since the previous frame
+   */
+  update(camera, delta) {
     if (!this.tileMap) return;
 
     // Transition: remove old terrain once new one has visible tiles
@@ -233,15 +261,19 @@ export default class GeoTerrainManager {
     }
 
     if (this._wireframeMode) this._enforceWireframe();
+    this.tileMap.update(camera);
+    this.tileMap.updateMorph(delta);
     this._updateEdgeLevels();
   }
 
   /**
-   * For each drawn tile, how many levels coarser the tiles drawn along its
-   * west, east, south and north edges are (0: same level or finer), read by
-   * the vertex shader to move the edges onto their coarser neighbours'.
-   * The neighbour along an edge is the drawn tile holding the middle of the
-   * edge, just outside it, at the tile's level or above.
+   * Coarseness of the surfaces drawn by each tile, read by the vertex shader:
+   * of the tile itself as it morphs (`userData.coarseness`: 0 its own
+   * surface, 1 its parent's), and along its west, east, south and north edges
+   * (`userData.edgeLevels`, in levels above the tile's), which follow the
+   * coarser side. A tile drawn at level z with morph m draws the surface of
+   * level z - 1 + m; the neighbour along an edge is the drawn tile holding the
+   * middle of the edge, just outside it, at the tile's level or above.
    */
   _updateEdgeLevels() {
     const drawn = this._drawnTiles;
@@ -249,24 +281,31 @@ export default class GeoTerrainManager {
     this.tileMap.rootTile.traverse((tile) => {
       if (tile.isTile && tile.showing) drawn.set(`${tile.z}/${tile.x}/${tile.y}`, tile);
     });
-    const levelOf = (z, u, v) => {
-      for (let level = z; level >= 0; level--) {
+    // Level of the surface drawn there by the neighbour, the tile's own when finer
+    const surfaceLevel = (tile, u, v) => {
+      for (let level = tile.z; level >= 0; level--) {
         const n = 2 ** level;
-        if (drawn.has(`${level}/${((Math.floor(u * n) % n) + n) % n}/${Math.floor(v * n)}`)) return z - level;
+        const neighbour = drawn.get(`${level}/${((Math.floor(u * n) % n) + n) % n}/${Math.floor(v * n)}`);
+        if (neighbour) return Math.min(level - 1 + neighbour.morph, tile.z - 1 + tile.morph);
       }
-      return 0;
+      return tile.z - 1 + tile.morph;
     };
     for (const tile of drawn.values()) {
       const n = 2 ** tile.z;
       const step = 0.25 / n / gridCells(tile.z);
-      const levels = (tile.model.userData.edgeLevels ??= new THREE.Vector4());
+      const { userData } = tile.model;
+      userData.coarseness = 1 - tile.morph;
+      // The parent's imagery fades out as the tile morphs (its own once done)
+      userData.parentMap = tile.morph < 1 && tile.parent?.isTile ? imageryOf(tile.parent.model) : null;
+      (userData.parentOffset ??= new THREE.Vector2()).set((tile.x & 1) * 0.5, (1 - (tile.y & 1)) * 0.5);
+      const levels = (userData.edgeLevels ??= new THREE.Vector4());
       levels.set(
-        levelOf(tile.z, tile.x / n - step, (tile.y + 0.5) / n),
-        levelOf(tile.z, (tile.x + 1) / n + step, (tile.y + 0.5) / n),
-        levelOf(tile.z, (tile.x + 0.5) / n, (tile.y + 1) / n + step),
-        levelOf(tile.z, (tile.x + 0.5) / n, tile.y / n - step),
+        surfaceLevel(tile, tile.x / n - step, (tile.y + 0.5) / n),
+        surfaceLevel(tile, (tile.x + 1) / n + step, (tile.y + 0.5) / n),
+        surfaceLevel(tile, (tile.x + 0.5) / n, (tile.y + 1) / n + step),
+        surfaceLevel(tile, (tile.x + 0.5) / n, tile.y / n - step),
       );
-      levels.clampScalar(0, MAX_STITCH_LEVELS);
+      levels.subScalar(tile.z).negate().clampScalar(0, MAX_STITCH_LEVELS);
     }
   }
 
@@ -461,12 +500,18 @@ export default class GeoTerrainManager {
     // Grid of size × size vertices over the tile, row 0 along the south edge,
     // inside a ring of one vertex (texture rows and columns 1 to size); each
     // cell is split along the diagonal from its south-east to its north-west
-    // vertex (three-tile's grid indices). The edges stitched to coarser
+    // vertex (three-tile's grid indices). Each elevation is blended towards
+    // the parent's surface as the tile morphs. The edges stitched to coarser
     // neighbours are left out (a few metres at most).
     const texture = displayed.model.geometry.userData.heightTexture;
     const { data, width } = texture.image;
     const size = width - 2;
-    const at = (column, row) => data[(row + 1) * width + column + 1];
+    const blend = 1 - displayed.morph;
+    const parent = parentRow(width) * width;
+    const at = (column, row) => {
+      const k = (row + 1) * width + column + 1;
+      return data[k] + blend * (data[parent + k] - data[k]);
+    };
     const n = 2 ** displayed.z;
     const gx = (u * n - displayed.x) * (size - 1);
     const gy = (1 - (v * n - displayed.y)) * (size - 1);

@@ -4,8 +4,8 @@
 
 import { registerDEMLoader } from "../..";
 import { TerrariumShaderLoader } from "./TerrariumShaderLoader";
-import { MAX_STITCH_LEVELS, gridCells } from "./grid";
+import { MAX_STITCH_LEVELS, gridCells, parentRow } from "./grid";
 
 registerDEMLoader(new TerrariumShaderLoader());
 
-export { TerrariumShaderLoader, MAX_STITCH_LEVELS, gridCells };
+export { TerrariumShaderLoader, MAX_STITCH_LEVELS, gridCells, parentRow };

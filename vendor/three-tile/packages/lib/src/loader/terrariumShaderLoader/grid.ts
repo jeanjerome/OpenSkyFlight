@@ -16,3 +16,11 @@ export const MAX_STITCH_LEVELS = 4;
 export function gridCells(z: number): number {
 	return z >= 10 ? 64 : z >= 4 ? 32 : 16;
 }
+
+/**
+ * First row of the parent's surface in the height texture of a tile whose
+ * grid and ring are `width` vertices across (see TerrariumShaderLoader)
+ */
+export function parentRow(width: number): number {
+	return width + 4 * MAX_STITCH_LEVELS;
+}
