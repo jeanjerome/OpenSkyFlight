@@ -6,8 +6,11 @@ contrainte : l'application doit continuer à fonctionner dans un navigateur (Web
 Ce document est la **source de vérité de l'avancement**. Il est lu en début de session et mis à jour
 en fin de session.
 
-## État courant (mis à jour le 2026-11-26, session 22)
+## État courant (mis à jour le 2026-11-26, session 23)
 
+- **Lot 4 terminé** le 2026-11-26 (toutes ses tâches faites, bilan dans **Mesures**, lignes
+  « Clôture du lot 4 », captures `docs/screenshots/render/lot4/`), fusionné dans `main` le même jour
+  à la demande de l'utilisateur (avance rapide depuis `feat/render-clouds`), non poussé.
 - **Lots terminés** : 0 à 3, fusionnés dans `main` (lots 2 et 3 le 2026-11-24). Lot 3 : bilan dans
   **Mesures** (lignes « Clôture du lot 3 ») et constats visuels sous les tableaux. Lot 2 : toutes les tâches faites sauf le reste optionnel de
   L2.6 (décodage d'altitude dans un worker, `compileAsync`), reporté : p5 et p1 ne le justifient
@@ -83,10 +86,10 @@ en fin de session.
   - les écarts de +0,4 ms (jusqu'à +1,3) qui sautent d'une vue à l'autre d'une série de captures à
     l'autre touchent aussi l'ancien code : seules des captures alternées (worktree de l'ancien état
     sur le port 3001, ou `--set` d'un réglage sur le même code) tranchent une régression.
-- **Lot 4 en cours** sur `feat/render-clouds` (depuis `main`, après la fusion de `feat/flight-model`
-  le 2026-11-25). Fait : L4.1, L4.4, L4.5, L4.6, L4.7, et premières versions de L4.2 et L4.3 (voir les tâches). Le réglage
-  « Clouds » (`showClouds`) dessine les nuages volumétriques en WebGPU (la couche plane `CloudLayer`
-  reste en WebGL2 jusqu'à L4.8) ; `cloudAltitude` fixe la base des cumulus. Code : `js/clouds/`,
+- **Lot 4** sur `feat/render-clouds` (depuis `main`, après la fusion de `feat/flight-model`
+  le 2026-11-25). Toutes les tâches faites. Le réglage « Clouds » (`showClouds`, désactivé par
+  défaut) dessine les nuages volumétriques en WebGPU (aucun en WebGL2) ; `cloudAltitude` fixe la base
+  des cumulus, `cloudCover` la part du ciel couverte. Code : `js/clouds/`,
   `js/constants/clouds.js`, passe des nuages (`CloudsTemporalNode`) dans
   `ScenePipeline.setAtmosphere(apply, clouds)`, composition dans `AtmosphericSky._overScene`. Référence
   des vues : `benchmarks/render/clouds-8` (rayons crépusculaires ; vue 5 : 7,38 ms, 7,14 dans `clouds-8b`), avant elle
@@ -99,9 +102,9 @@ en fin de session.
   instance de l'app ouverte ailleurs (navigateur de l'utilisateur) double tous les coûts GPU d'une
   capture : vérifier qu'aucune ne tourne avant de mesurer. Tout est commité (dernier commit de code :
   traversée des nuages), branche non poussée ni fusionnée.
-- **Prochaine étape** : L4.8 (retrait de l'ancien `CloudLayer`, couverture dans le menu), puis
-  clôture du lot 4. L4.6 validée en vol par l'utilisateur (au-dessus, en dessous et à travers les
-  nuages) ; L4.7 faite (rayons des nuages à 70 %, reflet d'objectif en option désactivée).
+- **Prochaine étape** : selon le choix de l'utilisateur, le lot G3 du jeu (train et aéroports, voir
+  `docs/gameplay-roadmap.md`, prévu après le lot 4) ou le lot 5 (terrain, ombres, eau), sur une
+  nouvelle branche depuis `main`.
   Outils pour les défauts en mouvement : variantes passées dans l'URL que l'utilisateur essaie en
   vol, vol rejoué à pas de temps fixe (crochets temporaires `window.__advance(n)` et
   `window.__move(m)` dans la boucle de rendu de `js/app.js`, à recréer : les patchs du scratchpad ne
@@ -578,12 +581,14 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       un canal ne s'écrit pas en compute). Générées une fois au démarrage : ≈ 20 ms (300 ms au premier
       lancement, compilation comprise). Comparées côte à côte aux textures livrées par takram : même
       structure, sans leurs coutures.
-- [~] **L4.2** Carte météo (couverture, type de nuage) et vent.
+- [x] **L4.2** Carte météo (couverture, type de nuage) et vent.
       Fait : carte météo générée avec les autres textures (cumulus en rouge, nuages moyens en vert,
-      cirrus en bleu, 100 km par répétition), couverture (uniforme `coverage`, 0,4 par défaut), vent
-      constant (`CLOUD_WIND`, la carte et la forme dérivent ensemble). Reste : réglage de la couverture
-      dans le menu (avec L4.8), vent et météo liés à un réglage compréhensible.
-- [~] **L4.3** Ray marching dans la couche, éclairage Beer + powder + Henyey-Greenstein double lobe,
+      cirrus en bleu, 100 km par répétition), couverture (uniforme `coverage`), vent constant
+      (`CLOUD_WIND`, la carte et la forme dérivent ensemble). Couverture réglable dans le menu avec
+      L4.8 (« Cloud cover »). Le vent reste constant, sans réglage : il ne porte que les nuages, pas
+      l'avion, et un réglage de vent sans effet sur le vol serait trompeur (à reprendre si le modèle de
+      vol prend le vent en compte).
+- [x] **L4.3** Ray marching dans la couche, éclairage Beer + powder + Henyey-Greenstein double lobe,
       ambiance issue de l'atmosphère.
       Fait (première version) : `js/clouds/VolumetricClouds.js`, modèle de takram three-clouds porté en
       TSL (trois couches, fonction de forme en demi-cercle, érosion par la forme et le détail, marche
@@ -738,7 +743,17 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       +0,15 à +0,5 ms sur la vue 6 (d'abord +1,3 ms : les nœuds passés sans `getTextureNode()` étaient
       recopiés dans des cibles plein écran).
       Captures `clouds-8` et `clouds-8b` : coûts des vues de référence inchangés.
-- [ ] **L4.8** Retirer l'ancien `CloudLayer` plan ; adapter les contrôles du panneau.
+- [x] **L4.8** Retirer l'ancien `CloudLayer` plan ; adapter les contrôles du panneau.
+      `js/atmosphere/CloudLayer.js` supprimé (et `CLOUD_RENDER_ORDER`) : en WebGL2, plus de nuages du
+      tout (ils demandent des compute shaders), l'aide du réglage « Clouds » le dit. Réglage « Cloud
+      density » (`cloudOpacity`, opacité de la couche plane) remplacé par « Cloud cover »
+      (`cloudCover`, 0 à 100 %, 50 % par défaut) : la part du ciel que les nuages semblent couvrir,
+      convertie en couverture de la carte météo par une table (`CLOUD_COVER_TO_COVERAGE`) établie sur
+      la vue 5, la couverture agissant très raide (rien sous 0,15, ciel couvert au-delà de 0,6). 50 %
+      donne la couverture 0,4 des captures précédentes ; les vues de référence remettent le réglage à
+      sa valeur par défaut. Ciel couvert (100 %) : +0,16 ms sur la vue 5. « Cloud altitude » désigne la
+      base des nuages les plus bas. README : nuages volumétriques dans les fonctionnalités, dossier
+      `js/clouds/`.
 
 ## Lot 5 — Terrain, ombres et eau
 
@@ -847,6 +862,10 @@ Notes de lecture :
 | 2026-11-24 | **Clôture du lot 3** (preset High) | Vol par défaut | 128 s | 119,3 | 108,7 | 63,3 | 4,3 (6,3) | 0 / 0 | 1,11 M | 316 |
 | 2026-11-24 | **Clôture du lot 3** (preset High), capture 1 | Plan 1 (basse alt.) | 94 s | 119,2 | 105,3 | 64,1 | 4,8 (6,6) | 1 / 1 | 1,39 M | 372 |
 | 2026-11-24 | **Clôture du lot 3** (preset High), capture 2 | Plan 1 (basse alt.) | 94 s | 119,5 | 105,3 | 64,1 | 4,8 (6,5) | 0 / 0 | 1,38 M | 372 |
+| 2026-11-26 | **Clôture du lot 4** (preset High, nuages désactivés par défaut) | Vol par défaut | 128 s | 119,3 | 109,9 | 62,9 | 4,4 (6,3) | 1 / 0 | 1,11 M | 316 |
+| 2026-11-26 | **Clôture du lot 4** (preset High, nuages désactivés par défaut) | Plan 1 (basse alt.) | 94 s | 119,3 | 105,3 | 59,2 | 4,7 (6,4) | 0 / 0 | 1,38 M | 372 |
+| 2026-11-26 | **Clôture du lot 4**, nuages activés (`showClouds=true`) | Vol par défaut | 129 s | 115,4 | 82,6 | 57,1 | 8,1 (9,8) | 3 / 1 | 1,10 M | 320 |
+| 2026-11-26 | **Clôture du lot 4**, nuages activés (`showClouds=true`) | Plan 1 (basse alt.) | 94 s | 117,5 | 86,2 | 56,5 | 8,0 (9,6) | 0 / 0 | 1,38 M | 377 |
 | 2026-11-24 | L2.7 preset Ultra, LODThreshold 1,4 | Vol par défaut | 128 s | 115,6 | 85,5 | 53,5 | 5,0 (6,5) | 1 / 0 | 2,84 M | 714 |
 
 Pour mémoire, la configuration n°4 de `BENCHMARKS.md` (même machine, Chrome 146, ancien moteur
@@ -899,6 +918,7 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 | 2026-11-24 | **Pleine résolution** — L3 sans fond de tuile three-tile | 4,23 | 5,65 | 5,53 | 4,74 | 4,43 | 4,68 |
 | 2026-11-24 | **Pleine résolution** — L3 tuiles opaques | 3,46 | 3,44 | 3,94 | 3,88 | 4,35 | 4,00 |
 | 2026-11-24 | **Pleine résolution** — **Clôture du lot 3** (courbure, sol lointain ; seconde capture) | 3,44 | 3,43 | 3,49 | 3,40 | 3,80 | 3,48 |
+| 2026-11-26 | **Pleine résolution** — **Clôture du lot 4** (nuages sur la vue 5 seule, brume de chaleur) | 3,61 | 3,61 | 3,69 | 4,06 | 7,55 | 3,85 |
 | 2026-11-24 | L3 sans fond de tuile — draw calls (contre 549 / 657 / 663 / 603 / 631 / 603) | 307 | 361 | 364 | 334 | 348 | 334 |
 | 2026-11-24 | L2.7 Low et Medium (LODThreshold 0,9) — draw calls / triangles | 382 / 1,26 M | 412 / 1,53 M | 454 / 1,69 M | 388 / 1,30 M | 384 / 1,21 M | 382 / 1,26 M |
 | 2026-11-24 | L2.7 Ultra 1,4 — draw calls / triangles | 712 / 2,66 M | 790 / 3,36 M | 820 / 3,45 M | 730 / 2,77 M | 768 / 2,78 M | 724 / 2,69 M |
@@ -916,6 +936,26 @@ pour la géométrie seulement. Le coût GPU réel d'une frame est ≈ 3–5 ms �
 Bilan du lot 2 (état de clôture contre lot 1 + altitude CPU) : vol par défaut p5 73,0 → 106,4 et
 p1 33,6 → 61,3 (frames > 33 ms 50 → 4), plan 1 p5 62,5 → 81,3 et p1 43,1 → 61,7 ; coût GPU d'une frame
 3,1 à 5,1 ms à 4112×2580, loin du budget de 16,6 ms. Critère de sortie respecté (p1 en hausse).
+
+Bilan du lot 4 (état de clôture, `benchmarks/render/lot4*`) : nuages volumétriques (cumulus, nuages
+moyens et cirrus fibreux) qu'on traverse, ombres sur le sol et l'avion, lumière des nuages sur l'avion,
+rayons crépusculaires, reflet d'objectif en option. Vues sans nuages : 3,6 à 4,1 ms (lot 3 : 3,4 à
+3,8 ; la brume de chaleur des moteurs, ajoutée entre-temps au preset High, compte pour ≈ 0,1 ms, et
+les écarts de série atteignent ±0,4 ms). Vue 5, au-dessus des nuages : 7,55 ms (3,80 au lot 3,
+nappe plane). Vols nuages désactivés (réglage par défaut) : vol par défaut p1 63,3 → 62,9, plan 1
+p1 64,1 → 59,2 (−8 %, la flamme de postcombustion du lot G2 tout le long du plan 1 compte : 60,2 en
+`g2-haze-flight`). Nuages activés : p1 57,1 et 56,5 (−9 % et −5 % contre les mêmes vols sans nuages),
+GPU médian ≈ 8 ms à 120 Hz. Critère de sortie respecté (p1 à moins de 10 %).
+
+Constats visuels après le lot 4 (`docs/screenshots/render/lot4/`, preset High, 6 vues ; vue 5 dans
+un nuage, à son entrée et sous un ciel couvert à 90 % ; vue 6 sous les nuages, rayons crépusculaires) :
+- Nuages : volume, bords érodés, cirrus en fibres, fondu dans la brume au loin ; dans un nuage, un
+  brouillard blanchâtre où l'avion reste visible, sans taches à l'entrée en vol rapide.
+- Ombres des nuages sur le relief et sur l'avion, et dans l'air : l'air à l'ombre perd 70 % de sa
+  lumière diffusée, d'où des faisceaux sous les nuages face au soleil.
+- Restent : grain fin du brouillard proche en mouvement, pas de vent réglable ni de météo variable
+  (une seule carte météo répétée tous les 100 km), pas de nuages en WebGL2, pas de rayons
+  derrière le relief (pas d'ombres du terrain : lot 5).
 
 Bilan du lot 3 (état de clôture contre lot 2) : atmosphère physique, heure du jour, nuit et feux de
 l'avion pour un coût GPU par vue de 3,4 à 3,8 ms à 4112×2580 (lot 2 : 3,1 à 5,1), grâce aux tuiles
@@ -999,6 +1039,7 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 | 2026-11-24 | Sol au-delà des tuiles | Sol diffus de l'ellipsoïde calculé dans la passe du ciel (éclairement et diffusion jusqu'au point de takram) plutôt que la luminance du ciel de takram sous l'horizon | Sous l'horizon, takram ne rend que la lumière diffusée le long du rayon, avec un saut de sa table de diffusion à l'horizon (trait clair) ; un maillage de sol supplémentaire coûterait des draw calls et de la géométrie pour un rendu identique |
 | 2026-11-24 | Adaptation aux lumières des villes | Moyenne logarithmique de leur luminance sur la zone en vue, calculée sur le CPU depuis la mosaïque Black Marble, ajoutée à l'éclairement de la pré-exposition | Déterministe comme la pré-exposition (pas de relecture GPU ni de boucle) ; la moyenne arithmétique laissait une ville lointaine assombrir tout un paysage au clair de lune, la moyenne logarithmique (comme l'adaptation de l'œil et le tone mapping de Reinhard) ne compte une ville que si elle remplit la vue |
 | 2026-11-25 | Nuages volumétriques | Implémentation propre en TSL, portée du modèle de takram three-clouds 0.7.6 (MIT) | takram three-clouds n'a pas de version WebGPU/TSL (effet `postprocessing` sur le renderer WebGL) ; son modèle (Schneider, Hillaire, Wrenninge) et ses paramètres par défaut sont éprouvés et s'éclairent avec le même contexte d'atmosphère que le reste de la scène |
+| 2026-11-26 | Nuages par défaut | Désactivés par défaut (réglage « Clouds »), comme la couche plane avant eux | Choix de l'utilisateur ; ils coûtent ≈ 4 ms GPU sur la vue 5 et 6 de p1 sur le vol par défaut |
 | 2026-11-26 | Brouillard des nuages proches | Marché à chaque frame à demi-résolution sur les 200 premiers mètres, lumière lue dans la carte des ombres, plutôt qu'un bloc de marche plus petit dans la couche ou un historique plus long | La reconstruction temporelle ne peut pas suivre un volume qui défile à quelques mètres de la caméra ; marcher 1 pixel sur 4 au lieu de 16 dans la couche quadruplerait le coût de toute la marche, là où le brouillard proche, sans bords nets, se contente de la demi-résolution |
 | 2026-11-25 | Repère des nuages | Coquilles sphériques centrées sur le centre de la Terre sous la caméra, coordonnées de texture tirées des x, z de la carte et de l'altitude, origine réduite modulo la répétition sur le CPU | Même courbure que le terrain (abaissé de d²/2R autour de la caméra) ; pas de coutures de projection cube-sphère ; précision des flottants conservée loin de l'origine de la carte |
 | 2026-11-25 | Suréchantillonnage temporel des nuages | Un pixel sur 16 marché par frame (Bayer 4×4), reprojection par pixel à la distance de sa scène ou du front des nuages, rejet de l'historique sur la distance de scène, repli pondéré par la ressemblance de profondeur | Comme takram pour le coût (marche à 1/16 des pixels) ; leur vitesse prise au fragment le plus proche d'un voisinage basse résolution laisse des halos aux silhouettes en mouvement, la reprojection à la profondeur pleine résolution de chaque pixel les évite |
@@ -1021,7 +1062,11 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 - Validé en vol par l'utilisateur : au-dessus, en dessous et à travers les nuages.
 - Fait ensuite : L4.7, rayons crépusculaires des nuages (intensité choisie sur planche) et reflet
   d'objectif en option (voir la tâche). Captures `clouds-8`, `clouds-8b`.
-- Prochaine étape : L4.8 (voir État courant).
+- Fait ensuite : L4.8 (couche plane retirée, réglage « Cloud cover »), clôture du lot 4 : vols de
+  référence nuages désactivés et activés, capture `lot4`, modes SAR et élévation vérifiés, captures
+  versionnées `docs/screenshots/render/lot4/`.
+- Décidé par l'utilisateur : nuages désactivés par défaut. Lot 4 fusionné dans `main` (non poussé).
+- Prochaine étape : G3 ou lot 5 (voir État courant).
 
 ### 2026-11-26 (22)
 - Mesuré : capture `clouds-3` (état de la session 21) ; une première série à coûts doublés venait
