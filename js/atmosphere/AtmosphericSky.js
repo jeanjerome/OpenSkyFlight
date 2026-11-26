@@ -446,11 +446,19 @@ export default class AtmosphericSky {
    */
   _overScene(color, depth, clouds, nearClouds) {
     let surface = color;
+    // Light shafts: the air in the shade of the clouds scatters no sunlight
+    let skyShade = null;
     if (CONFIG.fogEnabled && CONFIG.aerialPerspectiveVolume && this.renderer.backend.isWebGPUBackend) {
-      surface = new AerialPerspectiveVolume(color, depth, this.atmosphere, this.camera, {
-        directionECEF: this.lightDirectionECEF,
-        scale: this.lightScale,
-      });
+      const shadow = clouds ? this.clouds.shadow : null;
+      surface = new AerialPerspectiveVolume(
+        color,
+        depth,
+        this.atmosphere,
+        this.camera,
+        { directionECEF: this.lightDirectionECEF, scale: this.lightScale },
+        shadow,
+      );
+      skyShade = surface.skyShade(uv());
     } else if (CONFIG.fogEnabled) {
       surface = aerialPerspective(color, depth);
       surface.skyNode = null;
@@ -461,6 +469,7 @@ export default class AtmosphericSky {
       const result = vec3(surface.rgb).toVar();
       If(empty, () => {
         const behind = this.skyNode.add(this._nightSkyGlow).toVar();
+        if (skyShade) behind.assign(max(behind.sub(skyShade), 0));
         this._distantGround(behind);
         result.addAssign(behind.mul(color.a.oneMinus()));
       });

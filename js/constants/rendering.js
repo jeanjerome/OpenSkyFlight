@@ -122,6 +122,22 @@ export const AERIAL_PERSPECTIVE_VOLUME_SIZE = [128, 64, 64];
 export const AERIAL_PERSPECTIVE_VOLUME_DISTANCE = 1000e3;
 
 /**
+ * Light shafts of the clouds in the air (see AerialPerspectiveVolume): cells
+ * of their volume across the screen and along the distance, up to this
+ * distance (m), past which the map of the clouds' shadows fades out, and
+ * samples of that map in each cell
+ */
+export const LIGHT_SHAFT_VOLUME_SIZE = [256, 128, 32];
+export const LIGHT_SHAFT_DISTANCE = 25e3;
+export const LIGHT_SHAFT_SAMPLES = 4;
+/**
+ * Share of the light scattered by the air that its shade takes away: the rest
+ * is the light of the sky, which the shaded air still scatters (chosen on
+ * view 6 under the clouds, between 40 % and 100 %)
+ */
+export const LIGHT_SHAFT_STRENGTH = 0.7;
+
+/**
  * Albedo of the ground beyond the terrain tiles, drawn with the sky (linear):
  * fields and forests of the lowlands around the Alps, as satellite imagery
  * averages them
