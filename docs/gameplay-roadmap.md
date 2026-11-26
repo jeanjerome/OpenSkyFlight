@@ -18,8 +18,8 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
   poussé. **G3 (décollage et atterrissage) en cours sur `feat/takeoff-landing`** depuis le
   2026-11-26 : G3.1 (train animé), G3.2 (physique au sol), G3.3 (crash et écran de reprise) et
   G3.4 (aéroports, départ d'une piste depuis le menu : onglet World, section Airports) et G3.5
-  (terrain aplani sous les pistes) faits ; suite G3.6 (pistes et marquages dessinés), voir le lot
-  G3. Bundle three-tile à reconstruire après un changement de branche (`cd vendor/three-tile &&
+  (terrain aplani sous les pistes) et G3.6 (pistes et marquages peints) faits ; suite G3.7
+  (balisage lumineux et PAPI), voir le lot G3. Bundle three-tile à reconstruire après un changement de branche (`cd vendor/three-tile &&
   npm run build:lib`) : l'aplanissement est dans son worker. L'avion porte désormais
   son ombre et reçoit celle du relief (`js/aircraft/AircraftShadow.js`, calque `SHADOW_CASTER_LAYER`
   pour ce qui doit la projeter : penser au train d'atterrissage de G3).
@@ -410,8 +410,32 @@ sol) ; les nuages volumétriques (lot 4) n'ont pas de dépendance avec ces lots.
       amortisseurs à ±0,01 m, contre ±4° et des écarts de 1 m auparavant). Le relief Terrarium est
       5 à 8 m sous l'altitude publiée autour de LSGG : léger remblai, ≈ 3 % de pente. Reste : tuiles
       chargées avant que leurs pistes soient connues (aucun cas courant) non rechargées.
-- [ ] **G3.6** Pistes et marquages procéduraux (OACI Annexe 14) calculés dans le shader en coordonnées
+- [x] **G3.6** Pistes et marquages procéduraux (OACI Annexe 14) calculés dans le shader en coordonnées
       piste : barres de seuil selon la largeur, numéros, point de visée, zone de toucher, axe.
+      Fait : `js/terrain/RunwayMarkings.js`, peint dans la couleur du terrain avant l'éclairage (un
+      nœud partagé par toutes les tuiles, sur l'imagerie satellite seulement) : ombres, courbure et
+      perspective aérienne du sol. Les 8 pistes revêtues les plus proches de la caméra (à moins de
+      30 km, choisies à chaque kilomètre parcouru) passent en uniformes (extrémités en mètres monde,
+      donc exactes malgré l'échelle de Mercator, largeur, revêtement, désignations, seuils décalés) ;
+      seuls les fragments sur une piste calculent ses marquages. Revêtement asphalte ou béton mêlé à
+      25 % d'imagerie ; barres de seuil (2 à 8 par côté selon la largeur, à 3 m des bords, 27 m de
+      l'axe au plus), numéro à 12 m (glyphes à segments de 3 × 9 m, zéro initial gardé : « 04 »),
+      lettre L/C/R, point de visée (300 ou 400 m selon la longueur), paires de zone de toucher tous
+      les 150 m (3-3-2-2-1-1 barres, autant que la longueur le permet, aucune sur le point de visée),
+      axe en tirets de 30 m (intervalles 20 m), bandes latérales ; chaque moitié est marquée depuis
+      son seuil. Antialiasés sur l'empreinte du pixel en travers de la piste (dérivées écran
+      projetées : les vues rasantes étirent les pixels le long de la piste, pas en travers), estompés
+      de 1,5 à 5 m par pixel. Pistes non revêtues (herbe, terre…) laissées à l'imagerie ; zone avant
+      un seuil décalé revêtue sans flèches. Coût GPU (A/B sur la même vue, 0 ou 2 pistes passées au
+      shader, GPU saturé) : 2,41–2,46 contre 2,44–2,48 ms aligné au seuil, 2,80–2,82 contre
+      2,77–2,80 ms en survol : non mesurable. Vérifié dans Chrome (LSGG), puis par l'utilisateur à CDG.
+      Ajout à sa demande : autour des pistes (1,5 km autour de leurs extrémités) les tuiles descendent
+      jusqu'au zoom 18 de l'imagerie (≈ 0,6 m par pixel), le reste du terrain s'arrête au 15 hors mode
+      hi-res : `TileMap.maxLevelOf(x, y, z)` dans three-tile (niveau maximal par tuile, lu par
+      l'évaluation du LOD), zones tirées des pistes du catalogue (`GeoTerrainManager.setRunways`). À
+      CDG 09L, aligné : 22 tuiles en 18, 13 en 17, 19 en 16 ; à 9 km, plus rien au-delà de 15. Coût en
+      A/B sur la même vue (GPU saturé) : 3,96–4,11 ms et 528 draw calls contre 3,53–3,57 ms et 489 :
+      ≈ +0,45 ms près du sol sur un aéroport, rien ailleurs.
 - [ ] **G3.7** Balisage instancié dans la passe de halo : seuil vert, extrémité rouge, axe et bords
       blancs (codes de fin de piste), rampe d'approche, PAPI (4 unités, 2°30′ à 3°30′, couleur selon
       l'angle de l'œil).
@@ -736,6 +760,7 @@ piqué dans le relief : crash et redémarrage ; aucune erreur console.
 
 | Date | Fait | Reste / prochaine étape |
 |---|---|---|
+| 2026-11-26 | G3.6 : pistes revêtues et marquages OACI peints dans la couleur du terrain (seuils, numéros, point de visée, zone de toucher, axe, bandes latérales), antialiasés sur l'empreinte en travers ; coût non mesurable ; vérifié dans Chrome (LSGG), et par l'utilisateur à CDG ; à sa demande, tuiles jusqu'au zoom 18 autour des pistes (+0,45 ms près du sol sur un aéroport) | G3.7 (balisage lumineux, PAPI) |
 | 2026-11-26 | G3.5 : terrain aplani sous les pistes dans le worker d'altitude (relief, normales, morphing et altitude CPU ensemble, sans couture), pistes chargées avant le terrain d'un lieu ; vérifié dans Chrome à Genève (axe à 1 cm du profil publié, décollage sans à-coup) | G3.6 (pistes et marquages dessinés) |
 | 2026-11-26 | G3.4 : données OurAirports servies par le proxy (recherche, pistes par tuile), catalogue des pistes autour de l'avion, recherche d'aéroport dans le menu et départ aligné sur un seuil ; tests ; vérifié dans Chrome (LSGG 04) | G3.5 (aplanir le terrain sous les pistes) |
 | 2026-11-26 | G3.3 : points de structure du modèle, crash au contact de la cellule ou au-delà de 3 m/s au toucher, écran de reprise (en vol ou au point de départ au sol), commande du train verrouillée au sol ; tests ; vérifié dans Chrome | G3.4 (aéroports d'OurAirports, départ d'une piste) |
