@@ -42,6 +42,9 @@ const BAYER_OFFSETS = BAYER.map((_, frame) => {
   return [index % BLOCK, Math.floor(index / BLOCK)];
 });
 
+/** Side of the blocks of pixels of the scene pass that one pixel of the clouds around the camera covers */
+const NEAR_SCALE = 2;
+
 /** How fast the weight of a marched pixel falls with the ratio of its scene distance to the pixel's */
 const DEPTH_SHARPNESS = 8;
 
@@ -141,6 +144,15 @@ export default class CloudsTemporalNode extends Node {
     this._historyColor = texture(this._resolves[1].textures[0]);
     this._historyDistance = texture(this._resolves[1].textures[1]);
 
+    // The clouds right around the camera, marched every frame at half the
+    // resolution (a fog without sharp edges), filtered up where they are laid
+    this._near = new RenderTarget(1, 1, { depthBuffer: false, type: HalfFloatType });
+    this._near.texture.name = 'clouds.near';
+    this._nearMaterial = new NodeMaterial();
+    this._nearMaterial.name = 'clouds.near';
+    this._nearDrawn = false;
+    this._nearTextureNode = passTexture(this, this._near.texture);
+
     this._marchMaterial = new NodeMaterial();
     this._marchMaterial.name = 'clouds.march';
     this._resolveMaterial = new NodeMaterial();
@@ -164,6 +176,11 @@ export default class CloudsTemporalNode extends Node {
     return this._textureNode;
   }
 
+  /** The clouds right around the camera, to lay over the others (see VolumetricClouds.nearFog) */
+  getNearTextureNode() {
+    return this._nearTextureNode;
+  }
+
   updateBefore(frame) {
     const { renderer } = frame;
     const image = this.depthNode.value?.image;
@@ -179,6 +196,7 @@ export default class CloudsTemporalNode extends Node {
       const currentHeight = Math.ceil(height / BLOCK);
       this._current.setSize(currentWidth, currentHeight);
       for (const target of this._resolves) target.setSize(width, height);
+      this._near.setSize(Math.ceil(width / NEAR_SCALE), Math.ceil(height / NEAR_SCALE));
       this._size.value.set(width, height);
       this._currentSize.value.set(currentWidth, currentHeight);
     }
@@ -207,6 +225,20 @@ export default class CloudsTemporalNode extends Node {
     _quad.material = this._resolveMaterial;
     _quad.name = 'clouds.resolve';
     _quad.render(renderer);
+    // Away from the clouds, cleared once
+    const near = this.clouds.nearActive;
+    if (near || this._nearDrawn || resized) {
+      renderer.setRenderTarget(this._near);
+      if (near) {
+        _quad.material = this._nearMaterial;
+        _quad.name = 'clouds.near';
+        _quad.render(renderer);
+      } else {
+        renderer.setClearColor(0x000000, 0);
+        renderer.clear();
+      }
+      this._nearDrawn = near;
+    }
     renderer.setRenderTarget(null);
 
     RendererUtils.restoreRendererState(renderer, _rendererState);
@@ -247,6 +279,17 @@ export default class CloudsTemporalNode extends Node {
     })();
     this._marchMaterial.outputNode = outputNode;
     this._marchMaterial.contextNode = sharedContext;
+
+    // The output itself: as a color, an opaque material's alpha would be forced to 1
+    this._nearMaterial.outputNode = Fn(() => {
+      // The scene at the first of the pixels each one covers
+      const pixel = screenCoordinate.xy.floor().mul(NEAR_SCALE).toConst();
+      const screen = screenCoordinate.xy.div(this._size.div(NEAR_SCALE)).toConst();
+      const depth = this.depthNode.load(ivec2(min(pixel, this._size.sub(1)))).r;
+      const distance = clouds.sceneDistance(screen, depth, this.reversedDepth);
+      return clouds.nearFog(clouds.viewDirection(screen), distance);
+    })();
+    this._nearMaterial.contextNode = sharedContext;
 
     this._resolveMaterial.colorNode = Fn(() => {
       const pixel = screenCoordinate.xy.floor().toConst();
@@ -332,5 +375,7 @@ export default class CloudsTemporalNode extends Node {
     for (const target of this._resolves) target.dispose();
     this._marchMaterial.dispose();
     this._resolveMaterial.dispose();
+    this._near.dispose();
+    this._nearMaterial.dispose();
   }
 }

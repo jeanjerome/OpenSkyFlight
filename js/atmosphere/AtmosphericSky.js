@@ -1,6 +1,20 @@
 import * as THREE from 'three';
 import { EnvironmentNode, MeshStandardNodeMaterial, NodeMaterial } from 'three/webgpu';
-import { Fn, If, context, luminance, max, renderGroup, uniform, uv, vec2, vec3, vec4 } from 'three/tsl';
+import {
+  Fn,
+  If,
+  context,
+  luminance,
+  max,
+  normalWorld,
+  reflectVector,
+  renderGroup,
+  uniform,
+  uv,
+  vec2,
+  vec3,
+  vec4,
+} from 'three/tsl';
 import { Ellipsoid, Geodetic } from '@takram/three-geospatial';
 import { rayEllipsoidIntersection } from '@takram/three-geospatial/webgpu';
 import {
@@ -81,7 +95,34 @@ const ENVIRONMENT_DISTANCE_THRESHOLD = 5000;
  */
 const ENVIRONMENT_ANGULAR_THRESHOLD = 0.5 * DEG2RAD;
 
-AtmosphereLight.registerNode(AtmosphereLightNode);
+/**
+ * Light of the volumetric clouds around the aircraft (see CloudAmbient), which
+ * replaces part of the clear sky's light on the surfaces near it; null without
+ * volumetric clouds. Set before the materials are built (see setClouds).
+ */
+let cloudAmbient = null;
+
+/** The sunlight (or moonlight) and the sky light, the latter partly hidden by the clouds around the aircraft */
+class CloudLitAtmosphereLightNode extends AtmosphereLightNode {
+  static get type() {
+    return 'CloudLitAtmosphereLightNode';
+  }
+
+  setupDirect(builder) {
+    if (!cloudAmbient) return super.setupDirect(builder);
+    // The sky light the base class adds, caught to pass it through the clouds' light
+    const { context } = builder;
+    const irradiance = context.irradiance;
+    const sky = vec3().toVar();
+    context.irradiance = sky;
+    const direct = super.setupDirect(builder);
+    context.irradiance = irradiance;
+    irradiance.addAssign(cloudAmbient.irradiance(sky, normalWorld));
+    return direct;
+  }
+}
+
+AtmosphereLight.registerNode(CloudLitAtmosphereLightNode);
 
 /**
  * Image-based lighting reduced to its reflections: the diffuse sky light comes
@@ -89,6 +130,8 @@ AtmosphereLight.registerNode(AtmosphereLightNode);
  * table (it accounts for the altitude of the point, where the environment map
  * is the sky seen from the camera only). The irradiance three's EnvironmentNode
  * computes goes into a variable nothing reads, which the shader compiler drops.
+ * Near the aircraft, the clouds around it hide part of the reflected sky and
+ * reflect their own light.
  */
 class ReflectionEnvironmentNode extends EnvironmentNode {
   static get type() {
@@ -97,10 +140,14 @@ class ReflectionEnvironmentNode extends EnvironmentNode {
 
   setup(builder) {
     const { context } = builder;
-    const iblIrradiance = context.iblIrradiance;
+    const { iblIrradiance, radiance } = context;
     context.iblIrradiance = vec3().toVar();
+    const reflected = cloudAmbient ? vec3().toVar() : radiance;
+    context.radiance = reflected;
     super.setup(builder);
     context.iblIrradiance = iblIrradiance;
+    context.radiance = radiance;
+    if (cloudAmbient) radiance.addAssign(cloudAmbient.radiance(reflected, reflectVector));
   }
 }
 
@@ -279,6 +326,7 @@ export default class AtmosphericSky {
    */
   setClouds(clouds) {
     this.clouds = clouds;
+    cloudAmbient = clouds?.ambient ?? null;
     if (clouds) {
       // The clouds' shadows scale the direct light where objects receive
       // shadows, without a shadow map of their own (no depth pass)
@@ -357,9 +405,22 @@ export default class AtmosphericSky {
 
     const clouds = this.clouds && CONFIG.showClouds ? (depth, reversed) => this.clouds.pass(depth, reversed) : null;
     const shadow = clouds ? this.clouds.shadow : null;
-    if (this.clouds) this.clouds.shadow.enabled.value = shadow ? 1 : 0;
-    this.pipeline.setBeforeRender(shadow ? () => shadow.render(this.renderer) : null);
-    this.pipeline.setAtmosphere((color, depth, cloudsPass) => this._overScene(color, depth, cloudsPass), clouds);
+    if (this.clouds) {
+      this.clouds.shadow.enabled.value = shadow ? 1 : 0;
+      this.clouds.ambient.enabled.value = shadow ? 1 : 0;
+    }
+    this.pipeline.setBeforeRender(
+      shadow
+        ? () => {
+            shadow.render(this.renderer);
+            this.clouds.ambient.render(this.renderer);
+          }
+        : null,
+    );
+    this.pipeline.setAtmosphere(
+      (color, depth, cloudsPass, nearClouds) => this._overScene(color, depth, cloudsPass, nearClouds),
+      clouds,
+    );
     this.pipeline.setNightVision(this.preExposure);
     this.pipeline.setBloom(CONFIG.bloomEnabled);
     this.pipeline.setAutoExposure(CONFIG.autoExposure);
@@ -380,9 +441,10 @@ export default class AtmosphericSky {
    * under all the terrain.
    *
    * The volumetric clouds come last, in front of both: their pass gives the
-   * light they send toward the camera and their opacity (see VolumetricClouds).
+   * light they send toward the camera and their opacity (see VolumetricClouds),
+   * and those right around the camera are marched here, in front of them.
    */
-  _overScene(color, depth, clouds) {
+  _overScene(color, depth, clouds, nearClouds) {
     let surface = color;
     if (CONFIG.fogEnabled && CONFIG.aerialPerspectiveVolume && this.renderer.backend.isWebGPUBackend) {
       surface = new AerialPerspectiveVolume(color, depth, this.atmosphere, this.camera, {
@@ -405,6 +467,9 @@ export default class AtmosphericSky {
       if (clouds) {
         const cloud = vec4(clouds);
         result.assign(result.mul(cloud.a.oneMinus()).add(cloud.rgb));
+        // The clouds right around the camera, in front of the others
+        const near = vec4(nearClouds);
+        result.assign(result.mul(near.a.oneMinus()).add(near.rgb));
       }
       return result;
     })();

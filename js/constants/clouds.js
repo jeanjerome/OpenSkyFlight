@@ -138,3 +138,37 @@ export const CLOUD_SHADOW_STEPS = 8;
 export const CLOUD_SHADOW_CIRRUS_STEPS = 2;
 export const CLOUD_SHADOW_MIN_SUN = 0.05;
 export const CLOUD_SHADOW_REFRESH = 4;
+
+/**
+ * Light of the clouds around the aircraft (see CloudAmbient): rays marched per
+ * face of the ambient cube each render, share of each render in the cube (the
+ * rest from the previous ones), and distance from the aircraft beyond which
+ * surfaces keep the clear sky's light (m; fading in from half of it)
+ */
+export const CLOUD_AMBIENT_RAYS = 16;
+export const CLOUD_AMBIENT_BLEND = 0.1;
+export const CLOUD_AMBIENT_RADIUS = 60;
+
+/**
+ * Light diffused deep into the clouds, beyond the octaves of the multiple
+ * scattering: scale of the light reaching a point at an optical depth τ
+ * toward the sun, scale / (1 + rate × τ), as diffusion through a slab of
+ * forward-scattering cloud falls off
+ */
+export const CLOUD_DIFFUSION = { rate: 0.05, scale: 0.5 };
+
+/**
+ * The clouds near the camera, within CLOUD_NEAR_DISTANCE (m) when it is that
+ * close to the layers, are marched in CLOUD_NEAR_SAMPLES samples at every
+ * pixel every frame instead of by the temporal upscaling (see
+ * VolumetricClouds.nearFog)
+ */
+export const CLOUD_NEAR_DISTANCE = 200;
+export const CLOUD_NEAR_SAMPLES = 6;
+
+/**
+ * Fog thinned out between the camera and the aircraft: the clouds' density
+ * rises from nothing at this share of the aircraft's distance to all of it at
+ * this other share, so that the aircraft stays in sight inside a cloud
+ */
+export const CLOUD_CLEARING = [0.3, 1];

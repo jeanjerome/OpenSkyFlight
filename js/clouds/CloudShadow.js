@@ -144,6 +144,18 @@ export default class CloudShadow {
       const offset = positionWorld.xz.sub(cameraPosition.xz).toConst();
       // Height above sea level: the terrain is lowered by the curvature of the Earth around the camera
       const height = length(vec3(offset.x, positionWorld.y.add(R), offset.y)).sub(R).toConst();
+      return exp(this.opticalDepth(offset, height).negate());
+    })();
+  }
+
+  /**
+   * Optical depth of the clouds between a point and the light, faded out
+   * toward the edges of the map
+   * @param {Node} offset - vec2, horizontal offset of the point from the camera (world x, z, m)
+   * @param {Node} height - above sea level (m)
+   */
+  opticalDepth(offset, height) {
+    return Fn(() => {
       const light = this._light;
       const h = this._heights;
       const onBase = offset.add(light.xz.mul(h.x.sub(height).div(light.y)));
@@ -156,7 +168,7 @@ export default class CloudShadow {
       const above = select(height.greaterThan(this._cirrusTop), float(0), float(1));
       const edge = max(abs(uv.x.sub(0.5)), abs(uv.y.sub(0.5))).mul(2);
       const fade = smoothstep(1, 0.8, edge).mul(above).mul(this.enabled);
-      return mix(float(1), exp(depth.negate()), fade);
+      return depth.mul(fade);
     })();
   }
 

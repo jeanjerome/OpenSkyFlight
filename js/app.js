@@ -679,7 +679,7 @@ async function initApp() {
 
     // --- Environment phase ---
     cloudLayer?.update(dt, camera.position, aircraftState ? aircraftState.pitch : 0);
-    volumetricClouds?.update(dt, camera.position);
+    volumetricClouds?.update(dt, camera.position, aircraft.position);
 
     const timer = benchmarkRunner.getSubsystemTimer();
 

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {
   Break,
+  Fn,
   If,
   Loop,
   dot,
@@ -16,6 +17,7 @@ import {
   renderGroup,
   saturate,
   select,
+  smoothstep,
   sqrt,
   texture,
   texture3D,
@@ -27,15 +29,18 @@ import {
 import { getIndirectLuminanceToPoint, getSplitScalarIlluminance } from '@takram/three-atmosphere/webgpu';
 import { stbn } from '@takram/three-geospatial/webgpu';
 import { EARTH_RADIUS } from 'three-tile';
+import CloudAmbient from './CloudAmbient.js';
 import CloudShadow from './CloudShadow.js';
 import CloudTextures from './CloudTextures.js';
 import CloudsTemporalNode from './CloudsTemporalNode.js';
 import {
   CLOUD_CIRRUS_FIBRES,
   CLOUD_CIRRUS_TILE,
+  CLOUD_CLEARING,
   CLOUD_DEFAULT_COVERAGE,
   CLOUD_DETAIL_DISTANCE,
   CLOUD_DETAIL_TILE,
+  CLOUD_DIFFUSION,
   CLOUD_LAYERS,
   CLOUD_LIGHT_MIN_STEP,
   CLOUD_LIGHT_STEPS,
@@ -45,6 +50,8 @@ import {
   CLOUD_MAX_STEPS,
   CLOUD_MIN_STEP,
   CLOUD_MIN_TRANSMITTANCE,
+  CLOUD_NEAR_DISTANCE,
+  CLOUD_NEAR_SAMPLES,
   CLOUD_PHASE_G,
   CLOUD_PHASE_MIX,
   CLOUD_SCATTERING_DECAY,
@@ -137,6 +144,12 @@ export default class VolumetricClouds {
     this._layerTops = frameUniform(new THREE.Vector4());
     this._minHeight = frameUniform(0);
     this._maxHeight = frameUniform(0);
+    /** Length of the view rays left to nearFog() (m), 0 away from the clouds */
+    this._nearDistance = frameUniform(0);
+    /** Whether nearFog() has clouds to draw */
+    this.nearActive = false;
+    /** Distance from the camera to the aircraft (m), 0 for none (see _clearing) */
+    this._aircraftDistance = frameUniform(0);
     this._projectionInverse = frameUniform(new THREE.Matrix4()).onRenderUpdate(() => camera.projectionMatrixInverse);
     this._cameraWorld = frameUniform(new THREE.Matrix4()).onRenderUpdate(() => camera.matrixWorld);
 
@@ -152,6 +165,8 @@ export default class VolumetricClouds {
     this._drift = new THREE.Vector2();
     /** Their shadows on the ground */
     this.shadow = new CloudShadow(this);
+    /** Their light on the aircraft */
+    this.ambient = new CloudAmbient(this);
     this.setBase(3500);
   }
 
@@ -163,6 +178,8 @@ export default class VolumetricClouds {
     this._layerTops.value.set(...tops, 1);
     this._minHeight.value = Math.min(...bottoms);
     this._maxHeight.value = Math.max(...tops);
+    /** Heights of each layer (m), for nearFog() */
+    this._layers = bottoms.map((bottom, i) => [bottom, tops[i]]);
     this.shadow.setBase(altitude);
   }
 
@@ -179,8 +196,18 @@ export default class VolumetricClouds {
   /**
    * @param {number} dt - seconds
    * @param {THREE.Vector3} cameraPosition - world
+   * @param {THREE.Vector3} aircraftPosition - world, where the clouds' light around the aircraft is gathered
    */
-  update(dt, cameraPosition) {
+  update(dt, cameraPosition, aircraftPosition) {
+    this.ambient.position.copy(aircraftPosition);
+    this._aircraftDistance.value = cameraPosition.distanceTo(aircraftPosition);
+    // Near a layer (between the cumulus and the cirrus, far from both, there is none)
+    const height = cameraPosition.y;
+    const nearClouds = this._layers.some(
+      ([bottom, top]) => height > bottom - CLOUD_NEAR_DISTANCE && height < top + CLOUD_NEAR_DISTANCE,
+    );
+    this._nearDistance.value = nearClouds ? CLOUD_NEAR_DISTANCE : 0;
+    this.nearActive = nearClouds;
     this._drift.x += CLOUD_WIND[0] * dt;
     this._drift.y += CLOUD_WIND[1] * dt;
     this._cameraHeight.value = cameraPosition.y;
@@ -227,23 +254,25 @@ export default class VolumetricClouds {
    * @param {{fraction: Node, density: Node}} weather
    * @param {Node} position - vec3, relative to the Earth's centre below the camera (m)
    * @param {Node} height - m
-   * @param {?Node} detailed - bool, whether to read the detail noise
+   * @param {?Node|boolean} detailed - bool node, whether to read the detail noise (true: always)
    */
   _media(weather, position, height, detailed) {
     const shapePoint = this._shapeOrigin.add(vec3(position.x, position.z, height).div(CLOUD_SHAPE_TILE));
     const shape = texture3D(this.textures.shape, shapePoint, 0).r;
     const density = remapClamp(weather.density, vec4(shape.oneMinus()).mul(vec4(this._shapeAmounts)), vec4(1)).toVar();
-    if (detailed) {
-      If(detailed, () => {
-        const detailPoint = this._detailOrigin.add(vec3(position.x, position.z, height).div(CLOUD_DETAIL_TILE));
-        const detail = texture3D(this.textures.detail, detailPoint, 0).r;
-        // Billowy at the top, wispy at the bottom
-        const modifier = mix(vec4(pow(detail, 6)), vec4(detail.oneMinus()), remapClamp(weather.fraction, vec4(0.2), vec4(0.4))).mul(
-          vec4(this._detailAmounts),
-        );
-        density.assign(remapClamp(density.mul(2), modifier.mul(0.5), vec4(1)));
-      });
-    }
+    const erode = () => {
+      const detailPoint = this._detailOrigin.add(vec3(position.x, position.z, height).div(CLOUD_DETAIL_TILE));
+      const detail = texture3D(this.textures.detail, detailPoint, 0).r;
+      // Billowy at the top, wispy at the bottom
+      const modifier = mix(
+        vec4(pow(detail, 6)),
+        vec4(detail.oneMinus()),
+        remapClamp(weather.fraction, vec4(0.2), vec4(0.4)),
+      ).mul(vec4(this._detailAmounts));
+      density.assign(remapClamp(density.mul(2), modifier.mul(0.5), vec4(1)));
+    };
+    if (detailed === true) erode();
+    else if (detailed) If(detailed, erode);
     // Denser toward the top of each layer
     const profile = weather.fraction.mul(0.75).add(0.25);
     const layered = saturate(density.mul(vec4(this._densities)).mul(profile)).toConst();
@@ -271,13 +300,14 @@ export default class VolumetricClouds {
   }
 
   /**
-   * Ray distances where a ray from the camera enters and leaves a sphere
-   * around the Earth's centre, of radius R + height. The camera is on the axis
-   * at R + cameraHeight: the constant term is factored to keep its precision.
+   * Ray distances where a ray enters and leaves a sphere around the Earth's
+   * centre, of radius R + height. The ray starts on the axis at R + from (the
+   * camera, or a point near it): the constant term is factored to keep its
+   * precision.
    */
-  _sphere(direction, height) {
-    const b = this._cameraHeight.add(R).mul(direction.y);
-    const c = this._cameraHeight.sub(height).mul(this._cameraHeight.add(height).add(2 * R));
+  _sphere(direction, height, from) {
+    const b = from.add(R).mul(direction.y);
+    const c = from.sub(height).mul(from.add(height).add(2 * R));
     const discriminant = b.mul(b).sub(c).toConst();
     const root = sqrt(max(discriminant, 0));
     return { hit: discriminant.greaterThanEqual(0), near: b.negate().sub(root), far: b.negate().add(root) };
@@ -315,40 +345,176 @@ export default class VolumetricClouds {
     return select(empty, CLOUD_SKY_DISTANCE, min(point.xyz.div(point.w).length(), CLOUD_SKY_DISTANCE));
   }
 
+  /** Direction toward the sun or the moon (world) */
+  _lightDirection() {
+    const { atmosphere } = this.sky;
+    return atmosphere.matrixECEFToWorld.mul(vec4(this.sky.lightDirectionECEF, 0)).xyz.normalize().toConst();
+  }
+
+  /**
+   * Light scattered toward the start of a ray, per unit of extinction, at its
+   * samples: sunlight (or moonlight) through the clouds toward the light, and
+   * sky light. The sunlight and the sky light at the bottom and the top of the
+   * layers are read once, above a point of the ray, at the first sample in a
+   * cloud (none for the many rays that meet none).
+   * @param {Node} cosTheta - cosine of the angle between the ray and the light
+   * @param {Node} up - vec3, up at that point (from the Earth's centre)
+   * @param {?function(Node, Node): Node} toLight - optical depth from a
+   *   sample's position and height to the light; null to march toward it
+   * @returns {function(Node, Node, object, object): Node} - of a sample's
+   *   position, height, weather and media
+   */
+  _lighting(cosTheta, up, toLight = null) {
+    const { atmosphere } = this.sky;
+    const lightECEF = this.sky.lightDirectionECEF;
+    const lightScale = this.sky.lightScale;
+    const lightDirection = this._lightDirection();
+
+    const irradiance = (height) => {
+      const point = this._toAtmosphere(up.mul(height.add(R)).sub(vec3(0, this._cameraHeight.add(R), 0))).add(
+        atmosphere.altitudeCorrectionUnit,
+      );
+      const light = getSplitScalarIlluminance(point, lightECEF).toConst();
+      return { sun: light.get('direct').mul(lightScale), sky: light.get('indirect').mul(lightScale) };
+    };
+    const sunLow = vec3(0).toVar();
+    const sunHigh = vec3(0).toVar();
+    const skyLow = vec3(0).toVar();
+    const skyHigh = vec3(0).toVar();
+    const lit = float(0).toVar();
+    const read = () =>
+      If(lit.equal(0), () => {
+        const low = irradiance(this._minHeight);
+        const high = irradiance(this._maxHeight);
+        sunLow.assign(low.sun);
+        sunHigh.assign(high.sun);
+        skyLow.assign(low.sky);
+        skyHigh.assign(high.sky);
+        lit.assign(1);
+      });
+
+    // Phase of each octave of the multiple scattering, of decreasing anisotropy
+    const phases = [];
+    for (let i = 0; i < CLOUD_SCATTERING_OCTAVES; i++) {
+      const attenuation = CLOUD_SCATTERING_DECAY.anisotropy ** i;
+      phases.push(
+        mix(
+          henyeyGreenstein(float(CLOUD_PHASE_G[0] * attenuation), cosTheta),
+          henyeyGreenstein(float(CLOUD_PHASE_G[1] * attenuation), cosTheta),
+          CLOUD_PHASE_MIX,
+        ).toConst(),
+      );
+    }
+    // Wrenninge's octaves, and the light diffused deep into the cloud, which
+    // they leave out: it falls with the optical depth far slower than the
+    // light of any octave, so that the inside of a thick cloud is a whitish
+    // grey and not lit by the blue sky alone
+    const multipleScattering = (opticalDepth) =>
+      max(
+        phases.reduce(
+          (sum, phase, i) =>
+            sum.add(exp(opticalDepth.mul(-(CLOUD_SCATTERING_DECAY.opticalDepth ** i))).mul(phase).mul(CLOUD_SCATTERING_DECAY.energy ** i)),
+          float(0),
+        ),
+        float(RECIPROCAL_PI4 * CLOUD_DIFFUSION.scale).div(opticalDepth.mul(CLOUD_DIFFUSION.rate).add(1)),
+      );
+
+    return (position, height, weather, media) => {
+      read();
+      const alpha = remapClamp(height, this._minHeight, this._maxHeight);
+      const opticalDepth = toLight
+        ? toLight(position, height)
+        : this._opticalDepthToLight(position, lightDirection, stbn);
+      const skyGradient = dot(weather.fraction.mul(0.5).add(0.5), media.weight);
+      return mix(sunLow, sunHigh, alpha)
+        .mul(multipleScattering(opticalDepth))
+        .add(
+          mix(skyLow, skyHigh, alpha)
+            .mul(RECIPROCAL_PI4 * CLOUD_SKY_LIGHT_SCALE)
+            .mul(skyGradient),
+        );
+    };
+  }
+
+  /**
+   * Share of the clouds' density left at a distance from the camera: the fog
+   * between the camera and the aircraft is thinned out, for the aircraft to
+   * stay in sight inside a cloud
+   */
+  _clearing(distance) {
+    const aircraft = this._aircraftDistance;
+    return select(
+      aircraft.greaterThan(1),
+      smoothstep(aircraft.mul(CLOUD_CLEARING[0]), aircraft.mul(CLOUD_CLEARING[1]), distance),
+      float(1),
+    );
+  }
+
+  /**
+   * Light of the clouds and transmittance accumulated along a ray, one step
+   * at a time
+   */
+  _accumulator() {
+    const radiance = vec3(0).toVar();
+    const transmittance = float(1).toVar();
+    const weightedDistance = float(0).toVar();
+    const weightSum = float(0).toVar();
+    /**
+     * @param {Node} scattered - vec3, light scattered per unit of extinction
+     * @param {Node} extinction - per metre
+     * @param {Node} stepLength - m
+     * @param {Node} distance - of the sample from the start of the ray
+     */
+    const add = (scattered, extinction, stepLength, distance) => {
+      // Scattered light integrated over the step (energy conserving)
+      const stepTransmittance = exp(extinction.mul(stepLength).negate()).toConst();
+      radiance.addAssign(transmittance.mul(scattered.sub(scattered.mul(stepTransmittance))));
+      transmittance.mulAssign(stepTransmittance);
+      weightedDistance.addAssign(distance.mul(transmittance));
+      weightSum.addAssign(transmittance);
+    };
+    return { radiance, transmittance, weightedDistance, weightSum, add };
+  }
+
   /**
    * The clouds in front of the scene along one view ray, to call inside a
    * shader function: their light, premultiplied (rgb) and opacity (a), the
    * air in front of them included, and the distance of their front, weighted
-   * by their opacity (the scene distance where the ray meets none)
+   * by their opacity (the scene distance where the ray meets none). Near the
+   * clouds, the first CLOUD_NEAR_DISTANCE of a ray from the camera are left to
+   * nearFog().
    * @param {Node} direction - vec3, view ray (world)
    * @param {Node} sceneDistance - m
+   * @param {?Node} offset - vec3, start of the ray relative to the camera
+   *   (world, m; a few hundred metres at most: it is taken as straight above
+   *   the Earth's centre below the camera), or null for the camera
    * @returns {{color: Node, front: Node}}
    */
-  march(direction, sceneDistance) {
+  march(direction, sceneDistance, offset = null) {
     const { atmosphere } = this.sky;
     const lightECEF = this.sky.lightDirectionECEF;
     const lightScale = this.sky.lightScale;
 
     direction = vec3(direction).toConst();
-    const origin = vec3(0, this._cameraHeight.add(R), 0).toConst();
-    const lightDirection = atmosphere.matrixECEFToWorld.mul(vec4(lightECEF, 0)).xyz.normalize().toConst();
-    const cosTheta = dot(direction, lightDirection).toConst();
+    const from = (offset ? this._cameraHeight.add(offset.y) : this._cameraHeight).toConst();
+    const origin = (offset ? vec3(offset.x, from.add(R), offset.z) : vec3(0, from.add(R), 0)).toConst();
+    const cosTheta = dot(direction, this._lightDirection()).toConst();
 
     // Part of the ray in the shell of the layers
-    const ground = this._sphere(direction, float(0));
-    const bottom = this._sphere(direction, this._minHeight);
-    const top = this._sphere(direction, this._maxHeight);
+    const ground = this._sphere(direction, float(0), from);
+    const bottom = this._sphere(direction, this._minHeight, from);
+    const top = this._sphere(direction, this._maxHeight, from);
     const hitsGround = ground.hit.and(ground.far.greaterThan(0));
     const hitsBottom = bottom.hit.and(bottom.near.greaterThan(0));
     const near = float(-1).toVar();
     const far = float(-1).toVar();
-    If(this._cameraHeight.lessThan(this._minHeight), () => {
+    If(from.lessThan(this._minHeight), () => {
       If(hitsGround.not(), () => {
         near.assign(bottom.far);
         far.assign(top.far);
       });
     })
-      .ElseIf(this._cameraHeight.lessThan(this._maxHeight), () => {
+      .ElseIf(from.lessThan(this._maxHeight), () => {
         near.assign(0);
         far.assign(select(hitsBottom, bottom.near, top.far));
       })
@@ -359,50 +525,16 @@ export default class VolumetricClouds {
         });
       });
     far.assign(min(far, min(sceneDistance, near.add(CLOUD_MAX_DISTANCE))));
+    if (!offset) near.assign(max(near, this._nearDistance));
 
     const color = vec4(0).toVar();
     const front = float(sceneDistance).toVar();
     If(far.greaterThan(near).and(far.greaterThan(0)), () => {
       const jitter = stbn;
       const start = origin.add(direction.mul(near)).toConst();
-
-      // Sunlight and sky light at the bottom and the top of the layers, above the entry point
-      const up = normalize(start);
-      const irradiance = (height) => {
-        const point = this._toAtmosphere(up.mul(height.add(R)).sub(origin)).add(atmosphere.altitudeCorrectionUnit);
-        const light = getSplitScalarIlluminance(point, lightECEF).toConst();
-        return { sun: light.get('direct').mul(lightScale), sky: light.get('indirect').mul(lightScale) };
-      };
-      const low = irradiance(this._minHeight);
-      const high = irradiance(this._maxHeight);
-      const sunLow = vec3(low.sun).toConst();
-      const sunHigh = vec3(high.sun).toConst();
-      const skyLow = vec3(low.sky).toConst();
-      const skyHigh = vec3(high.sky).toConst();
-
-      // Phase of each octave of the multiple scattering, of decreasing anisotropy
-      const phases = [];
-      for (let i = 0; i < CLOUD_SCATTERING_OCTAVES; i++) {
-        const attenuation = CLOUD_SCATTERING_DECAY.anisotropy ** i;
-        phases.push(
-          mix(
-            henyeyGreenstein(float(CLOUD_PHASE_G[0] * attenuation), cosTheta),
-            henyeyGreenstein(float(CLOUD_PHASE_G[1] * attenuation), cosTheta),
-            CLOUD_PHASE_MIX,
-          ).toConst(),
-        );
-      }
-      const multipleScattering = (opticalDepth) =>
-        phases.reduce(
-          (sum, phase, i) =>
-            sum.add(exp(opticalDepth.mul(-(CLOUD_SCATTERING_DECAY.opticalDepth ** i))).mul(phase).mul(CLOUD_SCATTERING_DECAY.energy ** i)),
-          float(0),
-        );
-
-      const radiance = vec3(0).toVar();
-      const transmittance = float(1).toVar();
-      const weightedDistance = float(0).toVar();
-      const weightSum = float(0).toVar();
+      // Sunlight and sky light above the entry point
+      const light = this._lighting(cosTheta, normalize(start));
+      const sum = this._accumulator();
       const span = far.sub(near).toConst();
       const step = float(CLOUD_MIN_STEP).add(near.mul(CLOUD_STEP_GROWTH - 1)).toVar();
       // Start of the current step along the ray, from the entry into the layers
@@ -416,53 +548,91 @@ export default class VolumetricClouds {
         // step ends at the scene (the aircraft inside a cloud)
         const stepLength = min(step, span.sub(t)).toConst();
         const sampleT = t.add(stepLength.mul(jitter)).toConst();
+        const distance = near.add(sampleT).toConst();
         const position = start.add(direction.mul(sampleT)).toConst();
         const height = length(position).sub(R).toConst();
         const weather = this._weather(position, height);
         If(weather.density.greaterThan(vec4(MIN_DENSITY)).any(), () => {
-          const media = this._media(weather, position, height, near.add(sampleT).lessThan(CLOUD_DETAIL_DISTANCE));
-          const extinction = media.extinction;
+          const media = this._media(weather, position, height, distance.lessThan(CLOUD_DETAIL_DISTANCE));
+          const extinction = (offset ? media.extinction : media.extinction.mul(this._clearing(distance))).toConst();
           If(extinction.greaterThan(MIN_EXTINCTION), () => {
-            const alpha = remapClamp(height, this._minHeight, this._maxHeight);
-            const opticalDepth = this._opticalDepthToLight(position, lightDirection, jitter);
-            const skyGradient = dot(weather.fraction.mul(0.5).add(0.5), media.weight);
-            const scattered = mix(sunLow, sunHigh, alpha)
-              .mul(multipleScattering(opticalDepth))
-              .add(mix(skyLow, skyHigh, alpha).mul(RECIPROCAL_PI4 * CLOUD_SKY_LIGHT_SCALE).mul(skyGradient))
-              .mul(extinction);
-            // Scattered light integrated over the step (energy conserving)
-            const stepTransmittance = exp(extinction.mul(stepLength).negate()).toConst();
-            radiance.addAssign(transmittance.mul(scattered.sub(scattered.mul(stepTransmittance)).div(extinction)));
-            transmittance.mulAssign(stepTransmittance);
-            weightedDistance.addAssign(near.add(sampleT).mul(transmittance));
-            weightSum.addAssign(transmittance);
+            sum.add(light(position, height, weather, media), extinction, stepLength, distance);
           });
         });
-        If(transmittance.lessThanEqual(CLOUD_MIN_TRANSMITTANCE), () => Break());
+        If(sum.transmittance.lessThanEqual(CLOUD_MIN_TRANSMITTANCE), () => Break());
         t.addAssign(stepLength);
         step.assign(min(step.mul(CLOUD_STEP_GROWTH), CLOUD_MAX_STEP));
       });
 
-      If(weightSum.greaterThan(0), () => {
+      If(sum.weightSum.greaterThan(0), () => {
         // The air between the camera and the clouds, at their mean distance.
         // Inside a cloud it is zero where the first sample, taken at the
         // camera, is dense enough to end the march: the luminance toward a
         // point at the camera itself is undefined (a zero direction).
-        const distance = max(weightedDistance.div(weightSum), MIN_AIR_DISTANCE).toConst();
+        const distance = max(sum.weightedDistance.div(sum.weightSum), MIN_AIR_DISTANCE).toConst();
         const air = getIndirectLuminanceToPoint(
-          atmosphere.cameraPositionUnit.add(atmosphere.altitudeCorrectionUnit),
-          this._toAtmosphere(direction.mul(distance)).add(atmosphere.altitudeCorrectionUnit),
+          (offset ? this._toAtmosphere(offset) : atmosphere.cameraPositionUnit).add(atmosphere.altitudeCorrectionUnit),
+          this._toAtmosphere(offset ? offset.add(direction.mul(distance)) : direction.mul(distance)).add(
+            atmosphere.altitudeCorrectionUnit,
+          ),
           vec2(0),
           lightECEF,
         ).toConst();
-        const opacity = remapClamp(transmittance, 1, CLOUD_MIN_TRANSMITTANCE);
+        const opacity = remapClamp(sum.transmittance, 1, CLOUD_MIN_TRANSMITTANCE);
         color.assign(
-          vec4(radiance.mul(air.get('transmittance')).add(air.get('luminance').mul(lightScale).mul(opacity)), opacity),
+          vec4(
+            sum.radiance.mul(air.get('transmittance')).add(air.get('luminance').mul(lightScale).mul(opacity)),
+            opacity,
+          ),
         );
         front.assign(min(distance, sceneDistance));
       });
     });
     return { color, front };
+  }
+
+  /**
+   * The clouds within CLOUD_NEAR_DISTANCE of the camera, when it is near or
+   * inside them, along one view ray: their light, premultiplied (rgb), and
+   * opacity (a), to lay over the scene and the rest of the clouds. They are
+   * marched every frame at every pixel: as the camera flies through them, what
+   * a pixel shows of them changes too fast for the reprojected image of the
+   * previous frames, of which the rest of the clouds is made (see
+   * CloudsTemporalNode). The air over so short a distance is left out.
+   * @param {Node} direction - vec3, view ray (world)
+   * @param {Node} sceneDistance - m
+   */
+  nearFog(direction, sceneDistance) {
+    return Fn(() => {
+      const color = vec4(0).toVar();
+      If(this._nearDistance.greaterThan(0), () => {
+        const ray = vec3(direction).toConst();
+        const origin = vec3(0, this._cameraHeight.add(R), 0).toConst();
+        // The depth toward the light read from the map of the clouds' shadows
+        // (a march toward the light at every pixel would cost several ms)
+        const light = this._lighting(dot(ray, this._lightDirection()), vec3(0, 1, 0), (position, height) =>
+          this.shadow.opticalDepth(position.xz, height),
+        );
+        const sum = this._accumulator();
+        const stepLength = min(sceneDistance, this._nearDistance).div(CLOUD_NEAR_SAMPLES).toConst();
+        Loop(CLOUD_NEAR_SAMPLES, ({ i }) => {
+          const distance = float(i).add(stbn).mul(stepLength).toConst();
+          const position = origin.add(ray.mul(distance)).toConst();
+          const height = length(position).sub(R).toConst();
+          const weather = this._weather(position, height);
+          If(weather.density.greaterThan(vec4(MIN_DENSITY)).any(), () => {
+            const media = this._media(weather, position, height, true);
+            const extinction = media.extinction.mul(this._clearing(distance)).toConst();
+            If(extinction.greaterThan(MIN_EXTINCTION), () => {
+              sum.add(light(position, height, weather, media), extinction, stepLength, distance);
+            });
+          });
+          If(sum.transmittance.lessThanEqual(CLOUD_MIN_TRANSMITTANCE), () => Break());
+        });
+        color.assign(vec4(sum.radiance, remapClamp(sum.transmittance, 1, CLOUD_MIN_TRANSMITTANCE)));
+      });
+      return color;
+    })();
   }
 
   /**
@@ -475,6 +645,7 @@ export default class VolumetricClouds {
   }
 
   dispose() {
+    this.ambient.dispose();
     this.shadow.dispose();
     this.textures.dispose();
   }

@@ -226,15 +226,17 @@ export default class ScenePipeline {
   }
 
   /**
-   * @param {?function(TextureNode, TextureNode, ?TextureNode): Node} apply - builds the
+   * @param {?function(TextureNode, TextureNode, ?TextureNode, ?TextureNode): Node} apply - builds the
    *   atmosphere (sky and aerial perspective) over the scene from its color and
-   *   depth, and the clouds' pass when there is one, or null for none. The
+   *   depth, and the clouds' pass when there is one (the clouds, then those
+   *   right around the camera, in front of them), or null for none. The
    *   result is rendered at the scene pass resolution and fed to the
    *   anti-aliasing in place of the scene color.
    * @param {?function(TextureNode, boolean): Node} clouds - builds the pass
-   *   of the clouds in front of the scene (a node with getTextureNode(), whose
-   *   texture holds their premultiplied luminance and opacity at the scene pass
-   *   resolution) from the scene depth and whether it is reversed; null for none
+   *   of the clouds in front of the scene (a node with getTextureNode() and
+   *   getNearTextureNode(), whose textures hold their premultiplied luminance
+   *   and opacity at the scene pass resolution) from the scene depth and
+   *   whether it is reversed; null for none
    */
   setAtmosphere(apply, clouds = null) {
     this._atmosphereApply = apply;
@@ -261,7 +263,12 @@ export default class ScenePipeline {
       if (this._clouds) {
         this._cloudsNode = this._clouds(this._sceneDepth, this._renderer.reversedDepthBuffer);
       }
-      const node = apply(color, depth, this._cloudsNode?.getTextureNode() ?? null);
+      const node = apply(
+        color,
+        depth,
+        this._cloudsNode?.getTextureNode() ?? null,
+        this._cloudsNode?.getNearTextureNode() ?? null,
+      );
       // The atmosphere covers every pixel (sky included): opaque
       this._atmosphereNode = rtt(vec4(node.rgb, 1), null, null, {
         resolutionScale: this.scenePass.getResolutionScale(),
