@@ -9,10 +9,11 @@ en fin de session.
 ## État courant (mis à jour le 2026-11-26, session 24)
 
 - **Lot 5 en cours** sur `feat/render-terrain` (depuis `main`, non poussée). Faits : L5.1 (raccord exact
-  des bords entre tuiles, altitudes dans un worker), L5.8 (mode courbes de niveau tactique
-  phosphore) ; L5.5 abandonnée. Prochaine tâche au choix de l'utilisateur : L5.2, L5.3 ou L5.9.
-  Référence des vues : `benchmarks/render/terrain-stitch-2` ; vols : `terrain-stitch-flight`,
-  `terrain-stitch-plan1` (p1 80,6 et 77,5). Bundle three-tile à reconstruire après chaque
+  des bords entre tuiles, altitudes dans un worker), L5.2 (geomorphing du relief et fondu de
+  l'imagerie), L5.8 (mode courbes de niveau tactique phosphore) ; L5.5 abandonnée. Suite : L5.3,
+  puis L5.9, L5.4 (l'utilisateur a demandé d'enchaîner seul). Référence des vues :
+  `benchmarks/render/morph-fade-1` ; vols : `morph-fade-flight`, `morph-fade-plan1` (p1 83,3 et
+  82,0). L'arbre des tuiles est mis à jour par `GeoTerrainManager.update`, plus par le rendu. Bundle three-tile à reconstruire après chaque
   `git pull` ou changement de branche (`cd vendor/three-tile && npm run build:lib`) : le worker
   d'altitude y est intégré.
 
@@ -793,7 +794,36 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
       niveaux, moyenne de quelques cm, pics isolés aux coins de tuiles lointaines (une diagonale plus
       grossière que les deux voisines directes, non vue). Mesures dans **Mesures** (`terrain-stitch-*`).
       Normales par pixel : sorties en L5.9.
-- [ ] **L5.2** Geomorphing entre niveaux de LOD (suppression du « pop »).
+- [x] **L5.2** Geomorphing entre niveaux de LOD (suppression du « pop »).
+      Fait : morphing **dans le temps** plutôt qu'à la distance par sommet (CDLOD) : three-tile choisit
+      ses niveaux tuile par tuile (distance au centre / diagonale, renfort au centre de la vue qui
+      dépend de l'orientation de la caméra, hystérésis), un morph fonction de la distance n'aurait
+      pas suivi cette sélection. Chaque tuile a un `morph` (`Tile.ts`, 0 : surface du parent, 1 : la
+      sienne) parcouru en 0,75 s (`TileMap.morphDuration`, avancé à chaque frame par
+      `TileMap.updateMorph`). **Subdivision** : les quatre enfants apparaissent sur la surface exacte
+      du parent (ses triangles, diagonale sud-est – nord-ouest, calculés dans le worker : W lignes de
+      plus dans la texture d'altitude, `parentRow`), puis rejoignent la leur ; un parent encore en
+      cours de morph finit d'abord, quatre fois plus vite. **Fusion** : les enfants restent affichés
+      et reviennent sur la surface du parent, les niveaux les plus fins d'abord, puis le parent
+      s'affiche (`_merging` hérité des ancêtres, plus de subdivision dessous). **Raccords** : une
+      tuile de niveau z au morph m dessine la surface du niveau z − 1 + m ; chaque bord suit le côté
+      le plus grossier (`edgeLevels` devient fractionnaire : d + f mélange les profils d et d + 1,
+      profil 0 = la tuile elle-même), les voisines restent jointives même quand elles ne se
+      transforment pas ensemble ; normales tirées de la surface mélangée. **Imagerie** en fondu au
+      même rythme : la texture du parent (gardé chargé tant que ses enfants sont affichés),
+      échantillonnée sur le quart couvert, liée par objet comme la carte d'altitude
+      (`applyTerrariumImagery`, un seul graphe compilé). `groundHeight` suit le morph.
+      Trouvé en chemin : three mettait à jour l'arbre des tuiles pendant `render()` (TileMap est un
+      objet LOD), après le calcul des bords : une tuile affichée par une fusion était dessinée une
+      frame avec des bords périmés, et chaque rendu de la scène (cascades d'ombre de L5.3 comprises)
+      aurait évalué les LOD depuis sa propre caméra. `autoUpdate` coupé, arbre mis à jour au début
+      de la phase terrain (`GeoTerrainManager.update(camera, delta)`), puis morph, puis bords.
+      Vérifié (scripts Playwright, vue 2, seuil de LOD abaissé à 0,4 puis rétabli) : plus grand
+      saut du sol d'une frame à l'autre 58,8 m sans morph, 1,0 m avec ; morph figé, aucune variation
+      du sol au remplacement (surface du parent reproduite exactement) ; écart entre les bords des
+      voisines reconstruits sur le CPU pendant les transitions ≤ 0,24 mm sur 46 M sommets (hors
+      dernière cellule grossière avant un coin, défaut connu de L5.1) ; imagerie des parents figée
+      à morph 0 : alignée, sans décalage. Mesures dans **Mesures** (`morph-*`).
 - [ ] **L5.3** Ombres du relief (cartes d'horizon ou ray marching sur la carte d'altitude) +
       `CSMShadowNode` pour l'avion et le terrain proche.
 - [ ] **L5.4** Occlusion ambiante (`GTAONode`).
@@ -918,6 +948,10 @@ Notes de lecture :
 | 2026-11-26 | Raccord des bords, altitudes calculées sur le thread principal (abandonné) | Plan 1 (basse alt.) | 94 s | 108,8 | 79,4 | 24,9 | 4,8 (6,4) | 194 / 50 | 1,57 M | 372 |
 | 2026-11-26 | L5.1 raccord des bords, altitudes dans un worker (`terrain-stitch-flight`) | Vol par défaut | 128 s | 119,8 | 107,5 | 80,6 | 4,7 (6,3) | 0 / 0 | 1,30 M | 316 |
 | 2026-11-26 | L5.1 raccord des bords, altitudes dans un worker (`terrain-stitch-plan1`) | Plan 1 (basse alt.) | 94 s | 119,8 | 103,1 | 77,5 | 4,8 (6,3) | 0 / 0 | 1,57 M | 372 |
+| 2026-11-26 | L5.2 geomorphing du relief (`morph-flight`) | Vol par défaut | 128 s | 119,7 | 107,5 | 85,5 | 4,8 (6,4) | 0 / 0 | 1,37 M | 322 |
+| 2026-11-26 | L5.2 geomorphing du relief (`morph-plan1`) | Plan 1 (basse alt.) | 94 s | 119,9 | 104,2 | 84,0 | 4,9 (6,3) | 0 / 0 | 1,65 M | 387 |
+| 2026-11-26 | L5.2 relief + fondu de l'imagerie (`morph-fade-flight`) | Vol par défaut | 128 s | 119,6 | 105,3 | 83,3 | 5,0 (6,5) | 0 / 0 | 1,37 M | 322 |
+| 2026-11-26 | L5.2 relief + fondu de l'imagerie (`morph-fade-plan1`) | Plan 1 (basse alt.) | 94 s | 119,9 | 103,1 | 82,0 | 4,8 (6,1) | 0 / 0 | 1,65 M | 387 |
 | 2026-11-24 | L2.7 preset Ultra, LODThreshold 1,4 | Vol par défaut | 128 s | 115,6 | 85,5 | 53,5 | 5,0 (6,5) | 1 / 0 | 2,84 M | 714 |
 
 Pour mémoire, la configuration n°4 de `BENCHMARKS.md` (même machine, Chrome 146, ancien moteur
@@ -981,12 +1015,23 @@ geo-three) donnait avg 83,8 / p5 47,8 / p1 17,0 (avg biaisé, comparable à 127,
 | 2026-11-26 | **Pleine résolution** — L5.1 raccord, grilles 64 cellules dès z8 (`terrain-stitch`, écarté) | 4,16 | 3,80 | 4,36 | 3,86 | 7,79 | 4,20 |
 | 2026-11-26 | **Pleine résolution** — L5.1 raccord, grilles 64 cellules dès z10 (`terrain-stitch-2`) | 4,12 | 3,72 | 3,82 | 3,81 | 7,63 | 3,85 |
 | 2026-11-26 | L5.1 raccord — triangles (contre 1,01 / 1,34 / 1,35 / 1,06 / 1,14 / 1,07 M au lot 4) | 1,17 M | 1,51 M | 1,54 M | 1,24 M | 1,36 M | 1,27 M |
+| 2026-11-26 | **Pleine résolution** — L5.2 geomorphing du relief (`morph-3`) | 3,69 | 4,22 | 3,86 | 3,68 | 7,12 | 3,78 |
+| 2026-11-26 | **Pleine résolution** — L5.2 relief + fondu de l'imagerie (`morph-fade-1`) | 3,70 | 3,79 | 3,88 | 3,87 | 7,97 | 4,27 |
 
 Raccord des bords (L5.1) : captures alternées contre `main` (worktree, port 3001), vues 1 et 6, deux
 séries : `main` 3,62 / 3,98 ms (vue 1) et 4,15 / 3,66 ms (vue 6), raccord 3,64 / 3,64 et 4,16 / 4,17 ms :
 aucune différence mesurable malgré +16 à +18 % de triangles ; l'écart de la vue 1 contre la clôture
 du lot 4 (+0,5 ms) est celui d'une série à l'autre. Grilles de 64 cellules dès z8 : +30 à +45 % de
 triangles, écartées.
+
+Geomorphing (L5.2) : vues identiques une fois les transitions finies (draw calls et triangles égaux à
+`terrain-stitch-2`, 0,03 % de pixels différents : bruit du TAA). Coût du fondu de l'imagerie (une
+lecture de texture de plus par pixel de terrain) : captures alternées des vues 1 et 6 avec et sans
+fondu (bascule temporaire par l'URL), quatre séries : avec 3,83 / 3,89, 4,67 / 4,57 (pic thermique),
+3,71 / 3,79, 3,71 / 3,80 ms ; sans 3,70 / 4,18, 3,81 / 3,81, 3,75 / 4,08, 3,70 / 3,75 ms : aucune
+différence mesurable. Une seconde capture complète (`morph-fade-2`, 4,19 ms en vue 1) a été prise
+machine chaude, à ignorer. En vol, +5 % de triangles : les tuiles fines restent affichées 0,75 s le
+temps de leur fusion.
 
 Les lignes « GPU ms méd. » antérieures à L2.9 ne sont pas exploitables (somme des passes, fréquence
 du GPU fixée par le régulateur). Les lignes « coût GPU » de L2.9 à L2.3 ont été mesurées à 1028×645
@@ -1108,11 +1153,22 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 | 2026-11-26 | Éclairage incrusté dans l'imagerie (L5.5) | Abandonné, aucune correction (choix de l'utilisateur) | Les zones noires des vues 4 et 6 ne viennent pas de tuiles invalides : le cache est sain et les tuiles ESRI retéléchargées sont identiques octet pour octet. Elles viennent des ombres des photos (soleil à ≈ 155°, 50° d'élévation : faces nord-ouest 10 fois plus sombres et bleues, en partie écrasées au noir), de l'absence d'ombres du relief et de lumière renvoyée, et des comblements de lacunes du SRTM dans le MNT Terrarium. Le rééclairage essayé dans le shader (gain par canal tiré de la normale et de la teinte de l'ombre, masque élargi par un mip plus grossier, albédo de repli pour le noir écrasé) laissait des liserés sombres au bord des ombres et des taches dans les forêts : rendu jugé moins bon que l'original |
 | 2026-11-26 | Style du mode courbes de niveau (L5.8) | Tactique, coloris phosphore, traits affinés au-delà de 4 km avec plancher à 40 % (choix de l'utilisateur sur planches) | Lisible à l'ombre et la nuit, utile aux missions ; carte topo, maquette et isobandes écartées ; épaisseur constante : plus de notion de profondeur ; affinage dès 2 km : vue haute trop pâle |
 | 2026-11-26 | Raccord des bords entre tuiles (L5.1) | Altitude unique échantillonnée par-delà les tuiles, grilles emboîtées, profils d'arête des voisines plus grossières choisis à chaque frame, calcul dans un worker | Exact (au bit près entre voisines de même niveau, sans jonction en T entre niveaux) sans coût GPU mesurable ; calculé sur le thread principal, il faisait tomber le p1 à 25 (3,5 décodages par tuile, 2,2 ms de calcul) ; dans le worker, le p1 monte au-dessus du lot 4 |
+| 2026-11-26 | Geomorphing (L5.2) | Dans le temps (0,75 s), fusions différées jusqu'au retour des enfants sur la surface du parent, bords sur le côté le plus grossier, imagerie en fondu | La sélection des niveaux de three-tile dépend de la tuile entière et de l'orientation de la caméra : un morph fonction de la distance (CDLOD) n'aurait pas été terminé au moment du changement ; le temps couvre aussi les changements dus à une rotation. Coût nul sur le GPU, p1 en vol en hausse |
 | 2026-11-23 | Vitesse par défaut | 560 m/s | Vitesse réelle de l'ancien défaut (800 unités Mercator/s) : benchmarks comparables à la baseline |
 
 ## Journal des sessions
 
 <!-- Entrée la plus récente en haut. -->
+
+### 2026-11-26 (25)
+- Fait : L5.2, geomorphing dans le temps (subdivisions et fusions, bords sur le côté le plus
+  grossier) et fondu de l'imagerie (validé sur le principe par l'utilisateur, pas encore jugé en
+  vol). Corrigé : l'arbre des tuiles mis à jour pendant le rendu (bords périmés une frame).
+- Outils (scratchpad, non versionnés) : saut du sol d'une frame à l'autre sur 2 500 points par
+  `groundHeight` pendant des changements forcés du seuil de LOD, écart entre bords voisins
+  reconstruits sur le CPU à chaque frame, morph figé à 0 pour comparer l'imagerie des parents ; accès
+  temporaire par `window.__dbg`. Les différences d'images entre frames ne servent à rien ici : le
+  bruit du TAA et de l'animation du moteur dépasse le changement de géométrie.
 
 ### 2026-11-26 (24)
 - Analysé : zones noires dans les massifs (vues 4 et 6). Cache de tuiles sain, causes dans l'imagerie,
