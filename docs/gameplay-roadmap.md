@@ -14,9 +14,11 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
   faits et commités**, fusionnés dans `main` et poussés le 2026-11-25 (branche `feat/flight-model` supprimée), sauf le préchargement et les requêtes par lot de G0.4 (reportés à
   G3 et G5) et la récupération automatique de G1.2 (reportée). Le lot de rendu 4 (nuages
   volumétriques) est terminé et fusionné dans `main` le 2026-11-26 (voir `docs/rendering-roadmap.md`).
-  Le 2026-11-26, l'utilisateur a choisi le lot de rendu 5, en cours sur `feat/render-terrain` (voir
-  `docs/rendering-roadmap.md`) ; G3 (décollage et atterrissage, train et aéroports) suivra, sur une
-  nouvelle branche depuis `main`.
+  Le lot de rendu 5 (terrain et ombres) est terminé et fusionné dans `main` le 2026-11-26 (non
+  poussé) ; la suite, au choix de l'utilisateur en début de session, peut être G3 (décollage et
+  atterrissage, train et aéroports), sur une nouvelle branche depuis `main`. L'avion porte désormais
+  son ombre et reçoit celle du relief (`js/aircraft/AircraftShadow.js`, calque `SHADOW_CASTER_LAYER`
+  pour ce qui doit la projeter : penser au train d'atterrissage de G3).
 - **Vue orbite** (demandée par l'utilisateur, hors lots) : `CONFIG.cameraMode = 'orbit'`, entre la
   poursuite et le cockpit (`V`), `js/camera/OrbitCameraController.js`. La caméra tourne autour de
   l'avion dans son repère (roulis compris, rattrapé comme la poursuite liée), vise 3 m derrière son
