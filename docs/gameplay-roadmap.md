@@ -16,7 +16,9 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
   volumétriques) est terminé et fusionné dans `main` le 2026-11-26 (voir `docs/rendering-roadmap.md`).
   Le lot de rendu 5 (terrain et ombres) est terminé et fusionné dans `main` le 2026-11-26 et
   poussé. **G3 (décollage et atterrissage) en cours sur `feat/takeoff-landing`** depuis le
-  2026-11-26 : G3.1 (train animé) fait ; suite G3.2 (physique au sol), voir le lot G3. L'avion porte désormais
+  2026-11-26 : G3.1 (train animé) et G3.2 (physique au sol) faits ; suite G3.3 (contacts de
+  structure et crash), voir le lot G3. Pour essayer au sol avant G3.4 :
+  `?lat=46.2381&lon=6.1090` (Genève) puis `window.osf.startOnGround(0, 0, 46)` dans la console. L'avion porte désormais
   son ombre et reçoit celle du relief (`js/aircraft/AircraftShadow.js`, calque `SHADOW_CASTER_LAYER`
   pour ce qui doit la projeter : penser au train d'atterrissage de G3).
 - **Vue orbite** (demandée par l'utilisateur, hors lots) : `CONFIG.cameraMode = 'orbit'`, entre la
@@ -324,10 +326,35 @@ sol) ; les nuages volumétriques (lot 4) n'ont pas de dépendance avec ces lots.
       passe sur `U` ; HUD : `GEAR TRANSIT` / `GEAR DOWN`, en orange avec `SPEED` au-delà de 230 kt
       indiqués. Vérifié dans Chrome (page de test du modèle seul, puis en vol, vue orbite et HUD) ;
       +1 draw call (la seconde moitié de la trappe avant). Le mode Exploration garde le train rentré.
-- [ ] **G3.2** Physique au sol : 3 jambes ressort-amortisseur (principales ≈ 430 kN/m et 50 kN·s/m,
+- [x] **G3.2** Physique au sol : 3 jambes ressort-amortisseur (principales ≈ 430 kN/m et 50 kN·s/m,
       avant ≈ 150 kN/m et 15 kN·s/m, course 0,3 m), cercle de frottement (μ 0,8 / 0,5), freins carbone
       (≈ 0,4 g), roue avant orientable (±75° au roulage, faible au-delà de 60 kt), résistance au
       roulement 0,02, effet de sol sous une envergure.
+      Fait : `js/flight/GearContact.js` (chaque jambe : ressort et amortisseur le long de l'axe
+      vertical de l'avion, butée raide au-delà de la course, pneu sur le plan du sol pris sur la pente
+      autour de l'avion, glissements longitudinal et latéral proportionnels sous 0,2 et 0,3 m/s puis
+      cercle de frottement μ 0,8 ; freins sur les roues principales, roue avant orientable jusqu'à 75°,
+      braquage limité ensuite pour rester sous 3,5 m/s² d'accélération latérale : quelques degrés à
+      30 kt, moins d'un au-delà de 60 kt ; vitesse des roues gardée pour leur rotation). Jambe avant
+      raidie à 220 kN/m et 20 kN·s/m : à 150 kN/m elle talonnait au freinage. Freins calés à 0,7 sur
+      les roues principales (avec antidérapage) pour les 450 m de roulage officiels : le transfert de
+      charge sur la roue avant, qui ne freine pas, ne laissait que 0,36 g à 0,45. `FlightModel` :
+      roues au sol, l'avion tourne physiquement (inerties estimées `INERTIA`, moments des roues,
+      amortissement aérodynamique) et les commandes de vol passent en loi sol : vitesses de tangage
+      (5°/s) et de roulis (30°/s) commandées dans la limite de l'autorité des gouvernes à la vitesse
+      du moment (`GROUND_PITCH_CONTROL` calé pour lever le nez vers 120 kt), donc attitude tenue
+      manche au neutre et nez qui redescend doucement après le toucher ; palonnier direct, stabilité
+      de girouette. Au décollage, la loi en vol reprend depuis l'incidence et le roulis du moment.
+      Effet de sol : traînée induite réduite (McCormick) sous une envergure. Centre de gravité estimé
+      dans le modèle 3D (`AIRCRAFT_CG`, 12 % du poids sur la roue avant) : l'avion est maintenant
+      dessiné autour de lui (décalé de 0,7 m vers le haut et 1,5 m vers l'avant par rapport au centre
+      de sa boîte englobante). Mode Simulation : espace ou B freinent aussi les roues au sol ; au sol
+      la visée souris garde les ailes à plat et oriente la roue avant vers le cap de la visée (le
+      palonnier reste prioritaire). Visuel : amortisseurs qui s'enfoncent, roues qui tournent, roue
+      avant braquée. `window.osf.startOnGround(x, z, cap)` pose l'avion à l'arrêt (en attendant le
+      départ d'une piste de G3.4). Banc : trois cas au sol (tableau du banc de vérification) ; tests
+      `tests/gearContact.test.js`. Vérifié dans Chrome à Genève (piste 05/23) : roulage, rotation à
+      125 kt, décollage vers 150 kt ; le relief non aplani de la piste (±1 m, G3.5) secoue l'avion.
 - [ ] **G3.3** Contact et crash : points de structure (nez, saumons, tuyères, ventre), crash si contact
       de structure, si vitesse verticale > 3 m/s ou si le train est rentré ; écran de reprise.
 - [ ] **G3.4** Données d'aéroports : `runways.csv` d'OurAirports (domaine public) découpé par tuile par
@@ -617,6 +644,9 @@ Masse : base + emports + moitié du carburant interne (13,25 t) sauf mention.
 | Poussée pleine : facteur de charge mini | −3,37 g | −3,2 ± 0,3 | limite officielle |
 | Traction pleine lente : incidence max (q > 1 500 Pa) | 29,6° | 29 ± 1 | limite d'essai |
 | Manche au neutre 30 s / inclinaison 45° 20 s : écart d'altitude | +7 m / +13 m | 0 ± 30 / ± 40 | tenue de trajectoire |
+| Lâcher des freins → 125 kt, PC, 16,1 t (ajouté avec G3.2) | 9,55 s | 9 ± 1,5 | essai |
+| Course au décollage, PC, rotation à 125 kt (décollage à 160 kt) | 394 m | 400 ± 100 | officiel |
+| Roulage à l'atterrissage (approche 2,5° à 125 kt, freins et aérofrein) | 446 m | 450 ± 80 | officiel, sans parachute |
 
 Instructeur de visée revu le 2026-11-25 après les essais de l'utilisateur (l'avion se mettait sur le
 dos puis oscillait en pendule) : il roulait sur le dos dès qu'on visait plus de 15° sous le nez, son
@@ -658,6 +688,7 @@ piqué dans le relief : crash et redémarrage ; aucune erreur console.
 
 | Date | Fait | Reste / prochaine étape |
 |---|---|---|
+| 2026-11-26 | G3.2 : physique au sol (jambes ressort-amortisseur, pneus, freins, roue avant orientable, effet de sol), loi sol des commandes de vol, centre de gravité du modèle, visée souris au sol ; banc au sol (125 kt en 9,5 s, décollage 394 m, atterrissage 446 m) ; vérifié dans Chrome à Genève | G3.3 (contacts de structure et crash : queue au décollage, toucher trop dur, train rentré) ; ressenti au sol par l'utilisateur |
 | 2026-11-26 | G3 commencé sur `feat/takeoff-landing` ; G3.1 : séquence du train (trappes, jambes repliées vers l'avant, roue principale couchée à plat), traînée, touche `G` / bouton X, HUD et avertissement au-delà de 230 kt ; pilote automatique déplacé sur `U` | G3.2 (physique au sol : jambes ressort-amortisseur, freins, roue avant orientable) ; ressenti visuel du train par l'utilisateur |
 | 2026-11-25 | G2.4 : brume de chaleur (tampon de décalages, appliqué dans la passe d'atmosphère avant le TAAU), réglage « Heat haze » en High et Ultra ; ≈ +0,1 ms | Ressenti en vol ; lot 4 du rendu, puis G3 |
 | 2026-11-25 | Visée souris : l'avion ne se met plus sur le dos pour une visée modérément basse et n'oscille plus en pendule (poussée sans roulis, retour à l'endroit nez sur la visée, sens de roulis gardé) ; tests | Ressenti en vol ; convergence latérale lente à régler si besoin ; G2.4 |
