@@ -122,3 +122,19 @@ export const CLOUD_VARIANCE_GAMMA = 2;
  * so that its history spans about five of its samples
  */
 export const CLOUD_CURRENT_WEIGHT = 0.2;
+
+/**
+ * Shadows of the clouds on the ground: a map of the optical depth of the
+ * clouds along the light, of CLOUD_SHADOW_SIZE² texels over CLOUD_SHADOW_SPAN
+ * (m) centred below the camera, marched in CLOUD_SHADOW_STEPS steps through
+ * each third of the cumulus and mid-level layers and CLOUD_SHADOW_CIRRUS_STEPS
+ * through the cirrus, redrawn every CLOUD_SHADOW_REFRESH renders (the clouds
+ * and their shadows move slowly). The light's elevation is taken as at least
+ * CLOUD_SHADOW_MIN_SUN (sine) for the projection along it.
+ */
+export const CLOUD_SHADOW_SIZE = 512;
+export const CLOUD_SHADOW_SPAN = 60e3;
+export const CLOUD_SHADOW_STEPS = 8;
+export const CLOUD_SHADOW_CIRRUS_STEPS = 2;
+export const CLOUD_SHADOW_MIN_SUN = 0.05;
+export const CLOUD_SHADOW_REFRESH = 4;

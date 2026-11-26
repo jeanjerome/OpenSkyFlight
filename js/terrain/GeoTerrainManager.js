@@ -114,6 +114,8 @@ export default class GeoTerrainManager {
       maxLevel: effectiveZoom,
     });
     this.mapView = this.tileMap; // Alias for backwards compat
+    // The clouds' shadows (three-tile passes it on to every tile)
+    this.tileMap.receiveShadow = true;
     // three-tile draws every tile twice: first with a flat background material
     // at sea level, then with its imagery, which covers every tile. The
     // background stays hidden below the terrain and only adds a draw call per

@@ -73,6 +73,8 @@ export default class ScenePipeline {
     this._atmosphereNode = null;
     this._cloudsNode = null;
     this._clouds = null;
+    /** Called before each render of the pipeline (passes the scene depends on) */
+    this._beforeRender = null;
 
     this.taauNode = taau(this._sceneColor, this._sceneDepth, this.scenePass.getTextureNode('velocity'), camera);
     this._antiAliased = this.taauNode.getTextureNode();
@@ -300,6 +302,11 @@ export default class ScenePipeline {
    *   effect as a render, so the scene would render again inside the
    *   anti-aliasing resolve.)
    */
+  /** @param {?function(): void} callback - drawn before each render of the pipeline, or null */
+  setBeforeRender(callback) {
+    this._beforeRender = callback;
+  }
+
   render(repeats = 1) {
     if (this._renderer.toneMapping !== this._toneMapping) {
       this._toneMapping = this._renderer.toneMapping;
@@ -307,6 +314,7 @@ export default class ScenePipeline {
     }
     for (let i = 0; i < repeats; i++) {
       if (i > 0) this._renderer._nodes.nodeFrame.update();
+      this._beforeRender?.();
       this._pipeline.render();
     }
   }

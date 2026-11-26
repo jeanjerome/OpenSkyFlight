@@ -279,6 +279,13 @@ export default class AtmosphericSky {
    */
   setClouds(clouds) {
     this.clouds = clouds;
+    if (clouds) {
+      // The clouds' shadows scale the direct light where objects receive
+      // shadows, without a shadow map of their own (no depth pass)
+      this.renderer.shadowMap.enabled = true;
+      this.sunLight.castShadow = true;
+      this.sunLight.shadow.shadowNode = clouds.shadow.node;
+    }
     this._applyMode();
   }
 
@@ -312,6 +319,7 @@ export default class AtmosphericSky {
       this.scene.environmentNode = null;
       this.sunLight.visible = false;
       this.pipeline.setAtmosphere(null);
+      this.pipeline.setBeforeRender(null);
       this.pipeline.setNightVision(null);
       // Radar imagery is display-referred: no tone mapping
       this.renderer.toneMapping = THREE.NoToneMapping;
@@ -348,6 +356,9 @@ export default class AtmosphericSky {
     this.renderer.toneMappingExposure = TONE_MAPPING_EXPOSURE;
 
     const clouds = this.clouds && CONFIG.showClouds ? (depth, reversed) => this.clouds.pass(depth, reversed) : null;
+    const shadow = clouds ? this.clouds.shadow : null;
+    if (this.clouds) this.clouds.shadow.enabled.value = shadow ? 1 : 0;
+    this.pipeline.setBeforeRender(shadow ? () => shadow.render(this.renderer) : null);
     this.pipeline.setAtmosphere((color, depth, cloudsPass) => this._overScene(color, depth, cloudsPass), clouds);
     this.pipeline.setNightVision(this.preExposure);
     this.pipeline.setBloom(CONFIG.bloomEnabled);

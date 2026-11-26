@@ -27,6 +27,7 @@ import {
 import { getIndirectLuminanceToPoint, getSplitScalarIlluminance } from '@takram/three-atmosphere/webgpu';
 import { stbn } from '@takram/three-geospatial/webgpu';
 import { EARTH_RADIUS } from 'three-tile';
+import CloudShadow from './CloudShadow.js';
 import CloudTextures from './CloudTextures.js';
 import CloudsTemporalNode from './CloudsTemporalNode.js';
 import {
@@ -149,6 +150,8 @@ export default class VolumetricClouds {
 
     /** Distance the wind has carried the clouds (m), in doubles */
     this._drift = new THREE.Vector2();
+    /** Their shadows on the ground */
+    this.shadow = new CloudShadow(this);
     this.setBase(3500);
   }
 
@@ -160,6 +163,7 @@ export default class VolumetricClouds {
     this._layerTops.value.set(...tops, 1);
     this._minHeight.value = Math.min(...bottoms);
     this._maxHeight.value = Math.max(...tops);
+    this.shadow.setBase(altitude);
   }
 
   /** Bring the clouds back to where they were before the wind carried them */
@@ -471,6 +475,7 @@ export default class VolumetricClouds {
   }
 
   dispose() {
+    this.shadow.dispose();
     this.textures.dispose();
   }
 }
