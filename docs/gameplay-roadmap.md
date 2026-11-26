@@ -16,8 +16,8 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
   volumétriques) est terminé et fusionné dans `main` le 2026-11-26 (voir `docs/rendering-roadmap.md`).
   Le lot de rendu 5 (terrain et ombres) est terminé et fusionné dans `main` le 2026-11-26 et
   poussé. **G3 (décollage et atterrissage) en cours sur `feat/takeoff-landing`** depuis le
-  2026-11-26 : G3.1 (train animé) et G3.2 (physique au sol) faits ; suite G3.3 (contacts de
-  structure et crash), voir le lot G3. Pour essayer au sol avant G3.4 :
+  2026-11-26 : G3.1 (train animé), G3.2 (physique au sol) et G3.3 (crash et écran de reprise)
+  faits ; suite G3.4 (données d'aéroports, départ d'une piste), voir le lot G3. Pour essayer au sol avant G3.4 :
   `?lat=46.2381&lon=6.1090` (Genève) puis `window.osf.startOnGround(0, 0, 46)` dans la console. L'avion porte désormais
   son ombre et reçoit celle du relief (`js/aircraft/AircraftShadow.js`, calque `SHADOW_CASTER_LAYER`
   pour ce qui doit la projeter : penser au train d'atterrissage de G3).
@@ -355,8 +355,23 @@ sol) ; les nuages volumétriques (lot 4) n'ont pas de dépendance avec ces lots.
       départ d'une piste de G3.4). Banc : trois cas au sol (tableau du banc de vérification) ; tests
       `tests/gearContact.test.js`. Vérifié dans Chrome à Genève (piste 05/23) : roulage, rotation à
       125 kt, décollage vers 150 kt ; le relief non aplani de la piste (±1 m, G3.5) secoue l'avion.
-- [ ] **G3.3** Contact et crash : points de structure (nez, saumons, tuyères, ventre), crash si contact
+- [x] **G3.3** Contact et crash : points de structure (nez, saumons, tuyères, ventre), crash si contact
       de structure, si vitesse verticale > 3 m/s ou si le train est rentré ; écran de reprise.
+      Fait : `STRUCTURE_POINTS` (14 points relevés dans le modèle 3D : pointe et menton du radôme,
+      emports central et sous voilure, tuyères et crosse, missiles de saumon, dérive et verrière),
+      `js/flight/GroundStrike.js` (premier point sous le sol et sa vitesse d'enfoncement ; le sol n'est
+      lu que près des points à sa portée). Roues au sol : tuyères au sol vers 16° d'assiette, saumons
+      vers 17° d'inclinaison. `GearContact.touchdownSink` : vitesse verticale d'une roue au moment où
+      elle touche, crash au-delà de 3 m/s (`TOUCHDOWN_SINK_LIMIT`, 10 ft/s des chasseurs basés à terre).
+      Train rentré ou en mouvement, les roues ne portent pas : la cellule touche (la queue d'abord, à
+      l'incidence d'approche). `SimulatedFlight` s'arrête au crash (`crash` : partie, vitesse
+      d'enfoncement, vitesse, train) jusqu'à la reprise ; l'ancien seuil de 1 m sous le centre de
+      gravité est retiré. Écran de reprise `js/ui/CrashScreen.js` (style du menu) : cause en clair
+      (atterrissage dur, train rentré, queue, saumon, ventre, nez, ou « Flew into the ground » au-delà
+      de 6 m/s d'enfoncement), reprise en vol 1 500 m au-dessus (Entrée, A) ou au sol là où le vol
+      avait commencé (Espace, B ; seulement après un départ au sol). Commande du train verrouillée
+      sortie tant que les roues portent l'avion. Tests `tests/crash.test.js` ; vérifié dans Chrome à
+      Genève (atterrissage dur, piqué dans le sol, deux reprises).
 - [ ] **G3.4** Données d'aéroports : `runways.csv` d'OurAirports (domaine public) découpé par tuile par
       le proxy, chargé autour de l'avion ; recherche d'aéroport dans le menu (décollage depuis une piste).
 - [ ] **G3.5** Aplanir le terrain sous les pistes : distance signée au rectangle de piste dans le
@@ -688,6 +703,7 @@ piqué dans le relief : crash et redémarrage ; aucune erreur console.
 
 | Date | Fait | Reste / prochaine étape |
 |---|---|---|
+| 2026-11-26 | G3.3 : points de structure du modèle, crash au contact de la cellule ou au-delà de 3 m/s au toucher, écran de reprise (en vol ou au point de départ au sol), commande du train verrouillée au sol ; tests ; vérifié dans Chrome | G3.4 (aéroports d'OurAirports, départ d'une piste) |
 | 2026-11-26 | G3.2 : physique au sol (jambes ressort-amortisseur, pneus, freins, roue avant orientable, effet de sol), loi sol des commandes de vol, centre de gravité du modèle, visée souris au sol ; banc au sol (125 kt en 9,5 s, décollage 394 m, atterrissage 446 m) ; vérifié dans Chrome à Genève | G3.3 (contacts de structure et crash : queue au décollage, toucher trop dur, train rentré) ; ressenti au sol par l'utilisateur |
 | 2026-11-26 | G3 commencé sur `feat/takeoff-landing` ; G3.1 : séquence du train (trappes, jambes repliées vers l'avant, roue principale couchée à plat), traînée, touche `G` / bouton X, HUD et avertissement au-delà de 230 kt ; pilote automatique déplacé sur `U` | G3.2 (physique au sol : jambes ressort-amortisseur, freins, roue avant orientable) ; ressenti visuel du train par l'utilisateur |
 | 2026-11-25 | G2.4 : brume de chaleur (tampon de décalages, appliqué dans la passe d'atmosphère avant le TAAU), réglage « Heat haze » en High et Ultra ; ≈ +0,1 ms | Ressenti en vol ; lot 4 du rendu, puis G3 |
