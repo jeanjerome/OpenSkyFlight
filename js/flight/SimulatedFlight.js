@@ -70,6 +70,8 @@ export default class SimulatedFlight {
     this.crash = null;
     /** Where the flight last started on the ground, to restart there: {x, z, yaw} */
     this.groundStart = null;
+    /** Standing still, waiting for the ground to load before placeOnGround */
+    this.holding = false;
 
     this._stick = { pitch: 0, roll: 0, yaw: 0 };
     this._rudder = 0;
@@ -113,7 +115,24 @@ export default class SimulatedFlight {
     model.reset(position, this._quaternion, speed, ENTRY_LEVER);
     this._detentFree = false;
     this.crash = null;
+    this.holding = false;
     this.aim.syncTo(model.quaternion);
+    this._publish(true);
+  }
+
+  /**
+   * Stand still at a position, gear down, until placeOnGround: while the
+   * ground there loads
+   * @param {THREE.Vector3} position
+   * @param {number} yaw - heading (rad, 0 = north, positive to the west)
+   */
+  hold(position, yaw) {
+    this._euler.set(0, yaw, 0, 'YXZ');
+    this._quaternion.setFromEuler(this._euler);
+    this.model.reset(position, this._quaternion, 0, 0, true);
+    this.crash = null;
+    this.holding = true;
+    this.aim.syncTo(this.model.quaternion);
     this._publish(true);
   }
 
@@ -123,7 +142,7 @@ export default class SimulatedFlight {
    * @param {number} dt - frame time (s)
    */
   applyControls(commands, dt) {
-    if (!this.enabled || this.crash) return;
+    if (!this.enabled || this.crash || this.holding) return;
     const f = commands.flight;
     const model = this.model;
 
@@ -169,6 +188,7 @@ export default class SimulatedFlight {
     model.reset(new THREE.Vector3(x, ground + WHEELS_HEIGHT, z), this._quaternion, 0, 0, true);
     this._detentFree = false;
     this.crash = null;
+    this.holding = false;
     this.groundStart = { x, z, yaw };
     this.aim.syncTo(model.quaternion);
     this._publish(true);
@@ -189,7 +209,7 @@ export default class SimulatedFlight {
 
   /** Advance one simulation step */
   step(dt) {
-    if (!this.enabled || this.crash) return;
+    if (!this.enabled || this.crash || this.holding) return;
     const model = this.model;
     this.aircraft.beginStep();
 

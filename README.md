@@ -148,6 +148,8 @@ Search a place name or enter coordinates in the World tab of the settings menu, 
 
 Default location: **Mont Blanc** (45.8326°N, 6.8652°E).
 
+To take off from an airport, search it by code (`LFPG`), name or town under **Airports** in the World tab and pick a runway end: the terrain loads around it and the aircraft stands lined up on the runway, engines at idle. Airports and runways come from [OurAirports](https://ourairports.com/data/) (public domain): the dev server downloads the data once into `cache/ourairports/` and serves a search (`/api/airports?q=…`) and the runways of a map tile (`/api/runways/{z}/{x}/{y}`), which the app loads around the aircraft. Restart `npm run dev` after updating so the server has these routes.
+
 <!-- Texture modes 2×2 grid — capture each mode at the same camera position over Mont Blanc -->
 | Satellite | Road map |
 |---|---|
@@ -179,6 +181,7 @@ cache/
   osm/              ← map textures (OpenStreetMap)
   satellite/        ← satellite imagery (ESRI)
   nightlights/      ← city lights at night (NASA Black Marble, GIBS)
+  ourairports/      ← airports and runways (OurAirports CSV files)
 ```
 
 > The `cache/` directory is listed in `.gitignore` and should not be committed — it can be regenerated at any time.
@@ -213,6 +216,7 @@ cache/
 ├── tests/                     Unit tests of the simulation modules
 ├── scripts/
 │   ├── serve.js               Dev server with caching tile proxy
+│   ├── airports.js            Airport search and runways by tile, from OurAirports
 │   ├── prefetch-tiles.js      Bulk tile downloader for offline use
 │   ├── render-capture.js      Reference view screenshots & frame timing (Chrome)
 │   ├── render-benchmark.js    In-app flight benchmark runner (Chrome)
@@ -237,6 +241,7 @@ cache/
 - [OpenStreetMap](https://www.openstreetmap.org/) — road map textures
 - [ESRI World Imagery](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9) — satellite imagery (up to zoom 18+)
 - [NASA Black Marble](https://earthobservatory.nasa.gov/features/NightLights) (VIIRS, 2016, via NASA GIBS) — city lights at night (zoom 0–8)
+- [OurAirports](https://ourairports.com/data/) (public domain) — airports and runways
 - Node.js — dev server with transparent caching tile proxy and offline prefetch script
 - ES modules + import maps — no bundler needed
 - [ESLint](https://eslint.org/) 9 + [Prettier](https://prettier.io/) — code quality and formatting (dev only)

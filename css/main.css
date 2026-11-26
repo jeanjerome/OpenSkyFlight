@@ -649,6 +649,39 @@ body.menu-open :is(#hud, #crosshair, #minimap-container, #hires-badge) {
   background: var(--color-primary-dim);
 }
 
+/* Airport search results */
+.sm-airports {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.sm-airports:empty {
+  display: none;
+}
+.sm-airport {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 2px solid var(--ui-line-accent);
+}
+.sm-airport-name {
+  color: var(--ui-text);
+}
+.sm-airport-name b {
+  color: var(--color-primary);
+  letter-spacing: 0.08em;
+}
+.sm-airport-place {
+  margin-left: 10px;
+  color: var(--ui-muted);
+  font-size: 14px;
+}
+
 /* Shortcut list and live figures */
 .sm-keys,
 .sm-metrics {

@@ -38,6 +38,7 @@ import EngineSound from './audio/EngineSound.js';
 import ChaseCameraController from './camera/ChaseCameraController.js';
 import OrbitCameraController from './camera/OrbitCameraController.js';
 import FlightPlanRecorder from './flightplan/FlightPlanRecorder.js';
+import { RunwayCatalog, offsetPosition } from './airports/Airports.js';
 import Stats from 'stats.js';
 
 async function initApp() {
@@ -446,6 +447,53 @@ async function initApp() {
     applyReferenceView((referenceViewIndex + 1) % REFERENCE_VIEWS.length);
   });
 
+  // --- Airports ---
+  // Runways around the aircraft, and the start lined up on a runway: the
+  // terrain is loaded around its start, the aircraft holds there until the
+  // ground under it has loaded, then stands on its wheels
+  const runwayCatalog = new RunwayCatalog();
+  let runwayStart = null;
+  let catalogCountdown = 0;
+
+  /** Line up this far past the start of the runway's pavement (m) */
+  const LINE_UP_DISTANCE = 40;
+  /** Longest wait for the ground under a runway start (ms) */
+  const RUNWAY_LOAD_TIMEOUT = 20000;
+
+  function startOnRunway(airport, runway, endIndex) {
+    const end = runway.ends[endIndex];
+    const start = offsetPosition(end.lat, end.lon, end.heading, LINE_UP_DISTANCE);
+    update('flightMode', 'simulation');
+    update('lat', start.lat);
+    update('lon', start.lon);
+    geoTerrainManager.reinit();
+    const yaw = -end.heading * DEG2RAD;
+    simulation.hold(new THREE.Vector3(0, end.elevation + 2, 0), yaw);
+    simulation.groundStart = null;
+    chaseCameraController.reset();
+    runwayStart = { yaw, since: performance.now(), settled: 0, label: `${airport.ident} runway ${end.ident}` };
+    showNotification(`${runwayStart.label}: loading the airport…`);
+  }
+
+  /** Stand the aircraft on the runway once the ground there has loaded */
+  function updateRunwayStart(now) {
+    if (!runwayStart) return;
+    if (flight !== simulation || !simulation.holding) {
+      runwayStart = null;
+      return;
+    }
+    const ground = geoTerrainManager.groundHeight(0, 0);
+    const loaded = ground !== null && geoTerrainManager.pendingDownloads === 0;
+    runwayStart.settled = loaded ? runwayStart.settled || now : 0;
+    const timedOut = now - runwayStart.since > RUNWAY_LOAD_TIMEOUT && ground !== null;
+    if ((runwayStart.settled && now - runwayStart.settled > 500) || timedOut) {
+      simulation.placeOnGround(0, 0, runwayStart.yaw);
+      chaseCameraController.reset();
+      showNotification(runwayStart.label);
+      runwayStart = null;
+    }
+  }
+
   // --- Settings menu ---
   // Opening it pauses the flight; the scene keeps rendering so graphics changes show
   let paused = false;
@@ -465,7 +513,9 @@ async function initApp() {
         update('lon', lon);
         geoTerrainManager.reinit();
         flight.teleport(new THREE.Vector3(0, REALWORLD_START_ALTITUDE, 0));
+        simulation.groundStart = null;
       },
+      startOnRunway,
       reloadTerrain: () => geoTerrainManager.reinit(),
       referenceViews: REFERENCE_VIEWS.map((v) => v.name),
       setReferenceView: (index) => applyReferenceView(index),
@@ -556,6 +606,10 @@ async function initApp() {
     },
     // Ground as drawn at a world position (null while not loaded)
     groundHeight: (x, z) => geoTerrainManager.groundHeight(x, z),
+    // Runways loaded around the aircraft, and a start lined up on a runway (airport and runway as searched)
+    runways: () => runwayCatalog.runways,
+    startOnRunway: (airport, runway, end) => startOnRunway(airport, runway, end),
+    runwayStartPending: () => runwayStart !== null,
     // Simulation flight standing on the ground at a world position and heading (degrees, clockwise from north)
     startOnGround: (x = aircraft.position.x, z = aircraft.position.z, heading = 0) => {
       update('flightMode', 'simulation');
@@ -734,6 +788,13 @@ async function initApp() {
     if (timer) timer.begin('terrain');
     // Wall-clock time: the tiles keep morphing as the camera moves in the paused menu
     geoTerrainManager.update(camera, Math.min(frameTimeMs / 1000, MAX_DELTA_TIME));
+    updateRunwayStart(now);
+    // Runways around the aircraft, checked about once a second
+    if (--catalogCountdown <= 0) {
+      catalogCountdown = 60;
+      const geo = geoTerrainManager.worldToGeo(aircraft.position.x, aircraft.position.z);
+      if (geo) runwayCatalog.update(geo.lat, geo.lon);
+    }
     if (timer) timer.end('terrain');
 
     const farNeeded = REALWORLD_FAR_PLANE;

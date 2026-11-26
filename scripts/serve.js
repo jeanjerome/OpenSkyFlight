@@ -11,6 +11,7 @@ import { createServer } from 'node:http';
 import { readFile, readdir, mkdir, writeFile } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 import { parseArgs } from 'node:util';
+import { runwaysInTile, searchAirports } from './airports.js';
 
 const { values } = parseArgs({
   options: {
@@ -143,6 +144,20 @@ async function serveStatic(req, res, urlPath) {
 }
 
 const TILE_RE = /^\/tiles\/(\w+)\/(\d+)\/(\d+)\/(\d+)\.png$/;
+const RUNWAYS_RE = /^\/api\/runways\/(\d+)\/(\d+)\/(\d+)$/;
+
+/** Airports matching ?q=, or the runways of a map tile (OurAirports, see airports.js) */
+async function serveAirports(req, res, answer) {
+  try {
+    const body = JSON.stringify(await answer());
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(body);
+  } catch (err) {
+    console.error(`Airports: ${err.message}`);
+    res.writeHead(502, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
 const FLIGHTPLANS_DIR = join(ROOT, 'assets', 'flightplans');
 
 async function serveFlightPlanList(req, res) {
@@ -165,6 +180,12 @@ const server = createServer((req, res) => {
     serveTile(req, res, source, z, x, y);
   } else if (urlPath === '/api/flightplans') {
     serveFlightPlanList(req, res);
+  } else if (urlPath === '/api/airports') {
+    const query = new URL(req.url, 'http://localhost').searchParams.get('q') ?? '';
+    serveAirports(req, res, () => searchAirports(CACHE_DIR, query));
+  } else if (RUNWAYS_RE.test(urlPath)) {
+    const [, z, x, y] = urlPath.match(RUNWAYS_RE).map(Number);
+    serveAirports(req, res, () => runwaysInTile(CACHE_DIR, z, x, y));
   } else {
     serveStatic(req, res, urlPath);
   }
@@ -174,4 +195,5 @@ server.listen(PORT, () => {
   console.log(`OpenSkyFlight — http://localhost:${PORT}`);
   console.log(`Tile cache: ${CACHE_DIR}`);
   console.log(`Tile proxy: /tiles/{${Object.keys(SOURCES).join(',')}}/{z}/{x}/{y}.png`);
+  console.log('Airports (OurAirports): /api/airports?q=…, /api/runways/{z}/{x}/{y}');
 });

@@ -6,6 +6,7 @@ import Logger from '../utils/Logger.js';
 import { showNotification } from './Notification.js';
 import { SHORTCUTS } from './shortcuts.js';
 import { playUiSound } from './uiSounds.js';
+import { searchAirports } from '../airports/Airports.js';
 
 const ICONS = {
   graphics: '<rect x="3" y="5" width="18" height="12" rx="1"/><path d="M8 21h8M12 17v4"/>',
@@ -81,6 +82,7 @@ function isTextField(target) {
  * @typedef {Object} PanelActions
  * @property {() => void} resume - give the mouse back to the flight
  * @property {(lat: number, lon: number) => void} flyTo - load the terrain around a new location
+ * @property {(airport: object, runway: object, end: number) => void} startOnRunway - stand lined up on a runway
  * @property {() => void} reloadTerrain - reload the terrain tiles in place
  * @property {() => Object<string, string>} metrics - live figures for the developer tab
  * @property {string[]} referenceViews - names of the reference views
@@ -300,6 +302,7 @@ export default class ControlPanel {
     );
 
     this._buildWorldLocation();
+    this._buildWorldAirports();
     this._buildControls(this._panes.controls);
     if (this.devMode) this._buildDevTools(this._panes.dev);
     this._buildSettings();
@@ -667,6 +670,79 @@ export default class ControlPanel {
 
     this._controls.lat = (v) => (lat.value = v);
     this._controls.lon = (v) => (lon.value = v);
+  }
+
+  // ── World: airports ──
+
+  _buildWorldAirports() {
+    const search = el('input', 'sm-input');
+    search.type = 'search';
+    search.placeholder = 'LFPG, Geneva, Nice…';
+    search.setAttribute('aria-label', 'Search an airport');
+    const searchBtn = button('sm-btn', 'Search');
+    const rowEl = el('div', 'sm-row sm-row-field sm-row-airports');
+    const line = el('div', 'sm-field');
+    line.append(search, searchBtn);
+    const results = el('div', 'sm-airports');
+    rowEl.append(el('span', 'sm-label', 'Airport'), line, results);
+    const help =
+      'Finds an airport by its code, name or town. Pick a runway end to start lined up on it, engines at idle: ' +
+      'W for power, Space for the brakes, G for the gear once airborne.';
+    const row = this._addRow('world', 'Airports', {
+      el: rowEl,
+      title: 'Take off from an airport',
+      help,
+      activate: () => search.focus(),
+    });
+
+    const KM = 1000;
+    const show = (airports) => {
+      results.replaceChildren();
+      for (const airport of airports) {
+        const item = el('div', 'sm-airport');
+        const place = [airport.municipality, airport.country].filter(Boolean).join(', ');
+        const name = el('div', 'sm-airport-name');
+        name.append(el('b', '', airport.ident), ` ${airport.name}`, el('span', 'sm-airport-place', place));
+        const ends = el('div', 'sm-field');
+        for (const runway of airport.runways) {
+          runway.ends.forEach((end, index) => {
+            const length =
+              runway.length >= KM ? `${(runway.length / KM).toFixed(1)} km` : `${Math.round(runway.length)} m`;
+            const choice = button('sm-btn', `${end.ident} · ${length}`, `Runway ${end.ident}, ${length}`);
+            choice.addEventListener('click', () => {
+              playUiSound('confirm');
+              this.actions.startOnRunway(airport, runway, index);
+              this.resume();
+            });
+            ends.append(choice);
+          });
+        }
+        item.append(name, ends);
+        results.append(item);
+      }
+    };
+
+    const doSearch = async () => {
+      const query = search.value.trim();
+      if (!query) return;
+      row.help = 'Searching…';
+      this._showInfo(row);
+      try {
+        const airports = await searchAirports(query);
+        show(airports);
+        row.help = airports.length ? `${airports.length} found. ${help}` : 'No airport found.';
+        playUiSound(airports.length ? 'confirm' : 'deny');
+      } catch (err) {
+        Logger.warn('ControlPanel', `Airport search failed: ${err.message}`);
+        row.help = help;
+        showNotification('Airport search error: the airport data needs the dev server', 'error');
+      }
+      this._showInfo(row);
+    };
+    searchBtn.addEventListener('click', doSearch);
+    search.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') doSearch();
+    });
   }
 
   // ── Controls ──
