@@ -77,6 +77,23 @@ export const BLOOM_STRENGTH = 0.015;
 /** Weight of the wide blur levels against the narrow ones, in [0, 1] */
 export const BLOOM_RADIUS = 0.8;
 
+/**
+ * Lens flare (see ScenePipeline.setLensFlare): part of the bloom that makes
+ * ghosts, above this many times the bloom threshold (scaled as the bloom),
+ * strength of the ghosts, their tint, number and spacing along the line
+ * through the centre of the image, how fast they fade toward its edges, and
+ * the blur that softens them (pixels of the flare's quarter-resolution target)
+ */
+export const LENS_FLARE = {
+  threshold: 20,
+  strength: 1,
+  tint: [1, 0.85, 0.7],
+  ghosts: 4,
+  spacing: 0.25,
+  attenuation: 25,
+  blur: 4,
+};
+
 // --- Automatic exposure (see AutoExposureNode) ---
 
 /** Histogram bins of log2 luminance */

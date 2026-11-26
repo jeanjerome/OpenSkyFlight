@@ -2,11 +2,14 @@ import * as THREE from 'three';
 import { clamp, log2, luminance, mix, mrt, output, pass, rtt, smoothstep, uv, vec3, vec4, velocity } from 'three/tsl';
 import { taau } from 'three/addons/tsl/display/TAAUNode.js';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
+import { gaussianBlur } from 'three/addons/tsl/display/GaussianBlurNode.js';
+import { lensflare } from 'three/addons/tsl/display/LensflareNode.js';
 import {
   BLOOM_STRENGTH,
   BLOOM_RADIUS,
   GLOW_RESOLUTION_SCALE,
   HEAT_RESOLUTION_SCALE,
+  LENS_FLARE,
   NIGHT_VISION_COLOR,
   NIGHT_VISION_PHOTOPIC_LUMINANCE,
   NIGHT_VISION_SCOTOPIC_LUMINANCE,
@@ -82,6 +85,9 @@ export default class ScenePipeline {
     // No bloom until the lighting sets a threshold (see setBloomThreshold)
     this.bloomNode = bloom(this._antiAliased, BLOOM_STRENGTH, BLOOM_RADIUS);
     this._bloomEnabled = false;
+    // Ghosts of the bloom across the image (see setLensFlare), built when first enabled
+    this._lensFlareNode = null;
+    this._lensFlareEnabled = false;
 
     this.autoExposureSupported = renderer.backend.isWebGPUBackend === true;
     this.autoExposureNode = this.autoExposureSupported ? new AutoExposureNode(this._antiAliased) : null;
@@ -99,6 +105,7 @@ export default class ScenePipeline {
   _buildOutput() {
     let color = this._antiAliased.rgb;
     if (this._bloomEnabled) color = color.add(this.bloomNode.rgb);
+    if (this._lensFlareEnabled) color = color.add(this._lensFlare().rgb.mul(LENS_FLARE.strength));
     if (this._glowPass) color = color.add(this._glowPass.getTextureNode().rgb);
     if (this._preExposure) color = this._nightVision(color);
     if (this._autoExposureEnabled) color = color.mul(this.autoExposureNode);
@@ -211,6 +218,35 @@ export default class ScenePipeline {
       this._bloomEnabled = enabled;
       this._rebuild();
     }
+  }
+
+  /**
+   * Lens flare: ghosts of the bloom (the sun and its reflections) mirrored
+   * through the centre of the image, as the reflections between the elements
+   * of a camera lens (Chapman's pseudo lens flare), softened by a blur. They
+   * need the bloom pass, which then runs even with the bloom itself off.
+   * @param {boolean} enabled
+   */
+  setLensFlare(enabled) {
+    if (enabled !== this._lensFlareEnabled) {
+      this._lensFlareEnabled = enabled;
+      this._rebuild();
+    }
+  }
+
+  _lensFlare() {
+    if (!this._lensFlareNode) {
+      this._ghostsNode = lensflare(this.bloomNode.getTextureNode(), {
+        // Only the core of the bloom: its wide glow would make ghosts as wide as half the image
+        threshold: this.bloomNode.threshold.mul(BLOOM_STRENGTH * LENS_FLARE.threshold),
+        ghostTint: vec3(...LENS_FLARE.tint),
+        ghostSamples: LENS_FLARE.ghosts,
+        ghostSpacing: LENS_FLARE.spacing,
+        ghostAttenuationFactor: LENS_FLARE.attenuation,
+      });
+      this._lensFlareNode = gaussianBlur(this._ghostsNode.getTextureNode(), null, LENS_FLARE.blur);
+    }
+    return this._lensFlareNode;
   }
 
   /**
@@ -329,6 +365,8 @@ export default class ScenePipeline {
   dispose() {
     this._pipeline.dispose();
     this.bloomNode.dispose();
+    this._lensFlareNode?.dispose();
+    this._ghostsNode?.dispose();
     this.autoExposureNode?.dispose();
     this.taauNode.dispose();
     this._atmosphereNode?.dispose();

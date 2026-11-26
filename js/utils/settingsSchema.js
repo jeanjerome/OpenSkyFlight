@@ -135,6 +135,16 @@ export const SETTINGS = [
     persist: true,
   },
   {
+    key: 'lensFlare',
+    tab: 'graphics',
+    section: 'Light',
+    label: 'Lens flare',
+    help: 'Facing the sun, faint ghost images of it spread across the view, as through a camera lens.',
+    type: 'toggle',
+    impact: { cost: 1, gain: 1 },
+    persist: true,
+  },
+  {
     key: 'heatHaze',
     tab: 'graphics',
     section: 'Light',

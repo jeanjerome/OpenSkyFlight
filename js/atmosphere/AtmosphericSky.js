@@ -293,7 +293,7 @@ export default class AtmosphericSky {
       // Set from the menu or a reference view, not by the clock
       if (key === 'timeOfDay' && value !== this._publishedTime) this._timeOfDay = value;
       if (key === 'dayOfYear' && value !== this._publishedDay) this._dayOfYear = value;
-      if (['fogEnabled', 'aerialPerspectiveVolume', 'textureMode', 'bloomEnabled', 'autoExposure', 'showClouds'].includes(key)) {
+      if (['fogEnabled', 'aerialPerspectiveVolume', 'textureMode', 'bloomEnabled', 'lensFlare', 'autoExposure', 'showClouds'].includes(key)) {
         this._applyMode();
       }
     });
@@ -384,6 +384,7 @@ export default class AtmosphericSky {
       this.ambientLight.color.set(0xffffff);
       this.ambientLight.visible = true;
       this.pipeline.setBloom(false);
+      this.pipeline.setLensFlare(false);
       this.pipeline.setAutoExposure(false);
 
       Logger.debug('AtmosphericSky', 'SAR mode — black sky, side-looking light');
@@ -423,6 +424,7 @@ export default class AtmosphericSky {
     );
     this.pipeline.setNightVision(this.preExposure);
     this.pipeline.setBloom(CONFIG.bloomEnabled);
+    this.pipeline.setLensFlare(CONFIG.lensFlare);
     this.pipeline.setAutoExposure(CONFIG.autoExposure);
   }
 
