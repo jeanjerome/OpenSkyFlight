@@ -99,9 +99,8 @@ en fin de session.
   capture : vérifier qu'aucune ne tourne avant de mesurer. Tout est commité (dernier commit de code :
   traversée des nuages), branche non poussée ni fusionnée.
 - **Prochaine étape** : L4.7 (rayons crépusculaires et reflet d'objectif), puis L4.8 (retrait de
-  l'ancien `CloudLayer`, couverture dans le menu). L4.6 n'a pas encore été essayée en vol par
-  l'utilisateur (commit fait à sa demande avant) : lui demander son avis sur la traversée (grain fin
-  du brouillard proche à l'entrée et à la sortie, avion éclairci dans le nuage) avant L4.7.
+  l'ancien `CloudLayer`, couverture dans le menu). L4.6 validée en vol par l'utilisateur (au-dessus,
+  en dessous et à travers les nuages).
   Outils pour les défauts en mouvement : variantes passées dans l'URL que l'utilisateur essaie en
   vol, vol rejoué à pas de temps fixe (crochets temporaires `window.__advance(n)` et
   `window.__move(m)` dans la boucle de rendu de `js/app.js`, à recréer : les patchs du scratchpad ne
@@ -996,7 +995,8 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
   coût GPU dans un nuage par un script Playwright (vue 5, `cloudAltitude` 6000, avion avancé de
   600 m), scripts gardés dans le scratchpad.
 - Commits : correctif de la carte des ombres, traversée des nuages, documentation (non poussés).
-- Prochaine étape : avis de l'utilisateur en vol sur la traversée, puis L4.7 (voir État courant).
+- Validé en vol par l'utilisateur : au-dessus, en dessous et à travers les nuages.
+- Prochaine étape : L4.7 (voir État courant).
 
 ### 2026-11-26 (22)
 - Mesuré : capture `clouds-3` (état de la session 21) ; une première série à coûts doublés venait
