@@ -19,8 +19,9 @@ Ce document complète `docs/rendering-roadmap.md` (rendu) et suit les mêmes con
   2026-11-26 : G3.1 (train animé), G3.2 (physique au sol), G3.3 (crash et écran de reprise) et
   G3.4 (aéroports, départ d'une piste depuis le menu : onglet World, section Airports) et G3.5
   (terrain aplani sous les pistes), G3.6 (pistes et marquages peints, tuiles au zoom 18 autour) et
-  G3.7 (balisage lumineux et PAPI) faits ; suite G3.8 (guidage d'approche sur le HUD), voir le lot
-  G3. Bundle three-tile à reconstruire après un changement de branche (`cd vendor/three-tile &&
+  G3.7 (balisage lumineux et PAPI) et G3.8 (guidage d'approche, pilote automatique `C`) faits :
+  **lot G3 terminé** le 2026-11-27, branche non poussée ni fusionnée. Suite au choix de
+  l'utilisateur : ses essais en vol, la fusion, puis le lot de rendu 6 ou G4 (radar de nuit). Bundle three-tile à reconstruire après un changement de branche (`cd vendor/three-tile &&
   npm run build:lib`) : l'aplanissement est dans son worker. L'avion porte désormais
   son ombre et reçoit celle du relief (`js/aircraft/AircraftShadow.js`, calque `SHADOW_CASTER_LAYER`
   pour ce qui doit la projeter : penser au train d'atterrissage de G3).
@@ -460,8 +461,22 @@ sol) ; les nuages volumétriques (lot 4) n'ont pas de dépendance avec ces lots.
       éteints de jour. Coût (865 feux, A/B, GPU saturé) : 2,76–2,88 contre 2,75–2,79 ms, dans le
       bruit. Les lumières de ville (Black Marble) font de grandes taches floues au sol près des
       aéroports, de nuit : défaut existant, hors de ce lot.
-- [ ] **G3.8** Guidage d'approche sur le HUD : pente de 3°, écarts d'alignement et de pente calculés
+- [x] **G3.8** Guidage d'approche sur le HUD : pente de 3°, écarts d'alignement et de pente calculés
       depuis le seuil, PAPI virtuel ; pilote automatique de cap et d'altitude.
+      Fait : `js/flight/ApproachGuide.js` (testé sous Node) choisit le seuil vers lequel l'avion vole
+      (route à moins de 45° de l'axe, à moins de 35° de l'axe vu de la piste, jusqu'à 25 km avant le
+      seuil et 1,5 km au-dessus de la piste) et donne la distance au seuil, la hauteur au-dessus de
+      lui, l'écart d'alignement vu de l'extrémité opposée (comme l'antenne d'un localizer, pleine
+      échelle 2,5°), l'écart à un plan de 3° visant 300 m après le seuil (pleine échelle 0,7°) et un
+      PAPI virtuel. HUD (mode Simulation, train commandé sorti ou à moins de 600 m au-dessus du
+      seuil) : « LSGG 04 4.6 km 3.0° » et le PAPI au-dessus du centre, échelle de pente à droite,
+      d'alignement dessous, à deux points de part et d'autre. Pilote automatique (`C`) : tient le cap
+      et l'altitude du moment en posant la visée de l'instructeur sur le cap et sur la pente qui
+      rattrape l'écart d'altitude en 20 s (±8° au plus) plus l'incidence ; tout mouvement du manche
+      ou de la visée, ou le contact du sol, le déconnecte ; affiché « AP 046° 1500 m » sur le HUD.
+      Tests `tests/approachGuide.test.js`, `tests/autopilot.test.js` (virage de 30° et montée de
+      300 m : cap à 0,0°, altitude à 15 m). Vérifié dans Chrome en approche sur LSGG 04 (sur le plan,
+      à droite et bas, à gauche et haut).
 
 ## Lot G4 — Radar de nuit : relief devant l'avion
 
@@ -781,6 +796,7 @@ piqué dans le relief : crash et redémarrage ; aucune erreur console.
 
 | Date | Fait | Reste / prochaine étape |
 |---|---|---|
+| 2026-11-27 | G3.8 : guidage d'approche sur le HUD (seuil visé, écarts d'alignement et de pente, PAPI virtuel), pilote automatique de cap et d'altitude (`C`) ; tests ; vérifié dans Chrome (LSGG 04). Lot G3 terminé | Ressenti en vol par l'utilisateur (décollage, approche, atterrissage) ; fusion de `feat/takeoff-landing` à sa demande ; lot de rendu 6 ou G4 ensuite |
 | 2026-11-27 | G3.7 : balisage lumineux des pistes éclairées (bords, axe codé, seuils verts, fins rouges, rampe d'approche, PAPI selon l'angle de l'œil), allumé au crépuscule ou par mauvaise visibilité ; occultation tolérante au jitter du TAA ; coût dans le bruit ; vérifié dans Chrome (LSGG, CDG) | G3.8 (guidage d'approche sur le HUD, pilote automatique de cap et d'altitude) |
 | 2026-11-26 | G3.6 : pistes revêtues et marquages OACI peints dans la couleur du terrain (seuils, numéros, point de visée, zone de toucher, axe, bandes latérales), antialiasés sur l'empreinte en travers ; coût non mesurable ; vérifié dans Chrome (LSGG), et par l'utilisateur à CDG ; à sa demande, tuiles jusqu'au zoom 18 autour des pistes (+0,45 ms près du sol sur un aéroport) | G3.7 (balisage lumineux, PAPI) |
 | 2026-11-26 | G3.5 : terrain aplani sous les pistes dans le worker d'altitude (relief, normales, morphing et altitude CPU ensemble, sans couture), pistes chargées avant le terrain d'un lieu ; vérifié dans Chrome à Genève (axe à 1 cm du profil publié, décollage sans à-coup) | G3.6 (pistes et marquages dessinés) |
