@@ -40,6 +40,7 @@ import OrbitCameraController from './camera/OrbitCameraController.js';
 import FlightPlanRecorder from './flightplan/FlightPlanRecorder.js';
 import { RunwayCatalog, offsetPosition } from './airports/Airports.js';
 import RunwayMarkings from './terrain/RunwayMarkings.js';
+import RunwayLights from './airports/RunwayLights.js';
 import Stats from 'stats.js';
 
 async function initApp() {
@@ -166,6 +167,12 @@ async function initApp() {
   const engineSound = new EngineSound();
   const _autopilotEuler = new THREE.Euler(0, 0, 0, 'YXZ');
   const _autopilotQuat = new THREE.Quaternion();
+  // Runway lights, at dusk and in low visibility
+  const runwayLights = new RunwayLights(scene, {
+    emissiveExposure: atmosphericSky.emissiveExposure,
+    sceneDepth: scenePipeline.sceneDepth,
+  });
+  const _bufferSize = new THREE.Vector2();
   const aircraftManager = new AircraftManager(scene, {
     emissiveExposure: atmosphericSky.emissiveExposure,
     sceneDepth: scenePipeline.sceneDepth,
@@ -805,6 +812,15 @@ async function initApp() {
     geoTerrainManager.update(camera, Math.min(frameTimeMs / 1000, MAX_DELTA_TIME));
     updateRunwayStart(now);
     geoTerrainManager.runwayMarkings.update(runwayCatalog.runways, geoTerrainManager, camera.position);
+    renderer.getDrawingBufferSize(_bufferSize);
+    runwayLights.update(
+      runwayCatalog.runways,
+      geoTerrainManager,
+      camera,
+      _bufferSize.y,
+      atmosphericSky.sunElevation,
+      CONFIG.visibility,
+    );
     // Runways around the aircraft, checked about once a second
     if (--catalogCountdown <= 0) {
       catalogCountdown = 60;

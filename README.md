@@ -148,7 +148,7 @@ Search a place name or enter coordinates in the World tab of the settings menu, 
 
 Default location: **Mont Blanc** (45.8326°N, 6.8652°E).
 
-To take off from an airport, search it by code (`LFPG`), name or town under **Airports** in the World tab and pick a runway end: the terrain loads around it and the aircraft stands lined up on the runway, engines at idle. Airports and runways come from [OurAirports](https://ourairports.com/data/) (public domain): the dev server downloads the data once into `cache/ourairports/` and serves a search (`/api/airports?q=…`) and the runways of a map tile (`/api/runways/{z}/{x}/{y}`), which the app loads around the aircraft. Restart `npm run dev` after updating so the server has these routes.
+To take off from an airport, search it by code (`LFPG`), name or town under **Airports** in the World tab and pick a runway end: the terrain loads around it and the aircraft stands lined up on the runway, engines at idle. Paved runways are drawn with their ICAO markings, the ground under them is flattened, the imagery around them goes down to zoom 18, and lit runways switch on their edge, centre line, threshold and approach lights and their PAPI at dusk or in low visibility. Airports and runways come from [OurAirports](https://ourairports.com/data/) (public domain): the dev server downloads the data once into `cache/ourairports/` and serves a search (`/api/airports?q=…`) and the runways of a map tile (`/api/runways/{z}/{x}/{y}`), which the app loads around the aircraft. Restart `npm run dev` after updating so the server has these routes.
 
 <!-- Texture modes 2×2 grid — capture each mode at the same camera position over Mont Blanc -->
 | Satellite | Road map |
