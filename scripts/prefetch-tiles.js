@@ -6,6 +6,7 @@
 import { mkdirSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
+import { fetchFromProvider, isStorableTile } from './http.js';
 
 const { values } = parseArgs({
   options: {
@@ -73,9 +74,9 @@ async function downloadTile(source, z, x, y) {
   if (existsSync(filePath)) return 'cached';
 
   const url = source.urlTemplate(z, x, y);
-  const res = await fetch(url);
-  if (!res.ok) {
-    console.warn(`  FAIL ${source.name} ${z}/${x}/${y} → ${res.status}`);
+  const res = await fetchFromProvider(url);
+  if (!res.ok || !isStorableTile(source.name, res)) {
+    console.warn(`  FAIL ${source.name} ${z}/${x}/${y} → ${res.ok ? 'refused by the provider' : res.status}`);
     return 'failed';
   }
 

@@ -12,6 +12,7 @@ import { readFile, readdir, mkdir, writeFile } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { runwaysInTile, searchAirports } from './airports.js';
+import { fetchFromProvider, isStorableTile } from './http.js';
 
 const { values } = parseArgs({
   options: {
@@ -100,7 +101,7 @@ async function serveTile(req, res, source, z, x, y) {
   const remoteUrl = urlFn(z, x, y);
   await acquireOutbound();
   try {
-    const remote = await fetch(remoteUrl);
+    const remote = await fetchFromProvider(remoteUrl);
     if (!remote.ok) {
       res.writeHead(remote.status);
       res.end(`Remote fetch failed: ${remote.status}`);
@@ -110,10 +111,14 @@ async function serveTile(req, res, source, z, x, y) {
     const buffer = Buffer.from(await remote.arrayBuffer());
 
     // Save to cache (fire and forget — don't block the response)
-    const dir = join(CACHE_DIR, source, z, x);
-    mkdir(dir, { recursive: true })
-      .then(() => writeFile(cachePath, buffer))
-      .catch(() => {});
+    if (isStorableTile(source, remote)) {
+      const dir = join(CACHE_DIR, source, z, x);
+      mkdir(dir, { recursive: true })
+        .then(() => writeFile(cachePath, buffer))
+        .catch(() => {});
+    } else {
+      console.warn(`Tile not cached (refused by the provider): ${remoteUrl}`);
+    }
 
     res.writeHead(200, { 'Content-Type': contentType, 'X-Cache': 'MISS' });
     res.end(buffer);

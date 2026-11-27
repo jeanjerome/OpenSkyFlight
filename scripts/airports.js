@@ -6,6 +6,7 @@
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fetchFromProvider } from './http.js';
 
 const BASE_URL = 'https://davidmegginson.github.io/ourairports-data';
 const FEET = 0.3048;
@@ -65,7 +66,7 @@ async function download(cacheDir, name) {
   try {
     return await readFile(path, 'utf8');
   } catch {
-    const res = await fetch(`${BASE_URL}/${name}.csv`);
+    const res = await fetchFromProvider(`${BASE_URL}/${name}.csv`);
     if (!res.ok) throw new Error(`OurAirports ${name}.csv: HTTP ${res.status}`);
     const text = await res.text();
     await mkdir(cacheDir, { recursive: true });
