@@ -2,14 +2,18 @@
 
 A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Earth using elevation data from AWS Terrarium and multiple texture modes (satellite, road map, SAR radar, elevation contours) — all rendered in real time with Three.js WebGPU. No API key, and a single one-time build of the vendored terrain engine.
 
-![WebGPU](https://img.shields.io/badge/WebGPU-Three.js-green)
+![Version](https://img.shields.io/badge/version-2.0.0-blue) ![License: MIT](https://img.shields.io/badge/license-MIT-green) ![Open Source](https://img.shields.io/badge/open%20source-%E2%9D%A4-brightgreen) ![WebGPU](https://img.shields.io/badge/WebGPU-Three.js-green)
 
-[![Voir la démo vidéo](https://img.youtube.com/vi/WBhs0ORsLuw/maxresdefault.jpg)](https://www.youtube.com/watch?v=WBhs0ORsLuw)
+[![OpenSkyFlight 2.0 — watch the 4K demo on YouTube](docs/screenshots/video-thumbnail.jpg)](https://youtu.be/VKYvO-whgE0)
 
-[![YouTube](https://img.shields.io/badge/▶_Watch_Demo-YouTube-red?style=for-the-badge&logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=WBhs0ORsLuw)
+[![YouTube](https://img.shields.io/badge/▶_Watch_the_4K_demo-YouTube-red?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/VKYvO-whgE0)
 
-<!-- Hero screenshot: full-screen flight over mountains with HUD, satellite textures, and minimap visible -->
-![Flying over the Alps with satellite imagery and HUD instruments](docs/screenshots/hero.png)
+*Every frame of the demo comes from the simulator itself — Chamonix valley, through the clouds, Yosemite, the Grand Canyon, Mount Everest and the stratosphere. It is made from the sources of this repository, see [scripts/demo](scripts/demo/README.md).*
+
+| | | |
+|---|---|---|
+| ![Rafale low over the Chamonix valley](docs/screenshots/demo-valley.jpg) | ![Diving into the cloud layer](docs/screenshots/demo-clouds.jpg) | ![Banking over the Grand Canyon](docs/screenshots/demo-canyon.jpg) |
+| ![Afterburner at blue hour above the Alps](docs/screenshots/demo-afterburner.jpg) | ![Passing Mount Everest](docs/screenshots/demo-everest.jpg) | ![Afterglow above the sea of clouds](docs/screenshots/demo-afterglow.jpg) |
 
 ## Features
 
@@ -38,10 +42,9 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 - **Toast notifications** — non-blocking user feedback for search results and errors
 - **Centralized logging** — in-app log panel with level control (DEBUG/INFO/WARN/ERROR)
 
-<!-- Screenshot: chase camera view following the Rafale -->
-![Chase camera view — Rafale flying over real-world terrain](docs/screenshots/chase-camera.png)
+![Chase view of the Rafale facing Mont Blanc, with the HUD and the minimap](docs/screenshots/hero.jpg)
 
-*Third-person chase camera following the Rafale over satellite-textured terrain.*
+*In flight: chase view of the Rafale toward Mont Blanc, with the HUD (airspeed, Mach, load factor, angle of attack, altitude, fuel) and the OSM minimap.*
 
 ## Quick Start
 
@@ -77,6 +80,7 @@ Available scripts:
 | `npm run flight:bench` | Measure the flight model against the published figures of the Rafale |
 | `npm run flight:scenario -- --out <dir> [--airport LSGG] [--runway 0] [--end 0] [--time-scale 3]` | Fly a circuit from a real runway in Chrome with the scripted pilot (takeoff, circuit, guided final, landing) and save its report and a screenshot per phase (needs the dev server) |
 | `npm run livery:build` | Redraw the livery sheets of `assets/models/rafale/ada/source` (plain paint, their panel lines, rivets and markings), project them onto the Rafale model and write `assets/models/rafale/ada/Rafale.gltf` with its colour and normal atlases |
+| `node scripts/cinematic-record.js --shots <module> --out <dir> [--preview 3]` | Record cinematic shots frame by frame in Chrome (4K 60 fps), or save preview stills; the demo film is made this way, see [scripts/demo](scripts/demo/README.md) |
 | `npm run format` | Format all files with Prettier |
 | `npm run format:check` | Check formatting without modifying files |
 | `npm run render:capture -- --out <dir>` | Screenshot every reference view in Chrome and measure frame pacing, draw calls and GPU cost (dev server must be running); `--views 1,6` selects views, `--set key=value` overrides a setting |
@@ -145,14 +149,13 @@ Default location: **Mont Blanc** (45.8326°N, 6.8652°E).
 
 To take off from an airport, search it by code (`LFPG`), name or town under **Airports** in the World tab and pick a runway end: the terrain loads around it and the aircraft stands lined up on the runway, engines at idle. Paved runways are drawn with their ICAO markings, the ground under them is flattened, the imagery around them goes down to zoom 18, and lit runways switch on their edge, centre line, threshold and approach lights and their PAPI at dusk or in low visibility. Airports and runways come from [OurAirports](https://ourairports.com/data/) (public domain): the dev server downloads the data once into `cache/ourairports/` and serves a search (`/api/airports?q=…`) and the runways of a map tile (`/api/runways/{z}/{x}/{y}`), which the app loads around the aircraft. Restart `npm run dev` after updating so the server has these routes.
 
-<!-- Texture modes 2×2 grid — capture each mode at the same camera position over Mont Blanc -->
 | Satellite | Road map |
 |---|---|
-| ![Satellite imagery over Mont Blanc](docs/screenshots/satellite.png) | ![Road map tiles over Mont Blanc](docs/screenshots/roadmap.png) |
+| ![Satellite imagery over Mont Blanc](docs/screenshots/satellite.jpg) | ![Road map tiles over Mont Blanc](docs/screenshots/roadmap.jpg) |
 | **SAR radar** | **Elevation lines** |
-| ![SAR radar rendering with speckle grain](docs/screenshots/sar.png) | ![Elevation contour lines on terrain](docs/screenshots/elevation.png) |
+| ![SAR radar rendering with speckle grain](docs/screenshots/sar.jpg) | ![Elevation contour lines on terrain](docs/screenshots/elevation.jpg) |
 
-*Top-left: ESRI satellite imagery. Top-right: OpenStreetMap road map. Bottom-left: SAR radar style (black sky, side-looking light, grey speckle grain). Bottom-right: elevation contour lines (cyan lines on dark background).*
+*Top-left: ESRI satellite imagery. Top-right: OpenStreetMap road map. Bottom-left: SAR radar style (black sky, side-looking light, grey speckle grain). Bottom-right: elevation contour lines.*
 
 ## How It Works
 
@@ -194,6 +197,7 @@ cache/
 │   ├── clouds/                Volumetric clouds (noise textures, ray march, temporal upscaling), their shadows, light shafts and light on the aircraft
 │   ├── benchmark/             Automated perf testing & baseline comparison
 │   ├── camera/                Chase camera, springs
+│   ├── cinematic/             Cinematic shots: imposed flight paths and camera rigs
 │   ├── constants/             Shared constants (camera, HUD, physics, terrain…)
 │   ├── flight/                Aircraft state, flight model (aerodynamics, engines, fly-by-wire), mouse aim, Simulation and Exploration modes, verification bench
 │   ├── flightplan/            Waypoint recording, flight plan interpolation, autopilot
@@ -216,7 +220,9 @@ cache/
 │   ├── prefetch-tiles.js      Bulk tile downloader for offline use
 │   ├── render-capture.js      Reference view screenshots & frame timing (Chrome)
 │   ├── render-benchmark.js    In-app flight benchmark runner (Chrome)
-│   └── render-summary.js      Comparable figures from benchmark reports
+│   ├── render-summary.js      Comparable figures from benchmark reports
+│   ├── cinematic-record.js    Cinematic shots recorded frame by frame (Chrome)
+│   └── demo/                  The demo film: shot list, edit, thumbnails (see its README)
 ├── vendor/three-tile/         Vendored three-tile (0.11.8-osf) with concentric LOD
 ├── vendor/takram/             Vendored takram atmosphere WebGPU builds, with local patches (see its README)
 ├── docs/
