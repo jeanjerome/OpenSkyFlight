@@ -130,6 +130,11 @@ export default class GeoTerrainManager {
       dataType: 'image',
       minLevel: 0,
       maxLevel: Math.max(effectiveZoom, AIRPORT_LEVEL),
+      // Esri draws its levels up to 11 from Landsat and the finer ones from
+      // photographs of other colours and land cover: the tiles of levels 10
+      // and 11 are assembled from level 12, so that the content no longer
+      // changes as the tiles refine, until level 9, far in the haze
+      ...(CONFIG.textureMode !== 'osm' && { mosaicLevel: 12, mosaicMinLevel: 10 }),
       // three-tile makes sources transparent by default: the tiles would be
       // sorted far to near and shade every hidden slope
       transparent: false,
