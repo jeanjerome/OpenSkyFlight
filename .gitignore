@@ -25,3 +25,10 @@ assets/models/rafale/Rafale.obj
 assets/models/rafale/Rafale.mtl
 assets/models/rafale/Rafale-2.gltf
 assets/models/rafale/Textures.zip
+
+# Demo film: recorded shots, edit intermediates, renders and images
+/demo/*
+!/demo/youtube/
+/demo/youtube/*
+!/demo/youtube/*.md
+!/demo/youtube/*.html

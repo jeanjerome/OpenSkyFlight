@@ -1,0 +1,29 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #000; }
+  .bg { position: absolute; inset: 0; background: url(thumbnail-source.png) no-repeat; background-size: 2700px auto; background-position: -700px -200px;
+        filter: contrast(1.12) saturate(1.25) brightness(1.04); }
+  .shade { position: absolute; inset: 0; background:
+      linear-gradient(90deg, rgba(4,14,32,.85) 0%, rgba(4,14,32,.55) 30%, rgba(4,14,32,0) 50%),
+      radial-gradient(ellipse at 70% 50%, rgba(0,0,0,0) 45%, rgba(0,0,0,.45) 100%); }
+  .text { position: absolute; left: 90px; top: 110px; width: 1100px; font-family: 'Avenir Next Condensed', 'DIN Condensed', sans-serif; }
+  .name { font-weight: 800; font-size: 132px; line-height: .9; white-space: nowrap; color: #fff; letter-spacing: -1px;
+          text-shadow: 0 6px 0 rgba(0,0,0,.35), 0 0 40px rgba(0,0,0,.5); }
+  .ver { display: inline-block; margin-left: 18px; padding: 0 26px; font-size: 96px; line-height: 1.1; vertical-align: 14px;
+         color: #111; background: #ffd21f; border-radius: 18px; transform: rotate(-4deg); box-shadow: 0 10px 30px rgba(0,0,0,.45); text-shadow: none; }
+  .hook { margin-top: 40px; font-weight: 800; font-size: 96px; line-height: .95; color: #ffd21f; text-transform: uppercase;
+          text-shadow: 0 6px 0 rgba(0,0,0,.45), 0 0 34px rgba(0,0,0,.6); }
+  .hook span { color: #fff; }
+  .badges { position: absolute; left: 90px; bottom: 96px; display: flex; gap: 22px; font-family: 'Avenir Next Condensed', sans-serif; }
+  .badge { font-weight: 800; font-size: 54px; padding: 10px 30px 6px; border-radius: 14px; color: #fff; letter-spacing: 1px;
+           box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+  .oss { background: #18a957; } .gpu { background: #2f6fe4; } .k4 { background: #e53935; }
+</style>
+<div class="bg"></div>
+<div class="shade"></div>
+<div class="text">
+  <div class="name">OpenSkyFlight<span class="ver">2.0</span></div>
+  <div class="hook">Toute la Terre<br><span>dans ton navigateur</span></div>
+</div>
+<div class="badges"><div class="badge oss">OPEN SOURCE</div><div class="badge gpu">WebGPU</div><div class="badge k4">4K</div></div>
