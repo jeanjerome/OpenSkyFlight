@@ -4,7 +4,9 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "predev": "node scripts/build-vendor.js",
     "dev": "node scripts/serve.js",
+    "build:vendor": "node scripts/build-vendor.js --force",
     "lint": "eslint js/",
     "lint:fix": "eslint js/ --fix",
     "test": "node --test tests/*.test.js",

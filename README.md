@@ -45,20 +45,13 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 
 ## Quick Start
 
-1. Build the vendored terrain engine once (**required** — the bundle is not versioned, see [Building three-tile](#building-three-tile-required)):
+Start the dev server:
 
-   ```bash
-   cd vendor/three-tile
-   npm install
-   npm run build:lib
-   cd ../..
-   ```
+```bash
+npm run dev
+```
 
-2. Start the dev server (no other dependency needed to run the app):
-
-   ```bash
-   node scripts/serve.js
-   ```
+The first start builds the vendored terrain engine (its bundle is not versioned, see [Building three-tile](#building-three-tile)), which needs network access to install its build dependencies; later starts rebuild it only when its sources have changed. The app itself needs no other dependency.
 
 Then open [http://localhost:3000](http://localhost:3000) in your browser.
 
@@ -76,7 +69,8 @@ Available scripts:
 
 | Command | Description |
 |---|---|
-| `npm run dev` | Start the dev server |
+| `npm run dev` | Build the three-tile bundle when it is missing or stale, then start the dev server |
+| `npm run build:vendor` | Rebuild the three-tile bundle |
 | `npm run lint` | Run ESLint |
 | `npm run lint:fix` | Run ESLint with auto-fix |
 | `npm test` | Run the unit tests (Node test runner), including the flight model checks |
@@ -131,16 +125,14 @@ Available scripts:
 
 The settings menu (`Esc`) also lists every shortcut in its Controls tab.
 
-## Building three-tile (required)
+## Building three-tile
 
 The terrain engine relies on [three-tile](https://github.com/sxguojf/three-tile), a lightweight Three.js tile map library. We vendor a patched fork (`0.11.8-osf`) in `vendor/three-tile/` with custom LOD enhancements (concentric view-center weighting, removal hysteresis), WebGPU tile materials, Terrarium elevation decoded in a worker into float height textures with seamless tile edges, and anisotropic filtering of tile imagery.
 
-The app imports the built bundle `vendor/three-tile/packages/lib/dist/three-tile-osf.js` via the import map. This file is **not versioned** (`dist/` is git-ignored), so it must be built after cloning, and again after any change to `vendor/three-tile/packages/lib/src/`:
+The app imports the built bundle `vendor/three-tile/packages/lib/dist/three-tile-osf.js` via the import map. This file is **not versioned** (`dist/` is git-ignored). `npm run dev` builds it first when it is missing or older than `vendor/three-tile/packages/lib/src/` (`scripts/build-vendor.js`, which also installs the build dependencies of `vendor/three-tile` the first time). To rebuild it by hand, for instance while starting the server with `node scripts/serve.js`:
 
 ```bash
-cd vendor/three-tile
-npm install        # first time only
-npm run build:lib
+npm run build:vendor
 ```
 
 Without this bundle the import map cannot resolve `three-tile` and the app does not start.
