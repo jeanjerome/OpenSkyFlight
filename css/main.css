@@ -733,6 +733,34 @@ body.menu-open :is(#hud, #crosshair, #minimap-container, #hires-badge) {
   margin-right: 4px;
 }
 
+/* Credits */
+.sm-credits {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 12px 24px;
+  align-items: baseline;
+  padding: 6px 14px;
+}
+.sm-credits dt {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--ui-text);
+}
+.sm-credits a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--ui-line);
+  text-underline-offset: 3px;
+}
+.sm-credits a:hover {
+  color: var(--color-primary);
+  text-decoration-color: currentColor;
+}
+.sm-credits dd {
+  font-size: 15px;
+  color: var(--ui-text-soft);
+}
+
 /* Info card */
 .sm-info {
   align-self: start;
@@ -1040,6 +1068,13 @@ body.menu-open :is(#hud, #crosshair, #minimap-container, #hires-badge) {
   .sm-keys,
   .sm-metrics {
     grid-template-columns: 130px 1fr;
+  }
+  .sm-credits {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+  .sm-credits dd {
+    margin-bottom: 10px;
   }
   .sm-input {
     width: 100%;

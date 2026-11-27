@@ -264,7 +264,7 @@ Even with identical WGSL shaders, each browser compiles and optimizes them throu
 
 ## Data Sources & Attribution
 
-OpenSkyFlight does not bundle or redistribute any map data. All tiles are fetched at runtime by the user's browser through a local caching proxy. Users are responsible for complying with each provider's terms of use.
+OpenSkyFlight does not bundle or redistribute any map data. All tiles are fetched at runtime by the user's browser through a local caching proxy. Users are responsible for complying with each provider's terms of use. The proxy identifies itself to the providers with the `OpenSkyFlight` User-Agent (see `scripts/http.js`), and the Credits tab of the settings menu (`Esc`) lists every source below in the app.
 
 ### Elevation data — Mapzen Terrain Tiles (AWS)
 

@@ -5,6 +5,7 @@ import { QUALITY_PRESETS, PRESET_GPU_COST } from '../utils/qualityPresets.js';
 import Logger from '../utils/Logger.js';
 import { showNotification } from './Notification.js';
 import { SHORTCUTS } from './shortcuts.js';
+import { CREDITS } from './credits.js';
 import { playUiSound } from './uiSounds.js';
 import { searchAirports } from '../airports/Airports.js';
 
@@ -14,6 +15,7 @@ const ICONS = {
   flight: '<path d="M12 2l2 7 8 3-8 2-2 8-2-8-8-2 8-3z"/>',
   audio: '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 010 7M19 6a8.5 8.5 0 010 12"/>',
   controls: '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h1M10 10h1M14 10h1M18 10h1M7 14h10"/>',
+  credits: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v.5"/>',
   dev: '<path d="M8 9l-4 3 4 3M16 9l4 3-4 3M14 5l-4 14"/>',
 };
 
@@ -23,6 +25,7 @@ const TABS = [
   { id: 'flight', label: 'Flight', help: 'Speed, view, mouse, gamepad and what is shown over the view.' },
   { id: 'audio', label: 'Audio', help: 'Volume of each kind of sound.' },
   { id: 'controls', label: 'Controls', help: 'Keyboard, mouse and gamepad controls in flight.' },
+  { id: 'credits', label: 'Credits', help: 'The data, imagery, models and software the simulator is built on.' },
   { id: 'dev', label: 'Developer', help: 'Measurements, reference views and raw rendering values.', dev: true },
 ];
 
@@ -304,6 +307,7 @@ export default class ControlPanel {
     this._buildWorldLocation();
     this._buildWorldAirports();
     this._buildControls(this._panes.controls);
+    this._buildCredits(this._panes.credits);
     if (this.devMode) this._buildDevTools(this._panes.dev);
     this._buildSettings();
 
@@ -759,6 +763,29 @@ export default class ControlPanel {
           keys.append(el('kbd', '', key));
         });
         list.append(keys, el('dd', '', item.action));
+      }
+      section.append(list);
+    }
+  }
+
+  // ── Credits ──
+
+  _buildCredits(pane) {
+    for (const group of CREDITS) {
+      const section = this._section(pane, group.group);
+      const list = el('dl', 'sm-credits');
+      for (const item of group.items) {
+        const name = el('dt');
+        if (item.url) {
+          const link = el('a', '', item.name);
+          link.href = item.url;
+          link.target = '_blank';
+          link.rel = 'noopener';
+          name.append(link);
+        } else {
+          name.textContent = item.name;
+        }
+        list.append(name, el('dd', '', item.credit));
       }
       section.append(list);
     }
