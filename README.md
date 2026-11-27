@@ -17,30 +17,32 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 
 ## Features
 
-- **Real-world elevation** — [AWS Terrarium](https://registry.opendata.aws/terrain-tiles/) PNG tiles decoded into float height textures and displaced on the GPU via TSL `positionNode`, in a metric world (1 unit = 1 m) that keeps slopes at their true steepness
+- **Real-world elevation** — [AWS Terrarium](https://registry.opendata.aws/terrain-tiles/) PNG tiles decoded into float height textures and displaced on the GPU via TSL `positionNode`, in a metric world (1 unit = 1 m) that keeps slopes at their true steepness, and lit with normals computed per pixel from the full-resolution elevation
 - **4 texture modes** — Satellite imagery, Road map, SAR radar, and Elevation contour lines — cycle with `T` or pick from the settings menu
-- **Hi-Res mode (zoom 18)** — press `R` to toggle upsampled elevation with zoom-18 satellite textures for sharper close-up detail. Hi-res tiles are concentrated at the view center and fade concentrically toward the periphery. Best suited for static or slow-moving views; fast flight may cause temporary pixelation while high-zoom tiles load
-- **Adaptive LOD** — quadtree subdivision based on camera distance, with concentric view-center weighting for hi-res zoom levels; tiles join seamlessly and morph between levels of detail, relief and imagery, instead of popping
-- **Rafale aircraft** — 3D GLTF model in the Armée de l'Air livery (panel lines, rivets and markings taken from DCS livery sheets and projected onto the model over a plain paint, with a relief map drawn from the lines), with retracted landing gear, canards, elevons, rudder and slats moved by the flight control system, chase camera (30 m behind)
+- **Hi-Res mode (zoom 18)** — press `R` to toggle upsampled elevation with zoom-18 satellite textures for sharper close-up detail. Hi-res tiles are concentrated at the view centre and fade concentrically toward the periphery. Best suited for static or slow-moving views; fast flight may cause temporary pixelation while high-zoom tiles load
+- **Adaptive LOD** — quadtree subdivision based on camera distance, with concentric view-centre weighting for hi-res zoom levels; tiles join seamlessly and morph between levels of detail, relief and imagery, instead of popping
+- **Rafale aircraft** — 3D GLTF model in the Armée de l'Air livery (panel lines, rivets and markings taken from DCS livery sheets and projected onto the model over a plain paint, with a relief map drawn from the lines); canards, elevons, rudder and slats moved by the flight control system, exhaust nozzles that open with the afterburner, and a landing gear that extends and retracts in sequence (doors, legs, braces) with wheels that compress, roll and steer on the ground
 - **Flight model** — the Rafale flies by its weight, wings and engines: six degrees of freedom, lift and drag with angle of attack and Mach, two M88-2 engines (2 × 50 kN dry, 2 × 75 kN with afterburner) whose thrust follows altitude and speed, fuel burn, standard atmosphere; a fly-by-wire control system holds the flight path at neutral stick and limits the aircraft to +9 / −3.2 g and 29° of angle of attack, rolling at up to 270°/s. Its performance is checked against the published figures by `npm run flight:bench` (turn rates, top speed at sea level and at 11 000 m, ceiling, approach speed). The previous free flight remains as the Exploration mode (`F`)
-- **Cockpit / chase toggle** — press `V` to switch between first-person cockpit (roll applied to horizon) and third-person chase view
+- **Camera views** — press `V` to cycle the chase view (30 m behind), a free orbit view around the aircraft (turned with the mouse or the right stick, distance set with the wheel) and the first-person cockpit view
 - **Flight controls** — mouse aim (the mouse moves an aim circle and an instructor flies the nose to it within the aircraft's limits), keyboard stick and rudder, throttle with a detent before the afterburner, airbrake, landing gear, gamepad (standard layout); simulated at a fixed 240 Hz step whatever the frame rate
-- **Aircraft-style HUD** — compass, artificial horizon, altimeter (MSL + AGL), speed indicator; in the Simulation mode indicated airspeed, Mach, load factor, angle of attack, throttle, fuel, flight path marker, nose cross and aim circle
+- **Aircraft-style HUD** — compass, artificial horizon, altimeter (MSL + AGL), speed indicator; in the Simulation mode indicated airspeed, Mach, load factor, angle of attack, throttle, fuel, flight path marker, nose cross and aim circle, approach guidance to the runway ahead (3° glide path, deviations from the centre line and the slope, virtual PAPI) and a heading and altitude autopilot (`C`)
+- **Takeoff and landing** — start lined up on a real runway (see [Real-World Mode](#real-world-mode)), with ground physics (spring-damper gear legs, wheel brakes, nose wheel steering) and a crash when the airframe strikes the ground or the touchdown is too hard, followed by a restart in flight or on the runway
 - **Settings menu** — `Esc` pauses the flight and opens a game-style menu (Graphics, World, Flight, Controls) over the live scene, driven by mouse or keyboard (`↑` `↓` select, `←` `→` change, `Q` / `E` switch tab, `R` restore the default), with the performance impact and visual gain of each graphics setting, synthesised interface sounds and an Audio tab (master, interface, engine and radio volumes); a quality preset (Low / Medium / High / Ultra) sets the graphics settings at once, settings are remembered across sessions and can be given in the URL (`?quality=low&showClouds=true`); `?dev=1` adds a Developer tab (live GPU figures, reference views, benchmark, raw rendering values)
 - **OSM minimap** — real-time 2D map overlay with airplane marker and independent zoom
 - **Flight plan system** — record waypoints, save/load flight plans, and engage autopilot to follow a path automatically
 - **Local tile cache** — transparent caching proxy, pre-download tiles for offline flight
 - **Physical atmosphere** — precomputed atmospheric scattering ([takram](https://github.com/takram-design-engineering/three-geospatial)): sky, aerial perspective read from a frustum-aligned volume, sunlight and sky light evaluated at each surface point, all from the same scattering tables; the terrain follows the curvature of the Earth and meets the horizon of the sphere, with the distant ground beyond the tiles drawn by the sky; a Visibility setting sets the haze
-- **Volumetric clouds** — cumulus, mid-level clouds and fibrous cirrus ray-marched in real time (after [takram's three-clouds](https://github.com/takram-design-engineering/three-geospatial)) that you can fly through, with their shadows on the ground and on the aircraft, light shafts in the haze, and settings for their cover and altitude (WebGPU)
+- **Volumetric clouds** — cumulus, mid-level clouds and fibrous cirrus that you can fly through, ray-marched in real time (after [takram's three-clouds](https://github.com/takram-design-engineering/three-geospatial)) one pixel in sixteen each frame and reprojected from the previous frames, with their shadows on the ground and on the aircraft, light shafts in the haze, and settings for their cover and altitude (WebGPU)
 - **Shadows** — the relief casts its shadows across the valleys and onto the aircraft, from maps of the terrain marched toward the sun or the moon (edges softened by the size of the sun's disc), and the aircraft casts its own on itself and on the ground (WebGPU; a Shadows setting)
 - **Time of day** — the sun follows the date and the local solar time (NOAA formulas), with time frozen, real time or accelerated up to ×600
-- **Night** — stars turning with the hour, the moon with its phases and moonlight, an exposure that follows the falling light, night vision that fades colors into a bluish grey, and city lights from NASA's Black Marble imagery, to which the exposure adapts when a town fills the view
-- **Aircraft lights** — position lights, flashing red beacons and white wingtip strobes (switched with `O`) with their glare, engine glow with thrust and an afterburner flame with shock diamonds
-- **HDR render pipeline** — scene rendered into a HalfFloat buffer with a 32-bit reversed depth buffer, temporal anti-aliasing with upscaling (TAAU), bloom limited to the sun and its specular reflections, automatic exposure metered on the GPU, AgX tone mapping at the end of the pipeline
+- **Night** — stars turning with the hour, the moon with its phases and moonlight, an exposure that follows the falling light, night vision that fades colours into a bluish grey, and city lights from NASA's Black Marble imagery, to which the exposure adapts when a town fills the view
+- **Aircraft lights and engines** — position lights, flashing red beacons and white wingtip strobes (switched with `O`) with their glare, engine glow with thrust and an afterburner flame with shock diamonds; the hot exhaust makes the view through it shimmer (Heat haze setting), the afterburner flame lights the airframe and the ground at low altitude (Afterburner light setting, Ultra preset), and a synthesised engine sound follows the power, the afterburner and the distance to the camera
+- **HDR render pipeline** — scene rendered into a HalfFloat buffer with a 32-bit reversed depth buffer, temporal anti-aliasing with upscaling (TAAU), bloom limited to the sun and its specular reflections, an optional lens flare (ghosts of the sun across the view, Lens flare setting), automatic exposure metered on the GPU, AgX tone mapping at the end of the pipeline
 - **Dynamic resolution** — the 3D scene is rendered below the screen resolution when the GPU exceeds a 60 FPS budget, and TAAU reconstructs the full-resolution image
+- **Cinematic mode** — scripted shots rendered frame by frame at a fixed time step: the aircraft flies an imposed path that keeps clear of the relief, banked into its turns, while the camera follows a chase, fixed, orbit or travelling rig; `scripts/cinematic-record.js` records them in 4K at 60 fps, the way the [demo film](scripts/demo/README.md) was made
 - **Built-in benchmark** — automated camera path with FPS/GPU timing (GPU span of each frame), metrics recording, and baseline comparison
 - **Toast notifications** — non-blocking user feedback for search results and errors
-- **Centralized logging** — in-app log panel with level control (DEBUG/INFO/WARN/ERROR)
+- **Centralised logging** — in-app log panel with level control (DEBUG/INFO/WARN/ERROR)
 
 ![Chase view of the Rafale facing Mont Blanc, with the HUD and the minimap](docs/screenshots/hero.jpg)
 
@@ -103,7 +105,7 @@ Available scripts:
 | `Enter` / `Space` | After a crash: restart in flight / on the ground where the flight started |
 | `F` | Simulation or Exploration (free flight) mode |
 | `T` | Cycle texture mode (Satellite / Road map / SAR / Elevation) |
-| `V` | Toggle cockpit / chase view |
+| `V` | Cycle chase / orbit / cockpit view |
 | `O` | Toggle anti-collision lights (beacons and strobes) |
 | `H` | Toggle HUD |
 | `M` | Toggle minimap |
@@ -125,13 +127,13 @@ Available scripts:
 
 > **Keyboard layouts:** Flight controls (WASD) use physical key positions, so they map to ZQSD on AZERTY keyboards. All other shortcuts use the character printed on the key and work identically on any layout.
 
-> **Gamepad:** a gamepad in the standard layout (Xbox, PlayStation) flies without clicking the view: left stick for pitch and roll (pull back to raise the nose, invertible in the Flight tab), triggers for the throttle, right stick or bumpers for the rudder, `B` for the airbrake, `X` for the landing gear, `Y` for the chase or cockpit view and the menu button to pause or resume; in the Exploration mode the left stick steers, the triggers move forward and backward and the right stick slides sideways. Its sensitivity is set in the Flight tab. Flown with the keys or the gamepad, the chase view follows the airframe, roll included; with the mouse it looks along the aim.
+> **Gamepad:** a gamepad in the standard layout (Xbox, PlayStation) flies without clicking the view: left stick for pitch and roll (pull back to raise the nose, invertible in the Flight tab), triggers for the throttle, right stick or bumpers for the rudder, `B` for the airbrake, `X` for the landing gear, `Y` to cycle the views and the menu button to pause or resume; in the Exploration mode the left stick steers, the triggers move forward and backward and the right stick slides sideways. Its sensitivity is set in the Flight tab. Flown with the keys or the gamepad, the chase view follows the airframe, roll included; with the mouse it looks along the aim.
 
 The settings menu (`Esc`) also lists every shortcut in its Controls tab.
 
 ## Building three-tile
 
-The terrain engine relies on [three-tile](https://github.com/sxguojf/three-tile), a lightweight Three.js tile map library. We vendor a patched fork (`0.11.8-osf`) in `vendor/three-tile/` with custom LOD enhancements (concentric view-center weighting, removal hysteresis), WebGPU tile materials, Terrarium elevation decoded in a worker into float height textures with seamless tile edges, and anisotropic filtering of tile imagery.
+The terrain engine relies on [three-tile](https://github.com/sxguojf/three-tile), a lightweight Three.js tile map library. We vendor a patched fork (`0.11.8-osf`) in `vendor/three-tile/` with custom LOD enhancements (concentric view-centre weighting, removal hysteresis), WebGPU tile materials, Terrarium elevation decoded in a worker into float height textures with seamless tile edges, and anisotropic filtering of tile imagery.
 
 The app imports the built bundle `vendor/three-tile/packages/lib/dist/three-tile-osf.js` via the import map. This file is **not versioned** (`dist/` is git-ignored). `npm run dev` builds it first when it is missing or older than `vendor/three-tile/packages/lib/src/` (`scripts/build-vendor.js`, which also installs the build dependencies of `vendor/three-tile` the first time). To rebuild it by hand, for instance while starting the server with `node scripts/serve.js`:
 
@@ -160,7 +162,7 @@ To take off from an airport, search it by code (`LFPG`), name or town under **Ai
 ## How It Works
 
 1. **Elevation** — Terrarium PNG tiles (AWS S3) are decoded in a worker (`R×256 + G + B/256 − 32768` metres), sampled at the tile grid vertices across tile boundaries into a float texture, and displaced on the GPU by a TSL `positionNode` shader. Neighbouring tiles share their edges exactly, and the edges of a tile beside a coarser one follow the coarser edge, so the terrain has no steps between tiles. The tile map is scaled horizontally by cos(latitude) so that world units are metres on all three axes
-2. **LOD system** — three-tile's quadtree subdivision splits tiles near the camera into 4 children at higher zoom; a concentric weighting concentrates hi-res tiles (zoom 16–18) at the view center while distant and peripheral tiles stay coarse
+2. **LOD system** — three-tile's quadtree subdivision splits tiles near the camera into 4 children at higher zoom; a concentric weighting concentrates hi-res tiles (zoom 16–18) at the view centre while distant and peripheral tiles stay coarse
 3. **Textures** — Four modes: Satellite (ESRI) and Road map (OSM) fetch raster tiles on demand; SAR radar and the contour map (glowing contour lines over dark ground) are GPU-generated via TSL shaders. Esri draws its zoom levels up to 11 from Landsat and the finer ones from photographs of other colours and land cover, so the satellite tiles of levels 10 and 11 are assembled from level 12 tiles: a tile that refines only sharpens, and the switch between the two sources stays at level 9, far in the haze. A new tile fades from its parent's relief and imagery to its own over `terrainMorphDuration`
 4. **Caching** — A Node.js proxy intercepts all `/tiles/` requests: serves from disk on hit, fetches upstream on miss, caches for next time
 
@@ -184,7 +186,6 @@ cache/
 
 > The `cache/` directory is listed in `.gitignore` and should not be committed — it can be regenerated at any time.
 
-
 ## Project Structure
 
 ```
@@ -196,7 +197,9 @@ cache/
 │   ├── atmosphere/            Atmospheric scattering, aerial perspective volume, sun & moon ephemerides, night exposure
 │   ├── clouds/                Volumetric clouds (noise textures, ray march, temporal upscaling), their shadows, light shafts and light on the aircraft
 │   ├── benchmark/             Automated perf testing & baseline comparison
-│   ├── camera/                Chase camera, springs
+│   ├── airports/              Airports and runways around the aircraft, runway lights
+│   ├── audio/                 Engine sound and audio mixer (WebAudio)
+│   ├── camera/                Chase and orbit cameras, springs
 │   ├── cinematic/             Cinematic shots: imposed flight paths and camera rigs
 │   ├── constants/             Shared constants (camera, HUD, physics, terrain…)
 │   ├── flight/                Aircraft state, flight model (aerodynamics, engines, fly-by-wire), mouse aim, Simulation and Exploration modes, verification bench
@@ -228,6 +231,7 @@ cache/
 ├── docs/
 │   ├── rendering-roadmap.md   Rendering overhaul plan, progress, measurements, decisions
 │   ├── gameplay-roadmap.md    Flight model, takeoff and landing, radar, weapons and drones plan, progress, decisions
+│   ├── cockpit-rafale.md      Study of a Rafale cockpit view (not implemented)
 │   └── screenshots/           README screenshots, reference view captures per milestone
 ├── benchmarks/                Benchmark reports and full-resolution captures (git-ignored)
 └── cache/                     Local tile cache (git-ignored)
@@ -258,7 +262,7 @@ OpenSkyFlight uses **WebGPU** for rendering. Browser support varies significantl
 | **Firefox** | wgpu (Rust) | **Very Good** | ~90% spec coverage, may have minor rendering differences |
 | **Safari** | WebKit + Metal | Very Bad | WebGPU enabled by default since Safari 26 (2025); visual artefacts, flickering, and performance instability due to Metal-specific constraints |
 
-Even with identical WGSL shaders, each browser compiles and optimizes them through a different pipeline, which can produce subtle rendering differences. For the best experience, **use Chrome or a Chromium-based browser**.
+Even with identical WGSL shaders, each browser compiles and optimises them through a different pipeline, which can produce subtle rendering differences. For the best experience, **use Chrome or a Chromium-based browser**.
 
 ## Data Sources & Attribution
 
