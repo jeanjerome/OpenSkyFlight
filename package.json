@@ -1,8 +1,9 @@
 {
   "name": "openskylight",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "predev": "node scripts/build-vendor.js",
     "dev": "node scripts/serve.js",

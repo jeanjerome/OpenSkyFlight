@@ -319,4 +319,4 @@ The settings menu uses [Rajdhani](https://fonts.google.com/specimen/Rajdhani) by
 
 ## License
 
-This project's source code is licensed under MIT. Map data, imagery, and elevation data are subject to their respective licenses listed above.
+This project's source code is licensed under the [MIT License](LICENSE). Map data, imagery, and elevation data are subject to their respective licenses listed above.
