@@ -5,11 +5,11 @@
 //   - If the tile exists in cache/{source}/{z}/{x}/{y}.png → serve from disk
 //   - Otherwise → fetch from remote, save to cache/, and return
 //
-// Usage: node scripts/serve.js [--port 3000]
+// Usage: node scripts/serve.js [--port 3000] [--cache <directory>]
 
 import { createServer } from 'node:http';
 import { readFile, readdir, mkdir, writeFile } from 'node:fs/promises';
-import { join, extname } from 'node:path';
+import { join, extname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { runwaysInTile, searchAirports } from './airports.js';
 import { fetchFromProvider, isStorableTile } from './http.js';
@@ -17,12 +17,14 @@ import { fetchFromProvider, isStorableTile } from './http.js';
 const { values } = parseArgs({
   options: {
     port: { type: 'string', default: '3000' },
+    // Tile and data cache, ./cache by default: another directory starts from an empty cache
+    cache: { type: 'string' },
   },
 });
 
 const PORT = parseInt(values.port, 10);
 const ROOT = process.cwd();
-const CACHE_DIR = join(ROOT, 'cache');
+const CACHE_DIR = values.cache ? resolve(values.cache) : join(ROOT, 'cache');
 
 // Semaphore: limit concurrent outbound fetches to upstream servers
 const MAX_OUTBOUND = 6;
