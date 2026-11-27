@@ -27,6 +27,7 @@ import { SETTINGS_BY_KEY } from './settingsSchema.js';
  *
  * Rendering:
  * @property {number}  terrainLodThreshold    - Tile subdivision threshold: higher keeps fine relief further away (default: 1.2)
+ * @property {number}  terrainMorphDuration   - Seconds a tile takes to morph between its parent's relief and its own (default: 0.75)
  * @property {number}  textureAnisotropy      - Anisotropic filtering of ground textures, applied on terrain reload (default: 16)
  * @property {number}  maxPixelRatio          - Maximum device pixel ratio (default: 2)
  * @property {number}  renderScale            - Highest resolution of the 3D scene relative to the screen, range [0.5..1] (default: 1)
@@ -76,6 +77,7 @@ const CONFIG = {
   imageSharpness: 'maximum',
   terrainDetail: 'high',
   terrainLodThreshold: 1.2,
+  terrainMorphDuration: 0.75,
   textureAnisotropy: 16,
   maxPixelRatio: 2,
   renderScale: 1,

@@ -90,6 +90,7 @@ export default class GeoTerrainManager {
 
     onChange((key, value) => {
       if (key === 'terrainLodThreshold' && this.tileMap) this.tileMap.LODThreshold = value;
+      if (key === 'terrainMorphDuration' && this.tileMap) this.tileMap.morphDuration = value;
       if (key === 'hiResMode') this.reinit();
       if (key === 'textureMode') {
         const newWireframe = GeoTerrainManager._isSynthetic(value);
@@ -186,6 +187,7 @@ export default class GeoTerrainManager {
 
     // Higher keeps finer tiles further away
     this.tileMap.LODThreshold = CONFIG.terrainLodThreshold;
+    this.tileMap.morphDuration = CONFIG.terrainMorphDuration;
     // The tile tree is updated by update(), not by the renderer: tiles shown
     // or hidden while rendering would be drawn with the morph and edges of the
     // previous frame, and every render of the scene (shadow maps included)

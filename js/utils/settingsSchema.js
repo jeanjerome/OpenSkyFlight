@@ -507,6 +507,18 @@ export const SETTINGS = [
     format: (v) => v.toFixed(1),
   },
   {
+    key: 'terrainMorphDuration',
+    tab: 'dev',
+    section: 'Terrain',
+    label: 'Morph duration',
+    help: "Seconds a new tile takes to fade from its parent's relief and imagery to its own. 0 switches at once.",
+    type: 'range',
+    min: 0,
+    max: 1.5,
+    step: 0.05,
+    format: (v) => `${v.toFixed(2)} s`,
+  },
+  {
     key: 'textureAnisotropy',
     tab: 'dev',
     section: 'Terrain',
