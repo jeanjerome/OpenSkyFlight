@@ -6,7 +6,7 @@ contrainte : l'application doit continuer à fonctionner dans un navigateur (Web
 Ce document est la **source de vérité de l'avancement**. Il est lu en début de session et mis à jour
 en fin de session.
 
-## État courant (mis à jour le 2026-11-26, session 25)
+## État courant (mis à jour le 2026-11-27, session 26)
 
 - **Lot 5 terminé** le 2026-11-26 à la demande de l'utilisateur, fusionné dans `main` le même jour à
   sa demande (avance rapide depuis `feat/render-terrain`) et poussé par lui. Faits : L5.1 (raccord exact des bords entre tuiles, altitudes
@@ -19,6 +19,13 @@ en fin de session.
   mis à jour par `GeoTerrainManager.update`, plus par le rendu. Bundle three-tile à reconstruire après
   chaque `git pull` ou changement de branche (`cd vendor/three-tile && npm run build:lib`) : le worker
   d'altitude y est intégré.
+- **Livrée de l'avion** (2026-11-27, session 26, commitée dans `main` en `ded34fb`, non poussée) :
+  livrée Armée de l'Air tirée des planches DCS « Armee de l'Air skins for DCS MOD RAFALES 2.5.5
+  BETA », redessinées (peinture unie, lignes de panneaux, rivets et marquages) et projetées sur le
+  modèle par `npm run livery:build` (`scripts/rafale-livery.js`) ; l'application charge
+  `assets/models/rafale/ada/Rafale.gltf`. L6.1 en partie faite (carte de normales des lignes ; reste
+  métal/rugosité et verrière). Validée par l'utilisateur. Reste possible : missiles, pylônes et
+  carénage des tuyères encore sur l'ancienne texture marbrée.
 - **Prochaine étape** (mise à jour le 2026-11-27) : le lot de jeu G3 est fait et fusionné dans
   `main` (voir `docs/gameplay-roadmap.md`) ; au choix de l'utilisateur, lot 6, lot de jeu G4, ou
   reprise de L5.6 / L5.7. G3 a touché au rendu : pistes et marquages peints dans la couleur du
@@ -921,7 +928,10 @@ npm run render:summary -- benchmarks/render/<label>/benchmark-default.json bench
 
 ## Lot 6 — Contenu et effets
 
-- [ ] **L6.1** Avion : cartes métal/rugosité/normales, verrière en clearcoat.
+- [~] **L6.1** Avion : cartes métal/rugosité/normales, verrière en clearcoat. Fait : livrée Armée de
+      l'Air redessinée depuis les planches DCS (couleur 4096×2048) et carte de normales des lignes de
+      panneaux et rivets (2048×1024), rugosité uniforme 0,5 (voir Décisions et journal, session 26).
+      Reste : carte métal/rugosité, verrière en clearcoat, emports et tuyères (ancienne texture).
 - [ ] **L6.2** Particules GPU : post-combustion, traînées de condensation, tourbillons de bout d'aile,
       cône de vapeur, distorsion de chaleur.
 - [ ] **L6.3** Effets caméra : flou de mouvement, étalonnage `Lut3DNode`, grain et vignettage légers.
@@ -1269,11 +1279,32 @@ Constats visuels de la baseline (`docs/screenshots/render/baseline/`) :
 | 2026-11-26 | Occlusion ambiante (L5.4) | Écartée, pas de `GTAONode` | En espace écran avec un rayon en mètres, elle ne touche que ce qui est près de la caméra : l'avion (creux à peine plus sombres) ou, avec un grand rayon, les fonds de vallée proches, pour 1 à 1,7 ms, un quart d'une frame ; appliquée à la couleur entière elle assombrirait aussi la lumière directe, et l'appliquer à la seule lumière indirecte demanderait une pré-passe de profondeur et de normales de toute la géométrie, ce qui coûte le plus ici. Pistes si le besoin revient : occlusion du ciel à l'échelle du relief tirée des cartes d'altitude des ombres (L5.3), occlusion précalculée de l'avion avec ses cartes de matériau (L6.1) |
 | 2026-11-26 | Ombres du relief et de l'avion (L5.3) | Hauteur d'ombre par ray marching sur une carte d'altitude dessinée vue de dessus (deux cartes), ombre de l'avion par une carte d'ombre ajustée sur lui seul ; pas de `CSMShadowNode` | Des cascades dessinant le terrain depuis le soleil couvriraient mal 100 km de relief au soleil rasant et redessineraient toutes les tuiles à chaque frame ; la hauteur d'ombre est indépendante de l'objet qui la reçoit (terrain et avion lisent la même carte), se redessine rarement et s'étale sur plusieurs frames, et la carte d'altitude réutilise la géométrie affichée (morph et raccords compris). Les cartes d'horizon par texel des tuiles auraient demandé un calcul par tuile et par direction du soleil. L'avion seul justifie une carte d'ombre classique, petite et nette |
 | 2026-11-26 | Geomorphing (L5.2) | Dans le temps (0,75 s), fusions différées jusqu'au retour des enfants sur la surface du parent, bords sur le côté le plus grossier, imagerie en fondu | La sélection des niveaux de three-tile dépend de la tuile entière et de l'orientation de la caméra : un morph fonction de la distance (CDLOD) n'aurait pas été terminé au moment du changement ; le temps couvre aussi les changements dus à une rotation. Coût nul sur le GPU, p1 en vol en hausse |
+| 2026-11-27 | Livrée de l'avion (L6.1) | Planches DCS AdA redessinées puis projetées sur notre maillage, pas recopiées : peinture unie, lignes de panneaux et rivets (passe-haut), marquages en couleur et lettrage de dérive gardés ; salissures, coulures et bosselages écartés. Projection par régions (ailes et dérive par ajustement affine sur les îlots, fuselage par repères et spline de plaque mince), bords des îlots fondus dans la peinture ; virures, épaules des nacelles, radôme et réservoirs en peinture unie ; conduits d'entrée d'air trouvés par occlusion et assombris ; un seul atlas pour garder une primitive par nœud | Demande de l'utilisateur : extraire des planches ce qui est utile, pas les reproduire à l'identique. Leurs UV appartiennent au maillage DCS (Rafale M monoplace), le nôtre est un biplace : les copies laissaient des taches noires, des tons différents d'une région à l'autre en dents de scie, et un effet de tôle. `ControlSurfaces` et `LandingGear` exigent un `Mesh` à géométrie unique par nœud nommé |
 | 2026-11-23 | Vitesse par défaut | 560 m/s | Vitesse réelle de l'ancien défaut (800 unités Mercator/s) : benchmarks comparables à la baseline |
 
 ## Journal des sessions
 
 <!-- Entrée la plus récente en haut. -->
+
+### 2026-11-27 (26)
+- Fait (à la demande de l'utilisateur) : livrée Armée de l'Air de l'avion, construite par
+  `npm run livery:build` depuis les planches DCS de `assets/models/rafale/ada/source` (freeware,
+  distribution libre, variante sans numéro). Planches redessinées (peinture unie, lignes, rivets,
+  marquages) et projetées sur le maillage ; atlas couleur 4096×2048 et carte de normales des lignes ;
+  pneus noirs, jantes grises, conduits d'entrée d'air assombris en profondeur. Coût GPU inchangé
+  (vues 1 et 2 : 3,88 et 4,02 ms). Validé par l'utilisateur ; commit `ded34fb` dans `main`, non
+  poussé.
+- Corrigé après revue de l'utilisateur sur captures : taches sombres des flancs, intérieur des entrées
+  d'air, emplanture des canards (feux et trappes du skin effacés, dents de scie de ton), bande étirée
+  en haut du flanc arrière, tons des réservoirs, effet de tôle des ailes. L'ancien modèle n'est pas
+  une référence : viser le réalisme.
+- Outils (scratchpad, non versionnés) : page `livery-lab.html` (éclairage de studio, vues nommées par
+  URL) copiée à la racine le temps des captures, script Playwright de captures, rendus
+  orthographiques cotés du maillage, mode de diagnostic coloriant chaque région d'une teinte unie
+  (patch temporaire du script de construction). La page locale `gear-lab.html` (exclue du dépôt)
+  charge maintenant le nouveau modèle.
+- Reste : missiles, pylônes et tuyères sur l'ancienne texture marbrée ; carte métal/rugosité et
+  verrière (L6.1).
 
 ### 2026-11-26 (25)
 - Fait : L5.2, geomorphing dans le temps (subdivisions et fusions, bords sur le côté le plus

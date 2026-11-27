@@ -591,7 +591,7 @@ sol) ; les nuages volumétriques (lot 4) n'ont pas de dépendance avec ces lots.
 | Sujet | Options | Recommandation |
 |---|---|---|
 | Combat | Scénarios fictifs sur le vrai relief | Ennemis génériques, sans pays ni insignes réels |
-| Licence du modèle Rafale | Licence Royalty Free de CGTrader (confirmée le 2026-11-25). Ses conditions (§ 21A.1, 21A.3, 21A.6) interdisent de redistribuer le fichier tel que téléchargé et demandent d'empêcher l'utilisateur final d'y accéder, sans exception pour l'open source ; or `Rafale.gltf` et `Rafale_texture.png` sont versionnés dans un dépôt GitHub public | Retirer le modèle du dépôt (téléchargé par chaque utilisateur et converti par un script), ou le remplacer par un modèle CC-BY/CC0 ; la réécriture de l'historique déjà poussé est une décision à part |
+| Licence du modèle Rafale | Licence Royalty Free de CGTrader (confirmée le 2026-11-25). Ses conditions (§ 21A.1, 21A.3, 21A.6) interdisent de redistribuer le fichier tel que téléchargé et demandent d'empêcher l'utilisateur final d'y accéder, sans exception pour l'open source ; or `Rafale.gltf` et `Rafale_texture.png` sont versionnés dans un dépôt GitHub public, de même que `assets/models/rafale/ada/Rafale.gltf` qui en reprend la géométrie (livrée du 2026-11-27 ; les planches DCS de la livrée sont, elles, en distribution libre) | Retirer le modèle du dépôt (téléchargé par chaque utilisateur et converti par un script), ou le remplacer par un modèle CC-BY/CC0 ; la réécriture de l'historique déjà poussé est une décision à part |
 
 ## Données de référence
 
