@@ -3,7 +3,7 @@ import { CONFIG, DEFAULTS, onChange, update } from './utils/config.js';
 import { loadSettings, isDevMode } from './utils/settingsStore.js';
 import { bindQualitySettings } from './utils/qualityPresets.js';
 import { GLOW_LAYER, HEAT_LAYER, REALWORLD_FAR_PLANE, CLIP_PLANE_EPSILON } from './constants/rendering.js';
-import { REALWORLD_START_ALTITUDE, DEFAULT_NEAR, MAX_ROLL, ROLL_SENSITIVITY, ROLL_DAMP_SPEED } from './constants/camera.js';
+import { REALWORLD_START_ALTITUDE, DEFAULT_NEAR, DEFAULT_FOV, MAX_ROLL, ROLL_SENSITIVITY, ROLL_DAMP_SPEED } from './constants/camera.js';
 import { MAX_DELTA_TIME } from './constants/physics.js';
 import { SIMULATION_RATE, ENTITY_GRID_CELL } from './constants/simulation.js';
 import { GAMEPAD } from './constants/controls.js';
@@ -44,6 +44,7 @@ import RunwayLights from './airports/RunwayLights.js';
 import RunwaysInWorld from './airports/RunwaysInWorld.js';
 import { approachGuidance } from './flight/ApproachGuide.js';
 import PilotBot from './flight/PilotBot.js';
+import CinematicDirector, { elevationSampler } from './cinematic/CinematicDirector.js';
 import Stats from 'stats.js';
 
 async function initApp() {
@@ -634,8 +635,98 @@ async function initApp() {
   });
   updateFlyHint();
 
+  // --- Cinematic shots (see cinematic/CinematicDirector.js) ---
+  // While a shot plays, the aircraft and the camera follow the director and
+  // each frame is rendered on request at a fixed time step; between requests
+  // the terrain keeps loading but nothing is drawn, so that a recorder can
+  // read every frame
+  const director = new CinematicDirector(geoTerrainManager);
+  const cinematic = { active: false, time: 0, request: null };
+
+  async function loadShot(shot) {
+    cinematic.active = true;
+    cinematic.request = null;
+    const first = shot.aircraft?.path[0] ?? shot.camera.points?.[0] ?? shot.camera.at;
+    const [lat, lon] = shot.origin ?? [first.lat, first.lon];
+    if (Math.abs(lat - CONFIG.lat) > 1e-6 || Math.abs(lon - CONFIG.lon) > 1e-6 || !geoTerrainManager.tileMap) {
+      await loadRunways(lat, lon);
+      update('lat', lat);
+      update('lon', lon);
+      geoTerrainManager.reinit();
+    }
+    update('flightMode', 'exploration');
+    update('timeSpeed', 0);
+    update('showClouds', false);
+    update('cloudCover', DEFAULTS.cloudCover);
+    update('lensFlare', false);
+    update('hiResMode', shot.env?.hiResMode ?? false);
+    for (const [key, value] of Object.entries(shot.env ?? {})) update(key, value);
+    volumetricClouds?.resetWind();
+    scenePipeline.autoExposureNode?.reset();
+    const info = await director.prepare(shot);
+    cinematic.time = shot.start ?? 0;
+    director.update(cinematic.time);
+    return info;
+  }
+
+  /** Advance the shot by dt seconds and render `renders` frames there; resolves once drawn */
+  function cinematicFrame(dt, renders = 1) {
+    return new Promise((resolve) => {
+      cinematic.request = { dt, renders, resolve };
+    });
+  }
+
   // Read-only state and view selection for automated captures and measurements
   window.osf = {
+    cinematic: {
+      load: (shot) => loadShot(shot),
+      frame: (dt, renders) => cinematicFrame(dt, renders),
+      time: () => cinematic.time,
+      // Tiles still downloading, or morphing between levels of detail
+      terrainBusy: () => {
+        // The terrain of the previous place stays until the new one shows
+        if (geoTerrainManager.pendingDownloads > 0 || geoTerrainManager._oldTileMap) return true;
+        let morphing = false;
+        geoTerrainManager.tileMap?.rootTile.traverse((tile) => {
+          if (tile.isTile && tile.showing && tile.morph < 1) morphing = true;
+        });
+        return morphing;
+      },
+      // Ground elevation at places [[lat, lon], ...] from the elevation tiles the paths follow (m)
+      elevations: async (places) => {
+        const geo = places.map(([lat, lon]) => ({ lat, lon }));
+        const at = await elevationSampler(geoTerrainManager.elevationProvider, geo);
+        return places.map(([lat, lon]) => at(lat, lon));
+      },
+      // Ground as drawn and from the zoom-12 elevations at a place, relative to the terrain's centre
+      groundAt: (lat, lon) => {
+        const w = geoTerrainManager.geoToWorld(lat, lon, 0);
+        return w && { drawn: geoTerrainManager.groundHeight(w.x, w.z), zoom12: geoTerrainManager.getGroundElevation(w.x, w.z, null) };
+      },
+      // Fix the height of a camera standing on the ground, once the ground below it has loaded
+      settle: () => director.settle(),
+      profile: (step) => director.profile(step),
+      groundCheck: () => director.groundCheck(),
+      // Rebuild the terrain around the same place (after tiles that failed to load)
+      reloadTerrain: () => geoTerrainManager.reinit(),
+      pose: () => ({
+        camera: director.camera.position.toArray(),
+        aircraft: director.aircraft?.position.toArray() ?? null,
+        ground: director.aircraft
+          ? geoTerrainManager.groundHeight(director.aircraft.position.x, director.aircraft.position.z)
+          : null,
+        cameraGround: geoTerrainManager.groundHeight(director.camera.position.x, director.camera.position.z),
+        fov: director.camera.fov,
+      }),
+      stop: () => {
+        cinematic.active = false;
+        cinematic.request = null;
+        if (geoTerrainManager.tileMap) geoTerrainManager.tileMap.LODThreshold = CONFIG.terrainLodThreshold;
+        camera.fov = DEFAULT_FOV;
+        camera.updateProjectionMatrix();
+        if (scenePipeline.autoExposureNode) scenePipeline.autoExposureNode.fixedDeltaTime = null;
+      },
+    },
     referenceViews: REFERENCE_VIEWS.map((v) => v.name),
     setReferenceView: (n) => applyReferenceView(n - 1),
     setConfig: (key, value) => update(key, value),
@@ -716,6 +807,10 @@ async function initApp() {
 
   function animate() {
     requestAnimationFrame(animate);
+    if (cinematic.active) {
+      animateCinematic();
+      return;
+    }
     stats.begin();
 
     const now = performance.now();
@@ -931,6 +1026,67 @@ async function initApp() {
     gpuPanel.update(gpuTimer.getLastGPUTimeMs(), 30);
 
     stats.end();
+  }
+
+  /** A frame of a cinematic shot, when one is requested; otherwise the terrain only keeps loading */
+  function animateCinematic() {
+    const request = cinematic.request;
+    // Finer terrain the narrower the view: a telephoto view sees distant
+    // ground as large as a wide one sees near ground
+    if (geoTerrainManager.tileMap) {
+      const zoom = Math.tan((DEFAULT_FOV * Math.PI) / 360) / Math.tan((camera.fov * Math.PI) / 360);
+      const lod = CONFIG.terrainLodThreshold * (director.shot?.lodBoost ?? 1.25) * Math.min(3.5, Math.max(1, zoom));
+      geoTerrainManager.tileMap.LODThreshold = lod;
+    }
+    const now = performance.now();
+    const wallDt = Math.min((now - prevTime) / 1000, MAX_DELTA_TIME);
+    prevTime = now;
+    if (!request) {
+      // The tiles and the city lights finish loading while the shot's time stands still
+      geoTerrainManager.update(camera, wallDt);
+      cityLights.update(camera, groundElevation, atmosphericSky.sunElevation, wallDt);
+      return;
+    }
+    const dt = request.dt;
+    request.dt = 0;
+    cinematic.time += dt;
+    director.update(cinematic.time);
+
+    const state = director.aircraft;
+    aircraftManager.setVisible(Boolean(state));
+    if (state) aircraftManager.update(state, dt);
+    camera.position.copy(director.camera.position);
+    camera.quaternion.copy(director.camera.quaternion);
+    if (camera.fov !== director.camera.fov) {
+      camera.fov = director.camera.fov;
+      camera.updateProjectionMatrix();
+    }
+    camera.updateMatrixWorld();
+    engineSound.update(dt, null, { distance: 0, ahead: 0, cockpit: false });
+
+    const anchor = state ? state.position : camera.position;
+    volumetricClouds?.update(dt, camera.position, anchor);
+    geoTerrainManager.update(camera, dt);
+    geoTerrainManager.runwayMarkings.update(runwayCatalog.runways, geoTerrainManager, camera.position);
+    renderer.getDrawingBufferSize(_bufferSize);
+    runwayLights.update(runwayCatalog.runways, geoTerrainManager, camera, _bufferSize.y, atmosphericSky.sunElevation, CONFIG.visibility);
+    groundElevation = geoTerrainManager.groundHeight(camera.position.x, camera.position.z) ?? groundElevation;
+
+    atmosphericSky.groundLightsLuminance = cityLights.viewLuminance;
+    atmosphericSky.update(dt);
+    cityLights.update(camera, groundElevation, atmosphericSky.sunElevation, dt);
+    terrainShadow?.update(renderer, camera, dt);
+    aircraftShadow.update();
+    if (scenePipeline.autoExposureNode) scenePipeline.autoExposureNode.fixedDeltaTime = dt;
+    gpuTimer.beginFrame();
+    renderer.info.reset();
+    scenePipeline.render(1);
+    gpuTimer.endFrame();
+
+    if (--request.renders <= 0) {
+      cinematic.request = null;
+      request.resolve(cinematic.time);
+    }
   }
 
   animate();

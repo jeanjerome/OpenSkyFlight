@@ -76,6 +76,8 @@ export default class AutoExposureNode extends Node {
     this._deltaTime = uniform(0);
     // 1 on the first frame after (re)starting: adopt the metered luminance at once
     this._reset = uniform(1);
+    /** Time step of the adaptation (s) instead of the frame's, for renders at a fixed rate; null: the frame's */
+    this.fixedDeltaTime = null;
 
     this._meterNode = null;
     this._adaptNode = null;
@@ -158,7 +160,7 @@ export default class AutoExposureNode extends Node {
 
   updateBefore(frame) {
     const { renderer } = frame;
-    this._deltaTime.value = Math.min(frame.deltaTime || 0, 0.1);
+    this._deltaTime.value = Math.min(this.fixedDeltaTime ?? (frame.deltaTime || 0), 0.1);
     renderer.compute([this._meterNode, this._adaptNode]);
     this._reset.value = 0;
   }
