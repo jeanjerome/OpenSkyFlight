@@ -183,7 +183,7 @@ async function initApp() {
     renderer,
   });
   aircraftManager
-    .load('assets/models/rafale/Rafale.gltf')
+    .load('assets/models/rafale/ada/Rafale.gltf')
     .catch((err) => {
       Logger.warn('App', 'Failed to load Rafale model: ' + err.message);
     });

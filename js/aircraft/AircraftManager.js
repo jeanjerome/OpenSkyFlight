@@ -75,14 +75,7 @@ export default class AircraftManager {
     this.group = new THREE.Group();
     this.group.add(this.mesh);
 
-    const texture = await new THREE.TextureLoader().loadAsync('assets/models/rafale/Rafale_texture.png');
-    texture.flipY = false;
-    texture.colorSpace = THREE.SRGBColorSpace;
     this.mesh.traverse((child) => {
-      if (child.isMesh && child.material && child.material.map) {
-        child.material.map = texture;
-        child.material.needsUpdate = true;
-      }
       // The airframe darkens under and inside the clouds and in the shade of
       // the relief (their shadows scale the direct light) and casts its own
       // shadow; the lights and the exhaust, added below, glow on

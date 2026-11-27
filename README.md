@@ -17,7 +17,7 @@ A browser-based 3D flight simulator over real-world terrain. Fly anywhere on Ear
 - **4 texture modes** — Satellite imagery, Road map, SAR radar, and Elevation contour lines — cycle with `T` or pick from the settings menu
 - **Hi-Res mode (zoom 18)** — press `R` to toggle upsampled elevation with zoom-18 satellite textures for sharper close-up detail. Hi-res tiles are concentrated at the view center and fade concentrically toward the periphery. Best suited for static or slow-moving views; fast flight may cause temporary pixelation while high-zoom tiles load
 - **Adaptive LOD** — quadtree subdivision based on camera distance, with concentric view-center weighting for hi-res zoom levels; tiles join seamlessly and morph between levels of detail, relief and imagery, instead of popping
-- **Rafale aircraft** — 3D GLTF model with retracted landing gear, canards, elevons, rudder and slats moved by the flight control system, chase camera (30 m behind)
+- **Rafale aircraft** — 3D GLTF model in the Armée de l'Air livery (panel lines, rivets and markings taken from DCS livery sheets and projected onto the model over a plain paint, with a relief map drawn from the lines), with retracted landing gear, canards, elevons, rudder and slats moved by the flight control system, chase camera (30 m behind)
 - **Flight model** — the Rafale flies by its weight, wings and engines: six degrees of freedom, lift and drag with angle of attack and Mach, two M88-2 engines (2 × 50 kN dry, 2 × 75 kN with afterburner) whose thrust follows altitude and speed, fuel burn, standard atmosphere; a fly-by-wire control system holds the flight path at neutral stick and limits the aircraft to +9 / −3.2 g and 29° of angle of attack, rolling at up to 270°/s. Its performance is checked against the published figures by `npm run flight:bench` (turn rates, top speed at sea level and at 11 000 m, ceiling, approach speed). The previous free flight remains as the Exploration mode (`F`)
 - **Cockpit / chase toggle** — press `V` to switch between first-person cockpit (roll applied to horizon) and third-person chase view
 - **Flight controls** — mouse aim (the mouse moves an aim circle and an instructor flies the nose to it within the aircraft's limits), keyboard stick and rudder, throttle with a detent before the afterburner, airbrake, landing gear, gamepad (standard layout); simulated at a fixed 240 Hz step whatever the frame rate
@@ -82,6 +82,7 @@ Available scripts:
 | `npm test` | Run the unit tests (Node test runner), including the flight model checks |
 | `npm run flight:bench` | Measure the flight model against the published figures of the Rafale |
 | `npm run flight:scenario -- --out <dir> [--airport LSGG] [--runway 0] [--end 0] [--time-scale 3]` | Fly a circuit from a real runway in Chrome with the scripted pilot (takeoff, circuit, guided final, landing) and save its report and a screenshot per phase (needs the dev server) |
+| `npm run livery:build` | Redraw the livery sheets of `assets/models/rafale/ada/source` (plain paint, their panel lines, rivets and markings), project them onto the Rafale model and write `assets/models/rafale/ada/Rafale.gltf` with its colour and normal atlases |
 | `npm run format` | Format all files with Prettier |
 | `npm run format:check` | Check formatting without modifying files |
 | `npm run render:capture -- --out <dir>` | Screenshot every reference view in Chrome and measure frame pacing, draw calls and GPU cost (dev server must be running); `--views 1,6` selects views, `--set key=value` overrides a setting |
@@ -213,11 +214,12 @@ cache/
 │   ├── ui/                    HUD instruments, flight plan menu, minimap, settings menu
 │   └── utils/                 Reactive config, settings schema, quality presets, stored settings, logger
 ├── assets/
-│   ├── models/                3D models (Rafale GLTF)
+│   ├── models/                3D models: Rafale GLTF source and its Armée de l'Air build (rafale/ada)
 │   └── flightplans/           Saved flight plan JSON files
 ├── tests/                     Unit tests of the simulation modules
 ├── scripts/
 │   ├── serve.js               Dev server with caching tile proxy
+│   ├── rafale-livery.js       Rafale livery build: sheets registered on the model, atlas, normal map (helpers in livery/)
 │   ├── airports.js            Airport search and runways by tile, from OurAirports
 │   ├── prefetch-tiles.js      Bulk tile downloader for offline use
 │   ├── render-capture.js      Reference view screenshots & frame timing (Chrome)
@@ -301,6 +303,13 @@ The aircraft model was created by [pjedvaj](https://www.cgtrader.com/designers/p
 
 - **License:** Royalty Free License
 - **Original format:** Cheetah3D (.jas), converted to GLTF
+
+### Livery — Armée de l'Air
+
+The livery comes from the "Armee de l'Air skins for DCS MOD RAFALES 2.5.5 BETA" made by Aerojust for the Rafale M mod of DCS World by Patrick56 (AdA livery, variant without tail number nor side code), projected onto the model by `npm run livery:build`.
+
+- **License:** freeware, unlimited distribution
+- **Source sheets:** `assets/models/rafale/ada/source` (DXT1 DDS, see its README)
 
 ### Geocoding — Nominatim
 
