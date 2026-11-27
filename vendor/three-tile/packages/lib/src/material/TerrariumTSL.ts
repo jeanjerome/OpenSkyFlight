@@ -187,18 +187,25 @@ export function setTerrainHorizontalScale(scale: number): void {
  * map is scaled horizontally (and rotated: north is -Z, up is Y).
  */
 function normalNode(coarseness: any, parentOffset: any): any {
-	const placeholder = new DataTexture(new Int8Array([0, 0]), 1, 1, RGFormat, ByteType);
-	placeholder.magFilter = LinearFilter;
-	placeholder.minFilter = LinearFilter;
-	placeholder.needsUpdate = true;
-	const own: any = (texture(placeholder, uv()) as any).onObjectUpdate(
-		({ object }: { object: Mesh }) => (object.geometry.userData.normalTexture as Texture) ?? placeholder,
+	// One placeholder per texture node: nodes built on the same texture share
+	// its binding, and the parent's normals would be read from the tile's own map
+	const placeholder = () => {
+		const map = new DataTexture(new Int8Array([0, 0]), 1, 1, RGFormat, ByteType);
+		map.magFilter = LinearFilter;
+		map.minFilter = LinearFilter;
+		map.needsUpdate = true;
+		return map;
+	};
+	const ownPlaceholder = placeholder();
+	const parentPlaceholder = placeholder();
+	const own: any = (texture(ownPlaceholder, uv()) as any).onObjectUpdate(
+		({ object }: { object: Mesh }) => (object.geometry.userData.normalTexture as Texture) ?? ownPlaceholder,
 	);
-	const parent: any = (texture(placeholder, uv().mul(0.5).add(parentOffset)) as any).onObjectUpdate(
+	const parent: any = (texture(parentPlaceholder, uv().mul(0.5).add(parentOffset)) as any).onObjectUpdate(
 		({ object }: { object: Mesh }) =>
 			(object.userData.parentNormalMap as Texture) ??
 			(object.geometry.userData.normalTexture as Texture) ??
-			placeholder,
+			parentPlaceholder,
 	);
 	return Fn(() => {
 		const unit = (xy: any) => vec3(xy, sqrt(max(float(0), float(1).sub(xy.dot(xy)))));
