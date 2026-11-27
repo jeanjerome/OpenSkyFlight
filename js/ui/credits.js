@@ -51,8 +51,9 @@ export const CREDITS = [
         credit: '3D model by pjedvaj, CGTrader (royalty free)',
       },
       {
-        name: "Armée de l'Air livery",
-        credit: 'Skins by Aerojust for the Rafale mod of DCS World by Patrick56 (freeware)',
+        name: "Armée de l'Air skins",
+        url: 'https://files.digitalcombatsimulator.com/fr/files/3308088/',
+        credit: 'Paint scheme by Aerojust for the Rafale mod of DCS World by Patrick56 (freeware)',
       },
     ],
   },
